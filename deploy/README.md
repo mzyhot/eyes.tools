@@ -85,7 +85,8 @@ still work. Never expose a trusted proxy or origin port directly to the internet
   use CSP hashes calculated from the original HTML.
 - WebRTC sends files directly or through your optional TURN relay. The HTTP proxy
   carries only signaling, not file data. TURN is needed for some NAT/firewall
-  combinations; configuration is in the root README.
+  combinations; see [Sharing](https://github.com/mzyhot/eyes.tools/wiki/Sharing#stun-and-turn)
+  in the wiki for configuration.
 
 ## Verify after each release
 
@@ -93,7 +94,7 @@ still work. Never expose a trusted proxy or origin port directly to the internet
 sudo systemctl status eyes --no-pager
 sudo journalctl -u eyes -n 50 --no-pager
 curl --fail http://127.0.0.1:8777/healthz
-curl --head http://127.0.0.1:8777/t/share.html
+curl --head http://127.0.0.1:8777/share
 ```
 
 Then visit your public HTTPS site in two browsers and verify:
