@@ -18,12 +18,10 @@ jobs:
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
-    # Write access so Claude can push its branch, open the pull request and
-    # reply on the issue itself. Everything it does is credited to claude[bot].
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
+      pull-requests: read
+      issues: read
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
     steps:
@@ -48,9 +46,5 @@ jobs:
           # Optional: Add claude_args to customize behavior and configuration
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          # By default the action pushes a branch and posts a "Create PR" link,
-          # which makes whoever clicks it the pull request's author. Letting
-          # Claude run `gh pr create` means it opens the PR as claude[bot].
-          claude_args: |
-            --allowedTools "Bash(gh pr create:*),Bash(gh pr view:*)"
-            --append-system-prompt "When you change code, open a pull request yourself with gh pr create rather than posting a link to create one."
+          # claude_args: '--allowed-tools Bash(gh pr *)'
+
