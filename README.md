@@ -123,7 +123,7 @@ for what each suite covers and how to diagnose failures.
 
 ## Supporting the project
 
-eyes.tools is free, has no ads or analytics, and stays that way. If it saves
+eyes.tools is free, has no ads or analytics, and stays that way. if it saves
 you time, you can support its development with the button below!
 
 [![Support us!](.github/assets/support-us-square.svg)](https://square.link/u/JduZKl4L)
