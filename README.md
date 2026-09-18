@@ -67,14 +67,11 @@ walks through it in detail.
 
 ## Design
 
-Achromatic. Square corners everywhere. Hairline rules, no shadows, no
-gradients, no icons. The only accent is inversion — ink block, paper text —
-which is what hover, selection and primary actions all use. One typeface
-family (Geist and Geist Mono) in two roles: prose in the sans, anything the
-user is going to copy in the mono.
-
-The eyes use the `𓁹𓁹` wordmark. Theme choice persists in the browser; interfaces
-support keyboard navigation, visible focus, and reduced motion.
+Black, white and greys only, with square corners, thin borders, and no
+shadows, gradients or icons. Hover, selection and primary buttons invert the
+colours rather than adding an accent. Text is set in Geist; anything meant to
+be copied uses Geist Mono. There is a light and a dark theme, and the choice is
+saved in the browser.
 
 Keyboard: `/` focuses the filter on the index, `↑↓` move, `↵` opens, `Esc`
 returns to the index from any tool.
