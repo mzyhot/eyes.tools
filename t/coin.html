@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>coin · 𓁹𓁹</title>
+<meta name="description" content="flip a verifiable coin with the league of entropy.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+</head>
+<body data-tool="coin">
+<div class="wrap">
+  <header class="top"><a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" type="button" data-theme-toggle>theme</button></header>
+  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
+  <main class="stack-6">
+    <section><label class="lbl" for="n">flips</label><input class="field" id="n" type="number" min="1" max="100" value="1" inputmode="numeric"></section>
+    <section>
+      <button class="btn" id="flip" type="button">flip</button>
+      <p class="err" id="err" role="alert"></p>
+      <div class="display mt-4" id="first" aria-live="polite"></div>
+      <div class="out mt-2" id="all" aria-live="polite"></div>
+      <p class="hint mt-2" id="counts" aria-live="polite"></p>
+      <button class="btn -ghost mt-2" id="copy" type="button" disabled>copy results</button>
+      <p class="hint mt-2">Fetches a public beacon from Cloudflare drand. Your flip count stays in this browser.</p>
+      <dl class="kv mt-4" id="proof" hidden><dt>verification</dt><dd>signature verified</dd><dt>round</dt><dd id="round"></dd><dt>chain</dt><dd id="chain"></dd></dl>
+    </section>
+  </main>
+  <footer class="foot"><a href="../index.html">← all tools</a></footer>
+</div>
+<script src="../tools.js?v=20260821"></script>
+<script src="../s.js"></script>
+<script src="../drand-client.min.js"></script>
+<script src="../drand-tools.js?v=20260821"></script>
+<script>
+(function () {
+  "use strict";
+  var b = E.qs("#flip"), er = E.qs("#err"), first = E.qs("#first"), all = E.qs("#all"), proof = E.qs("#proof");
+  var counts = E.qs("#counts"), copy = E.qs("#copy"), report = "";
+  E.on(copy, "click", function () { E.copy(report, this); });
+  E.on(b, "click", function () {
+    var raw = E.qs("#n").value.trim(), n = Number(raw);
+    er.textContent = "";
+    counts.textContent = report = "";
+    copy.disabled = true;
+    first.textContent = "";
+    all.textContent = "";
+    proof.hidden = true;
+    E.qs("#round").textContent = "";
+    E.qs("#chain").textContent = "";
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 1 || n > 100) {
+      er.textContent = "flips must be a whole number between 1 and 100";
+      return;
+    }
+    b.disabled = true;
+    b.dataset.state = "loading";
+    R.source("trng", R.byteCount(2, n)).then(function (r) {
+      var vals = [];
+      for (var i = 0; i < n; i++) vals.push((r.bytes[i >> 3] >> (i & 7) & 1) ? "heads" : "tails");
+      first.textContent = vals[0];
+      all.textContent = vals.join(" · ");
+      var heads = vals.filter(function (value) { return value === "heads"; }).length;
+      counts.textContent = heads + " heads · " + (n - heads) + " tails";
+      report = vals.join("\n") + "\n\n" + counts.textContent;
+      copy.disabled = false;
+      proof.hidden = false;
+      E.qs("#round").textContent = r.round;
+      E.qs("#chain").textContent = r.chainHash;
+      E.flash(b, "flipped");
+    }).catch(function (e) {
+      er.textContent = e.message || "drand request failed";
+    }).finally(function () {
+      b.disabled = false;
+      delete b.dataset.state;
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+{
+  "rewrites": [
+    {
+      "source": "/barcode",
+      "destination": "/t/barcode.html"
+    },
+    {
+      "source": "/base64",
+      "destination": "/t/base64.html"
+    },
+    {
+      "source": "/calc",
+      "destination": "/t/calc.html"
+    },
+    {
+      "source": "/case",
+      "destination": "/t/case.html"
+    },
+    {
+      "source": "/char",
+      "destination": "/t/char.html"
+    },
+    {
+      "source": "/coin",
+      "destination": "/t/coin.html"
+    },
+    {
+      "source": "/color",
+      "destination": "/t/color.html"
+    },
+    {
+      "source": "/count",
+      "destination": "/t/count.html"
+    },
+    {
+      "source": "/dice",
+      "destination": "/t/dice.html"
+    },
+    {
+      "source": "/diff",
+      "destination": "/t/diff.html"
+    },
+    {
+      "source": "/dir",
+      "destination": "/t/dir.html"
+    },
+    {
+      "source": "/dump",
+      "destination": "/t/dump.html"
+    },
+    {
+      "source": "/exif",
+      "destination": "/t/exif.html"
+    },
+    {
+      "source": "/hash",
+      "destination": "/t/hash.html"
+    },
+    {
+      "source": "/img",
+      "destination": "/t/img.html"
+    },
+    {
+      "source": "/inspect",
+      "destination": "/t/inspect.html"
+    },
+    {
+      "source": "/json",
+      "destination": "/t/json.html"
+    },
+    {
+      "source": "/lines",
+      "destination": "/t/lines.html"
+    },
+    {
+      "source": "/lorem",
+      "destination": "/t/lorem.html"
+    },
+    {
+      "source": "/pass",
+      "destination": "/t/pass.html"
+    },
+    {
+      "source": "/qr",
+      "destination": "/t/qr.html"
+    },
+    {
+      "source": "/rng",
+      "destination": "/t/rng.html"
+    },
+    {
+      "source": "/share",
+      "destination": "/t/share.html"
+    },
+    {
+      "source": "/spectrogram",
+      "destination": "/t/spectrogram.html"
+    },
+    {
+      "source": "/subdomains",
+      "destination": "/t/subdomains.html"
+    },
+    {
+      "source": "/time",
+      "destination": "/t/time.html"
+    },
+    {
+      "source": "/tz",
+      "destination": "/t/tz.html"
+    },
+    {
+      "source": "/units",
+      "destination": "/t/units.html"
+    },
+    {
+      "source": "/url",
+      "destination": "/t/url.html"
+    },
+    {
+      "source": "/uuid",
+      "destination": "/t/uuid.html"
+    }
+  ]
+}

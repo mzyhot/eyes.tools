@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>hash · 𓁹𓁹</title>
+<meta name="description" content="md5, sha-1, sha-256, sha-384 and sha-512 of text or a file, computed in your browser.">
+<meta name="theme-color" content="#fbfbfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<style>
+  /* scoped to this page; tokens only */
+  .drop {
+    border: var(--rule) dashed var(--color-rule);
+    padding: var(--space-4);
+    transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+  }
+  .drop.is-over { border-color: var(--color-ink); background: var(--color-paper-2); }
+  .meta {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: var(--track-wide);
+    color: var(--color-dim);
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+  .vd {
+    display: inline-block;
+    padding: 0 var(--space-2);
+    border: var(--rule) solid var(--color-rule);
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: var(--track-wide);
+    color: var(--color-dim);
+  }
+  .vd.-yes { background: var(--color-ink); color: var(--color-paper); border-color: var(--color-ink); }
+  .vd.-no { color: var(--color-alert); border-color: var(--color-alert); }
+  .check input:disabled { opacity: 0.38; cursor: not-allowed; }
+  .check:has(input:disabled) { color: var(--color-dim); opacity: 0.5; cursor: default; }
+</style>
+</head>
+<body data-tool="hash">
+<div class="wrap">
+
+  <header class="top">
+    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+    <p class="crumb" data-crumb></p>
+    <span class="top__spacer"></span>
+    <button class="tbtn" type="button" data-theme-toggle>theme</button>
+  </header>
+
+  <div class="head">
+    <h1 class="h1" data-title></h1>
+    <p class="lede" data-lede></p>
+  </div>
+
+  <main class="stack-6">
+
+    <section>
+      <label class="lbl" for="in">text</label>
+      <textarea class="field" id="in" rows="4" spellcheck="false" autocapitalize="off"
+                placeholder="the quick brown fox"></textarea>
+
+      <div class="row mt-3">
+        <div class="seg" role="radiogroup" aria-label="digest encoding">
+          <label><input type="radio" name="enc" value="hex" checked><span>hex</span></label>
+          <label><input type="radio" name="enc" value="b64"><span>base64</span></label>
+        </div>
+        <label class="check"><input type="checkbox" id="uc"><span>uppercase</span></label>
+        <span class="row__spacer"></span>
+        <button class="btn -ghost -sm" type="button" id="paste">paste</button>
+        <button class="btn -ghost -sm" type="button" id="clear">clear</button>
+      </div>
+
+      <div class="out-head mt-6">
+        <span class="lbl">digests of text</span>
+        <span class="row__spacer"></span>
+        <span class="meta" id="tmeta"></span>
+        <button class="tbtn" type="button" id="tcopy">copy all</button>
+        <button class="tbtn" type="button" id="tdl">download</button>
+      </div>
+      <div id="tout"></div>
+      <p class="err" id="terr"></p>
+      <p class="hint">md5 is fine for checksums against accidental corruption and broken for security — collisions are cheap to manufacture. encoding and case apply to every digest on this page.</p>
+    </section>
+
+    <section class="section--ruled">
+      <p class="lbl">file</p>
+      <div class="drop" id="drop">
+        <input class="field" type="file" id="file" aria-label="file to hash">
+        <p class="hint">or drop a file anywhere on this page — it is read locally and never uploaded.</p>
+      </div>
+
+      <div class="row mt-3">
+        <button class="btn -sm" type="button" id="run" disabled>hash file</button>
+        <button class="btn -ghost -sm" type="button" id="fclear" disabled>clear</button>
+        <span class="row__spacer"></span>
+        <span class="meta" id="fmeta" aria-live="polite"></span>
+      </div>
+
+      <div class="out-head mt-6">
+        <span class="lbl">digests of file</span>
+        <span class="row__spacer"></span>
+        <button class="tbtn" type="button" id="fcopy">copy all</button>
+        <button class="tbtn" type="button" id="fdl">download</button>
+      </div>
+      <div id="fout"></div>
+      <p class="err" id="ferr"></p>
+      <p class="hint">md5 streams in 4 MB chunks. sha digests need a whole-file copy and are limited to 64 MB to protect this tab's memory; larger files still get an md5 checksum.</p>
+    </section>
+
+    <section class="section--ruled">
+      <label class="lbl" for="cmp">compare</label>
+      <input class="field" type="text" id="cmp" spellcheck="false" autocomplete="off"
+             autocapitalize="off" placeholder="paste an expected digest">
+      <dl class="kv mt-4" aria-live="polite">
+        <dt>reads as</dt><dd id="ckind"></dd>
+        <dt>vs text</dt><dd id="ctext"></dd>
+        <dt>vs file</dt><dd id="cfile"></dd>
+      </dl>
+      <p class="err" id="cerr"></p>
+      <p class="hint">hex is case-insensitive; base64 is case-sensitive. accepts a digest, a checksum-file line, or a labeled line from the results above.</p>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <a href="../index.html">← all tools</a>
+    <span class="row__spacer"></span>
+    <span>runs in your browser · nothing is uploaded</span>
+  </footer>
+
+</div>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* ══ md5 ═══════════════════════════════════════════════════════════════
+     crypto.subtle has no md5, and md5 is still what most checksum lists
+     publish, so it is implemented here. RFC 1321, incremental so a file can
+     be streamed through it in chunks.                                     */
+
+  /* Per-round additive constants, floor(abs(sin(i + 1)) * 2^32). Held in an
+     Int32Array: the values above 2^31 arrive already truncated to the signed
+     form the `| 0` arithmetic below wants, and the engine reads machine
+     integers instead of boxed doubles it has to convert on every round. */
+  var K = new Int32Array([
+    0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+    0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+    0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa, 0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+    0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed, 0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+    0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c, 0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+    0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05, 0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+    0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039, 0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
+    0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
+  ]);
+  /* Left-rotation amounts. One four-value cycle per round, which is why the
+     round loops below index them with `i & 3`. */
+  var S1 = new Uint8Array([7, 12, 17, 22]), S2 = new Uint8Array([5, 9, 14, 20]);
+  var S3 = new Uint8Array([4, 11, 16, 23]), S4 = new Uint8Array([6, 10, 15, 21]);
+
+  function MD5() {
+    this.h = new Int32Array([0x67452301, 0xefcdab89 | 0, 0x98badcfe | 0, 0x10325476]);
+    this.buf = new Uint8Array(64);
+    this.bufLen = 0;
+    this.bytes = 0;
+    this.M = new Int32Array(16);
+  }
+
+  /* Transform one 64-byte block into the running state.
+     The four rounds are written out separately rather than as one 64-iteration
+     loop with a branch chain in it: the round function, the message-word order
+     and the rotation cycle are all constant within a round, so separating them
+     removes four comparisons and two table lookups from every one of the 64
+     steps — and this runs once per 64 bytes of a file that may be gigabytes. */
+  MD5.prototype._block = function (d, off) {
+    var M = this.M, h = this.h, i, j;
+    for (i = 0; i < 16; i++) {
+      j = off + (i << 2);
+      M[i] = d[j] | (d[j + 1] << 8) | (d[j + 2] << 16) | (d[j + 3] << 24);
+    }
+    var a = h[0], b = h[1], c = h[2], dd = h[3], t, s;
+
+    /* Round 1: f = (b AND c) OR (NOT b AND d); word i. */
+    for (i = 0; i < 16; i++) {
+      t = (((b & c) | (~b & dd)) + a + K[i] + M[i]) | 0;
+      s = S1[i & 3];
+      a = dd; dd = c; c = b;
+      b = (b + ((t << s) | (t >>> (32 - s)))) | 0;
+    }
+    /* Round 2: f = (d AND b) OR (NOT d AND c); word (5i + 1) mod 16. */
+    for (i = 16; i < 32; i++) {
+      t = (((dd & b) | (~dd & c)) + a + K[i] + M[(5 * i + 1) & 15]) | 0;
+      s = S2[i & 3];
+      a = dd; dd = c; c = b;
+      b = (b + ((t << s) | (t >>> (32 - s)))) | 0;
+    }
+    /* Round 3: f = b XOR c XOR d; word (3i + 5) mod 16. */
+    for (i = 32; i < 48; i++) {
+      t = ((b ^ c ^ dd) + a + K[i] + M[(3 * i + 5) & 15]) | 0;
+      s = S3[i & 3];
+      a = dd; dd = c; c = b;
+      b = (b + ((t << s) | (t >>> (32 - s)))) | 0;
+    }
+    /* Round 4: f = c XOR (b OR NOT d); word (7i) mod 16. */
+    for (i = 48; i < 64; i++) {
+      t = ((c ^ (b | ~dd)) + a + K[i] + M[(7 * i) & 15]) | 0;
+      s = S4[i & 3];
+      a = dd; dd = c; c = b;
+      b = (b + ((t << s) | (t >>> (32 - s)))) | 0;
+    }
+
+    h[0] = (h[0] + a) | 0;
+    h[1] = (h[1] + b) | 0;
+    h[2] = (h[2] + c) | 0;
+    h[3] = (h[3] + dd) | 0;
+  };
+
+  MD5.prototype.update = function (data) {
+    var i = 0, n = data.length;
+    this.bytes += n;
+    if (this.bufLen) {
+      var need = 64 - this.bufLen;
+      if (n < need) { this.buf.set(data, this.bufLen); this.bufLen += n; return this; }
+      this.buf.set(data.subarray(0, need), this.bufLen);
+      this._block(this.buf, 0);
+      i = need;
+      this.bufLen = 0;
+    }
+    for (; i + 64 <= n; i += 64) this._block(data, i);
+    if (i < n) { this.buf.set(data.subarray(i), 0); this.bufLen = n - i; }
+    return this;
+  };
+
+  MD5.prototype.digest = function () {
+    var total = this.bytes;
+    var pad = new Uint8Array((this.bufLen < 56 ? 56 : 120) - this.bufLen + 8);
+    pad[0] = 0x80;
+    var lo = (total * 8) >>> 0, hi = Math.floor(total / 536870912) >>> 0, p = pad.length - 8;
+    pad[p]     = lo & 255;         pad[p + 1] = (lo >>> 8) & 255;
+    pad[p + 2] = (lo >>> 16) & 255; pad[p + 3] = (lo >>> 24) & 255;
+    pad[p + 4] = hi & 255;         pad[p + 5] = (hi >>> 8) & 255;
+    pad[p + 6] = (hi >>> 16) & 255; pad[p + 7] = (hi >>> 24) & 255;
+    this.update(pad);
+    var out = new Uint8Array(16);
+    for (var i = 0; i < 4; i++) {
+      out[i * 4]     = this.h[i] & 255;
+      out[i * 4 + 1] = (this.h[i] >>> 8) & 255;
+      out[i * 4 + 2] = (this.h[i] >>> 16) & 255;
+      out[i * 4 + 3] = (this.h[i] >>> 24) & 255;
+    }
+    return out;
+  };
+
+  /* ══ bytes in, strings out ═════════════════════════════════════════════ */
+
+  /* One two-character string per byte value, built once, so formatting a digest
+     is a table lookup per byte rather than a base conversion and a pad test. */
+  var HEX = new Array(256);
+  for (var hexByte = 0; hexByte < 256; hexByte++) HEX[hexByte] = (hexByte < 16 ? "0" : "") + hexByte.toString(16);
+
+  function hex(b) {
+    var s = "", i;
+    for (i = 0; i < b.length; i++) s += HEX[b[i]];
+    return s;
+  }
+
+  function b64(b) {
+    var bin = "", i;
+    for (i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+    return btoa(bin);
+  }
+
+  function unhex(s) {
+    var out = new Uint8Array(s.length / 2), i;
+    for (i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16);
+    return out;
+  }
+
+  function unb64(s) {
+    s = String(s).replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    var bin = atob(s), out = new Uint8Array(bin.length), i;
+    for (i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function same(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  /* ══ wiring ════════════════════════════════════════════════════════════ */
+
+  var ALGOS = [
+    { key: "md5",    label: "md5",     sub: null,       len: 16 },
+    { key: "sha1",   label: "sha-1",   sub: "SHA-1",    len: 20 },
+    { key: "sha256", label: "sha-256", sub: "SHA-256",  len: 32 },
+    { key: "sha384", label: "sha-384", sub: "SHA-384",  len: 48 },
+    { key: "sha512", label: "sha-512", sub: "SHA-512",  len: 64 }
+  ];
+  var BY_LEN = {};
+  ALGOS.forEach(function (a) { BY_LEN[a.len] = a; });
+
+  var subtle = (window.crypto && window.crypto.subtle) || null;
+  var enc = new TextEncoder();
+
+  var input = E.qs("#in"), tout = E.qs("#tout"), terr = E.qs("#terr"), tmeta = E.qs("#tmeta");
+  var fileIn = E.qs("#file"), drop = E.qs("#drop"), fout = E.qs("#fout"), ferr = E.qs("#ferr");
+  var fmeta = E.qs("#fmeta"), runBtn = E.qs("#run"), fclear = E.qs("#fclear");
+  var cmp = E.qs("#cmp"), ckind = E.qs("#ckind"), ctext = E.qs("#ctext"), cfile = E.qs("#cfile"), cerr = E.qs("#cerr");
+  var ucBox = E.qs("#uc");
+
+  var textD = {}, fileD = {};        /* key → Uint8Array */
+  var textSeq = 0, fileSeq = 0, current = null;
+
+  function encMode() {
+    var r = E.qs('input[name="enc"]:checked');
+    return r ? r.value : "hex";
+  }
+
+  function fmt(bytes) {
+    if (!bytes) return "";
+    if (encMode() === "b64") return b64(bytes);
+    var h = hex(bytes);
+    return ucBox.checked ? h.toUpperCase() : h;
+  }
+
+  function rows(host) {
+    return ALGOS.map(function (a) {
+      var v = E.el("div", { class: "res__v" });
+      var b = E.el("button", { class: "tbtn", type: "button", text: "copy",
+                               "aria-label": "copy " + a.label });
+      E.on(b, "click", function () { E.copy(v.textContent, b); });
+      host.appendChild(E.el("div", { class: "res" }, [
+        E.el("div", { class: "res__k", text: a.label }), v, b
+      ]));
+      return { key: a.key, label: a.label, v: v };
+    });
+  }
+  var rowsT = rows(tout), rowsF = rows(fout);
+
+  function report(store) {
+    return ALGOS.filter(function (a) { return store[a.key]; })
+      .map(function (a) { return a.label + "  " + fmt(store[a.key]); })
+      .join("\n");
+  }
+
+  function paint() {
+    rowsT.forEach(function (r) { r.v.textContent = fmt(textD[r.key]); });
+    rowsF.forEach(function (r) { r.v.textContent = fmt(fileD[r.key]); });
+    compare();
+  }
+
+  /* run every sha over one buffer at once */
+  function shas(bytes) {
+    if (!subtle) return Promise.reject(new Error("nosubtle"));
+    var want = ALGOS.filter(function (a) { return a.sub; });
+    return Promise.all(want.map(function (a) {
+      return subtle.digest(a.sub, bytes);
+    })).then(function (list) {
+      var out = {};
+      list.forEach(function (ab, i) { out[want[i].key] = new Uint8Array(ab); });
+      return out;
+    });
+  }
+
+  function subtleMsg(e) {
+    if (e && e.message === "nosubtle") {
+      return "crypto.subtle is unavailable in this context — sha digests need https, localhost or file://. md5 above is still exact.";
+    }
+    return "crypto.subtle refused the digest — " + ((e && e.name) || "unknown error") + ".";
+  }
+
+  /* ── text ─────────────────────────────────────────────── */
+
+  var TEXT_CAP = 64 * 1024 * 1024;
+
+  function doText() {
+    var s = input.value, seq = ++textSeq;
+    terr.textContent = "";
+    if (!s) {
+      textD = {};
+      tmeta.textContent = "";
+      paint();
+      return;
+    }
+    var bytes;
+    try { bytes = enc.encode(s); }
+    catch (e) { textD = {}; tmeta.textContent = ""; terr.textContent = "could not encode this text as utf-8."; paint(); return; }
+
+    tmeta.textContent = E.bytes(bytes.length) + " utf-8";
+    if (bytes.length > TEXT_CAP) {
+      textD = {};
+      terr.textContent = "text is " + E.bytes(bytes.length) + " — over the " + E.bytes(TEXT_CAP) + " live limit. use the file section.";
+      paint();
+      return;
+    }
+
+    textD = { md5: new MD5().update(bytes).digest() };
+    paint();
+
+    shas(bytes).then(function (out) {
+      if (seq !== textSeq) return;
+      for (var k in out) textD[k] = out[k];
+      paint();
+    }, function (e) {
+      if (seq !== textSeq) return;
+      terr.textContent = subtleMsg(e);
+    });
+  }
+  var runText = E.debounce(doText, 140);
+
+  E.on(input, "input", function () { ++textSeq; textD = {}; paint(); runText(); });
+  E.on(E.qs("#clear"), "click", function () { input.value = ""; doText(); input.focus(); });
+  E.on(E.qs("#paste"), "click", function () {
+    var btn = this;
+    if (!navigator.clipboard || !navigator.clipboard.readText) { E.flash(btn, "use ⌘V"); input.focus(); return; }
+    navigator.clipboard.readText().then(function (t) { input.value = t; doText(); },
+      function () { E.flash(btn, "blocked"); input.focus(); });
+  });
+  E.on(E.qs("#tcopy"), "click", function () { E.copy(report(textD), this); });
+  E.on(E.qs("#tdl"), "click", function () {
+    var body = report(textD);
+    if (!body) { E.flash(this, "nothing yet"); return; }
+    E.download(body + "\n", "digests.txt");
+    E.flash(this, "saved");
+  });
+
+  /* ── file ─────────────────────────────────────────────── */
+
+  var CHUNK = 4 * 1024 * 1024, SHA_FILE_CAP = 64 * 1024 * 1024;
+
+  function readSlice(blob) {
+    if (blob.arrayBuffer) return blob.arrayBuffer();
+    return new Promise(function (res, rej) {
+      var r = new FileReader();
+      r.onload = function () { res(r.result); };
+      r.onerror = function () { rej(r.error || new Error("read")); };
+      r.readAsArrayBuffer(blob);
+    });
+  }
+
+  function busy(on, label) {
+    if (on) { runBtn.dataset.state = "loading"; runBtn.disabled = true; runBtn.textContent = label; }
+    else { delete runBtn.dataset.state; runBtn.disabled = !current; runBtn.textContent = "hash file"; }
+  }
+
+  function pick(f) {
+    current = f;
+    fclear.disabled = false;
+    hashFile(f);
+  }
+
+  function hashFile(f) {
+    var seq = ++fileSeq, off = 0, md = new MD5(), whole = null;
+    fileD = {};
+    ferr.textContent = "";
+    fmeta.textContent = f.name + " · " + E.bytes(f.size);
+    paint();
+    busy(true, "reading 0%");
+
+    if (subtle && f.size <= SHA_FILE_CAP) {
+      try { whole = new Uint8Array(f.size); }
+      catch (e) { whole = null; }
+    }
+
+    step();
+
+    function step() {
+      if (seq !== fileSeq) return;
+      if (off >= f.size) { finish(); return; }
+      var end = Math.min(f.size, off + CHUNK);
+      readSlice(f.slice(off, end)).then(function (ab) {
+        if (seq !== fileSeq) return;
+        var u = new Uint8Array(ab);
+        md.update(u);
+        if (whole) whole.set(u, off);
+        off = end;
+        busy(true, "reading " + Math.floor(off / f.size * 100) + "%");
+        setTimeout(step, 0);              /* yield so the page keeps painting */
+      }, function (e) {
+        if (seq !== fileSeq) return;
+        ferr.textContent = "could not read " + f.name + " — " + ((e && e.name) || "read error") + ". it may have moved or changed on disk.";
+        busy(false);
+      });
+    }
+
+    function finish() {
+      fileD.md5 = md.digest();
+      fout.classList.remove("reveal");
+      void fout.offsetWidth;
+      fout.classList.add("reveal");
+      paint();
+
+      if (!subtle) { ferr.textContent = subtleMsg(new Error("nosubtle")); busy(false); return; }
+      if (!whole) {
+        ferr.textContent = "md5 is complete. sha digests require whole-file copies and are limited to 64 MB to protect this tab's memory.";
+        busy(false);
+        return;
+      }
+      busy(true, "sha…");
+      shas(whole).then(function (out) {
+        if (seq !== fileSeq) return;
+        for (var k in out) fileD[k] = out[k];
+        whole = null;
+        paint();
+        busy(false);
+      }, function (e) {
+        if (seq !== fileSeq) return;
+        whole = null;
+        ferr.textContent = subtleMsg(e);
+        busy(false);
+      });
+    }
+  }
+
+  E.on(fileIn, "change", function () {
+    var f = fileIn.files && fileIn.files[0];
+    if (f) pick(f);
+  });
+
+  E.on(runBtn, "click", function () { if (current) hashFile(current); });
+
+  E.on(fclear, "click", function () {
+    fileSeq++;
+    current = null;
+    fileD = {};
+    fileIn.value = "";
+    fmeta.textContent = "";
+    ferr.textContent = "";
+    fclear.disabled = true;
+    busy(false);
+    paint();
+  });
+
+  /* drop anywhere on the page; the zone lights up */
+  var overT;
+  function carriesFile(e) {
+    var t = e.dataTransfer && e.dataTransfer.types;
+    return !!t && Array.prototype.indexOf.call(t, "Files") >= 0;
+  }
+  E.on(document, "dragover", function (e) {
+    if (!carriesFile(e)) return;
+    e.preventDefault();
+    drop.classList.add("is-over");
+    clearTimeout(overT);
+    overT = setTimeout(function () { drop.classList.remove("is-over"); }, 180);
+  });
+  E.on(document, "drop", function (e) {
+    if (!carriesFile(e)) return;
+    e.preventDefault();
+    clearTimeout(overT);
+    drop.classList.remove("is-over");
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) { ferr.textContent = "that drop carried no file."; return; }
+    try { fileIn.files = e.dataTransfer.files; } catch (err) { /* input keeps its own label */ }
+    pick(f);
+  });
+
+  E.on(E.qs("#fcopy"), "click", function () { E.copy(report(fileD), this); });
+  E.on(E.qs("#fdl"), "click", function () {
+    var body = report(fileD);
+    if (!body) { E.flash(this, "nothing yet"); return; }
+    E.download(body + "\n", (current ? current.name : "file") + ".digests.txt");
+    E.flash(this, "saved");
+  });
+
+  /* ── compare ──────────────────────────────────────────── */
+
+  /* first whitespace-delimited token wins (checksum-file lines), then the
+     whole value with all whitespace removed (digests split into groups)  */
+  function parseExpected(raw) {
+    var trimmed = String(raw).trim();
+    var labeled = trimmed.match(/^(md5|sha-?1|sha-?256|sha-?384|sha-?512)(?:\s*\([^\r\n]*\)\s*=\s*|\s*[:=]\s*|\s+)(\S+)/i);
+    var declared = labeled ? labeled[1].toLowerCase().replace(/-/g, "") : null;
+    var first = trimmed.split(/\s+/)[0] || "";
+    var joined = trimmed.replace(/\s+/g, "");
+    var cands = first ? [first] : [];
+    if (labeled) cands.unshift(labeled[2]);
+    if (joined && joined !== first) cands.push(joined);
+
+    for (var i = 0; i < cands.length; i++) {
+      var c = cands[i], b;
+      if (/^[0-9a-fA-F]+$/.test(c) && c.length % 2 === 0) {
+        b = unhex(c.toLowerCase());
+        if (BY_LEN[b.length]) return declared && declared !== BY_LEN[b.length].key ? null : { bytes: b, enc: "hex", algo: BY_LEN[b.length] };
+      }
+      if (/^[A-Za-z0-9+/\-_]+={0,2}$/.test(c)) {
+        try { b = unb64(c); } catch (e) { b = null; }
+        if (b && BY_LEN[b.length]) return declared && declared !== BY_LEN[b.length].key ? null : { bytes: b, enc: "base64", algo: BY_LEN[b.length] };
+      }
+    }
+    return null;
+  }
+
+  function verdict(dd, expected, mine, missing) {
+    dd.textContent = "";
+    if (!mine) { dd.appendChild(E.el("span", { class: "dim", text: missing })); return; }
+    var hit = same(expected, mine);
+    dd.appendChild(E.el("span", { class: "vd " + (hit ? "-yes" : "-no"), text: hit ? "match" : "no match" }));
+  }
+
+  function compare() {
+    var raw = cmp.value;
+    cerr.textContent = "";
+    if (!raw.trim()) {
+      ckind.textContent = ""; ctext.textContent = ""; cfile.textContent = "";
+      cmp.removeAttribute("aria-invalid");
+      return;
+    }
+    var p = parseExpected(raw);
+    if (!p) {
+      ckind.textContent = ""; ctext.textContent = ""; cfile.textContent = "";
+      cmp.setAttribute("aria-invalid", "true");
+      cerr.textContent = "not a digest of a known length — expected 32, 40, 64, 96 or 128 hex characters, or the same bytes in base64.";
+      return;
+    }
+    cmp.removeAttribute("aria-invalid");
+    ckind.textContent = p.algo.label + " · " + p.enc + " · " + p.bytes.length + " bytes";
+    verdict(ctext, p.bytes, textD[p.algo.key], input.value ? "not computed" : "no text");
+    verdict(cfile, p.bytes, fileD[p.algo.key], current ? "not computed" : "no file");
+  }
+
+  E.on(cmp, "input", compare);
+
+  /* ── controls ─────────────────────────────────────────── */
+
+  E.qsa('input[name="enc"]').forEach(function (r) {
+    E.on(r, "change", function () {
+      ucBox.disabled = encMode() === "b64";
+      paint();
+    });
+  });
+  E.on(ucBox, "change", paint);
+
+  /* ── boot ─────────────────────────────────────────────── */
+
+  input.value = E.param("t") || "";
+  doText();
+  compare();
+})();
+</script>
+</body>
+</html>

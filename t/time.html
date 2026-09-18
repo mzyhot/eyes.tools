@@ -1,0 +1,65 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>time · 𓁹𓁹</title><meta name="description" content="convert dates and unix timestamps."><link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css"><link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script></head><body data-tool="time"><div class="wrap"><header class="top"><a class="eyes" href="../index.html" data-eyes>𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" data-theme-toggle>theme</button></header><div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div><main class="stack-6">
+  <section>
+    <label class="lbl" for="in">date or unix timestamp</label>
+    <input class="field" id="in" spellcheck="false" autocomplete="off" placeholder="2026-08-21T12:00:00Z or 1787332800">
+    <div class="row mt-2"><button class="btn" id="now" type="button">use now</button></div>
+    <p class="err" id="err" role="alert"></p>
+  </section>
+  <section>
+    <label class="lbl" for="unit">timestamp unit</label>
+    <select class="field" id="unit"><option value="auto">auto</option><option value="seconds">seconds</option><option value="milliseconds">milliseconds</option></select>
+    <p class="hint mt-2" id="interpreted"></p>
+  </section>
+  <dl class="kv" id="out" aria-live="polite"><dt>local</dt><dd></dd><dt>utc</dt><dd></dd><dt>iso 8601</dt><dd></dd><dt>unix seconds</dt><dd></dd><dt>unix milliseconds</dt><dd></dd></dl>
+  <button class="btn -ghost" id="copy" type="button" disabled>copy</button>
+</main><footer class="foot"><a href="../index.html">← all tools</a></footer></div><script src="../tools.js"></script><script src="../s.js"></script><script>
+(function () {
+  "use strict";
+  var input = E.qs("#in"), values = E.qsa("#out dd"), error = E.qs("#err");
+  var unit = E.qs("#unit"), interpreted = E.qs("#interpreted"), copy = E.qs("#copy"), report = "";
+  var labels = ["local", "utc", "iso 8601", "unix seconds", "unix milliseconds"];
+
+  function run() {
+    var raw = input.value.trim();
+    values.forEach(function (value) { value.textContent = ""; });
+    error.textContent = interpreted.textContent = report = "";
+    copy.disabled = true;
+    if (!raw) return;
+
+    var numeric = /^[+-]?\d+(?:\.\d+)?$/.test(raw);
+    var calendar = /^(\d{4})-(\d{2})-(\d{2})(?:T|\s|$)/.exec(raw);
+    if (calendar) {
+      var check = new Date(0);
+      check.setUTCFullYear(+calendar[1], +calendar[2] - 1, +calendar[3]);
+      if (check.getUTCFullYear() !== +calendar[1] || check.getUTCMonth() !== +calendar[2] - 1 || check.getUTCDate() !== +calendar[3]) {
+        error.textContent = "that calendar date does not exist";
+        return;
+      }
+    }
+    var selected = unit.value;
+    if (numeric && selected === "auto") selected = Math.abs(Number(raw)) < 1e11 ? "seconds" : "milliseconds";
+    var date = numeric ? new Date(Number(raw) * (selected === "seconds" ? 1000 : 1)) : new Date(raw);
+    if (!Number.isFinite(date.getTime())) {
+      error.textContent = "date not understood or outside the supported range";
+      return;
+    }
+    if (numeric) interpreted.textContent = "read as " + selected + (unit.value === "auto" ? " · choose a unit to override" : "");
+    var results = [date.toLocaleString(), date.toUTCString(), date.toISOString(), Math.floor(date.getTime() / 1000), date.getTime()];
+    results.forEach(function (value, index) { values[index].textContent = value; });
+    report = results.map(function (value, index) { return labels[index] + "  " + value; }).join("\n");
+    copy.disabled = false;
+  }
+  E.on(input, "input", run);
+  E.on(unit, "change", run);
+  E.on(E.qs("#now"), "click", function () { input.value = new Date().toISOString(); run(); });
+  E.on(copy, "click", function () { E.copy(report, this); });
+  var query = E.param("t"), queryUnit = E.param("unit");
+  input.value = query === null ? new Date().toISOString() : query;
+  if (queryUnit === "seconds" || queryUnit === "milliseconds") unit.value = queryUnit;
+  run();
+})();
+</script></body></html>

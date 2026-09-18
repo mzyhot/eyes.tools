@@ -1,0 +1,77 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>img · 𓁹𓁹</title><meta name="description" content="resize and convert browser-supported image formats."><link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css"><link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script><style>#preview{display:block;max-width:100%;height:auto}</style></head><body data-tool="img"><div class="wrap"><header class="top"><a class="eyes" href="../index.html" data-eyes>𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" data-theme-toggle>theme</button></header><div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div><main class="stack-6">
+<section><label class="lbl" for="file">image</label><input class="field" id="file" type="file" accept="image/*,.jpg,.jpeg,.jfif,.png,.apng,.gif,.webp,.avif,.svg,.bmp,.ico"><p class="hint">typically jpeg, png, apng, gif, webp, avif, svg, bmp and ico · support depends on your browser · animation becomes one frame</p></section>
+<section class="stack"><div class="grid2"><div><label class="lbl" for="w">width</label><input class="field" id="w" type="number" min="1" max="12000" step="1"></div><div><label class="lbl" for="h">height</label><input class="field" id="h" type="number" min="1" max="12000" step="1"></div></div><div class="row"><label class="check"><input id="lock" type="checkbox" checked><span>keep proportions</span></label><span class="row__spacer"></span><button class="tbtn" id="original" type="button" disabled>original size</button></div></section><section class="grid2"><div><label class="lbl" for="fmt">format</label><select class="field" id="fmt"><option value="image/png">png</option><option value="image/jpeg">jpeg</option><option value="image/webp" selected>webp</option></select></div><div><label class="lbl" for="q">quality</label><input id="q" type="range" min="1" max="100" value="82"><p class="hint"><span id="qv">82</span>%</p></div></section>
+<p class="err" id="err" role="alert"></p><figure class="figure"><canvas id="preview" role="img" aria-label="resized image preview"></canvas></figure><div class="row"><button class="btn" id="dl" disabled>download</button><span class="hint" id="meta" aria-live="polite"></span></div>
+</main><footer class="foot"><a href="../index.html">← all tools</a></footer></div><script src="../tools.js"></script><script src="../s.js"></script><script>
+(function () {
+  "use strict";
+  var file = E.qs("#file"), w = E.qs("#w"), h = E.qs("#h"), lock = E.qs("#lock"), original = E.qs("#original"), fmt = E.qs("#fmt"), q = E.qs("#q"), canvas = E.qs("#preview"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl");
+  var source = null, sourceWidth = 0, sourceHeight = 0, sourceBytes = 0, name = "image", loadSeq = 0, renderSeq = 0, encoded = null, MAX_PIXELS = 40000000;
+  function ext(type) { return type === "image/jpeg" ? "jpg" : type.split("/")[1]; }
+  function discard(image) { if (image && typeof image.close === "function") { try { image.close(); } catch (e) {} } }
+  function reset() { renderSeq++; discard(source); source = null; encoded = null; sourceWidth = 0; sourceHeight = 0; canvas.width = 0; canvas.height = 0; w.value = ""; h.value = ""; download.disabled = true; original.disabled = true; meta.textContent = ""; error.textContent = ""; }
+  function draw() {
+    var seq = ++renderSeq;
+    encoded = null; download.disabled = true; error.textContent = ""; meta.textContent = "";
+    q.disabled = fmt.value === "image/png";
+    if (!source) return;
+    var width = Number(w.value), height = Number(h.value), type = fmt.value;
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 12000 || height > 12000) { error.textContent = "width and height must be whole numbers from 1 to 12000"; return; }
+    if (width * height > MAX_PIXELS) { error.textContent = "that size exceeds the 40 megapixel safety limit"; return; }
+    try {
+    canvas.width = width; canvas.height = height;
+    var context = canvas.getContext("2d");
+    if (!context) { error.textContent = "canvas is unavailable in this browser"; return; }
+    if (type === "image/jpeg") { context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--color-qr-paper").trim(); context.fillRect(0, 0, width, height); }
+    context.imageSmoothingEnabled = true; context.imageSmoothingQuality = "high";
+    context.drawImage(source, 0, 0, width, height);
+    meta.textContent = width + " × " + height + " · encoding…";
+    canvas.toBlob(function (blob) {
+      if (seq !== renderSeq) return;
+      if (!blob || blob.type !== type) { error.textContent = "the browser could not encode " + ext(type); meta.textContent = ""; return; }
+      encoded = blob; download.disabled = false;
+      var change = sourceBytes ? (1 - blob.size / sourceBytes) * 100 : 0;
+      meta.textContent = width + " × " + height + " · " + E.bytes(sourceBytes) + " → " + E.bytes(blob.size) + (sourceBytes ? " · " + Math.abs(change).toFixed(1) + "% " + (change >= 0 ? "smaller" : "larger") : "");
+    }, type, Number(q.value) / 100);
+    } catch (e) { error.textContent = "the browser could not render this image; try a smaller size or another format"; meta.textContent = ""; }
+  }
+  var scheduleDraw = E.debounce(draw, 160);
+  function dimensions(changed) {
+    encoded = null; download.disabled = true; renderSeq++;
+    if (lock.checked && sourceWidth && sourceHeight && Number(changed.value) > 0) {
+      if (changed === w) h.value = Math.max(1, Math.round(Number(w.value) * sourceHeight / sourceWidth));
+      else w.value = Math.max(1, Math.round(Number(h.value) * sourceWidth / sourceHeight));
+    }
+    scheduleDraw();
+  }
+  function fallback(f) { return new Promise(function (resolve, reject) { var image = new Image(), url = URL.createObjectURL(f); image.onload = function () { URL.revokeObjectURL(url); resolve({ image: image, width: image.naturalWidth, height: image.naturalHeight }); }; image.onerror = function () { URL.revokeObjectURL(url); reject(new Error("this browser could not decode that image format")); }; image.src = url; }); }
+  function decode(f) { if (window.createImageBitmap) return createImageBitmap(f, { imageOrientation: "from-image" }).then(function (bitmap) { return { image: bitmap, width: bitmap.width, height: bitmap.height }; }).catch(function () { return fallback(f); }); return fallback(f); }
+  E.on(file, "change", function () {
+    var f = this.files && this.files[0], seq = ++loadSeq;
+    reset(); if (!f) return;
+    if (!f.size) { error.textContent = "that image file is empty"; return; }
+    if (f.size > 64 * 1024 * 1024) { error.textContent = "images are limited to 64 MB to protect this tab's memory"; return; }
+    name = f.name.replace(/\.[^.]*$/, "").trim() || "image"; sourceBytes = f.size; meta.textContent = "reading…";
+    decode(f).then(function (decoded) {
+      if (seq !== loadSeq) { discard(decoded.image); return; }
+      if (!decoded.width || !decoded.height) { discard(decoded.image); throw new Error("that image has no usable dimensions"); }
+      if (decoded.width * decoded.height > MAX_PIXELS) { discard(decoded.image); throw new Error("that image exceeds the 40 megapixel limit"); }
+      source = decoded.image; sourceWidth = decoded.width; sourceHeight = decoded.height;
+      w.value = sourceWidth; h.value = sourceHeight; original.disabled = false; draw();
+    }).catch(function (e) { if (seq === loadSeq) { meta.textContent = ""; error.textContent = e.message || "image could not be decoded"; } });
+  });
+  E.on(w, "input", function () { dimensions(w); }); E.on(h, "input", function () { dimensions(h); });
+  E.on(lock, "change", function () { if (lock.checked) dimensions(w); });
+  E.on(original, "click", function () { if (source) { w.value = sourceWidth; h.value = sourceHeight; draw(); } });
+  E.on(fmt, "change", draw);
+  E.on(q, "input", function () { E.qs("#qv").textContent = q.value; encoded = null; download.disabled = true; renderSeq++; scheduleDraw(); });
+  E.on(download, "click", function () { if (encoded) { E.download(encoded, name + "." + ext(encoded.type), encoded.type); E.flash(this, "downloaded"); } });
+  try { var probe = document.createElement("canvas"), webp = fmt.querySelector('option[value="image/webp"]'); probe.width = probe.height = 1; if (webp && probe.toDataURL("image/webp").indexOf("data:image/webp") !== 0) webp.remove(); if (probe.toDataURL("image/avif").indexOf("data:image/avif") === 0) fmt.appendChild(E.el("option", { value: "image/avif", text: "avif" })); } catch (e) {}
+  E.on(window, "pagehide", function (event) { if (event && event.persisted) return; loadSeq++; renderSeq++; discard(source); source = null; });
+  q.disabled = fmt.value === "image/png";
+})();
+</script></body></html>

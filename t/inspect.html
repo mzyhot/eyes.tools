@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>text inspector · 𓁹𓁹</title>
+    <meta name="description" content="inspect text as unicode code points or ascii bytes.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+    <link rel="stylesheet" href="../tokens.css">
+    <link rel="stylesheet" href="../s.css">
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("eyes.theme");
+          if (theme) document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {}
+      }());
+    </script>
+    <style>
+      .inspect-row {
+        display: grid;
+        grid-template-columns: minmax(3rem, .45fr) minmax(0, 1fr) minmax(0, 1fr);
+        gap: var(--space-3);
+        padding: var(--space-2) 0;
+        border-top: var(--rule) solid var(--color-rule);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+      }
+      .inspect-row span { overflow-wrap: anywhere; }
+      @media (max-width: 420px) {
+        .inspect-row {
+          grid-template-columns: minmax(2.5rem, .4fr) minmax(0, 1fr);
+          row-gap: var(--space-1);
+        }
+        .inspect-row span:last-child { grid-column: 2; }
+      }
+    </style>
+  </head>
+  <body data-tool="inspect">
+    <div class="wrap">
+      <header class="top">
+        <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+        <p class="crumb" data-crumb></p>
+        <span class="top__spacer"></span>
+        <button class="tbtn" type="button" data-theme-toggle>theme</button>
+      </header>
+
+      <div class="head">
+        <h1 class="h1" data-title></h1>
+        <p class="lede" data-lede></p>
+      </div>
+
+      <main class="stack-6">
+        <section>
+          <div class="seg" role="radiogroup" aria-label="character set">
+            <label><input type="radio" name="mode" value="unicode" checked><span>unicode</span></label>
+            <label><input type="radio" name="mode" value="ascii"><span>ascii</span></label>
+          </div>
+        </section>
+
+        <section>
+          <label class="lbl" for="in">text</label>
+          <textarea class="field" id="in" spellcheck="false"></textarea>
+          <p class="err" id="err" role="alert" aria-live="polite"></p>
+        </section>
+
+        <section>
+          <div class="out-head">
+            <span class="lbl">character</span>
+            <span class="row__spacer"></span>
+            <button class="tbtn" id="copy" type="button" disabled>copy table</button>
+            <button class="tbtn" id="download" type="button" disabled>download tsv</button>
+          </div>
+          <div id="out" aria-live="polite"></div>
+        </section>
+      </main>
+
+      <footer class="foot"><a href="../index.html">← all tools</a></footer>
+    </div>
+
+    <script src="../tools.js"></script>
+    <script src="../s.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        var input = E.qs("#in");
+        var output = E.qs("#out");
+        var error = E.qs("#err");
+        var copy = E.qs("#copy");
+        var download = E.qs("#download");
+        var report = "";
+        var MAX_ROWS = 10000;
+        var names = [
+          "NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL",
+          "BS", "HT", "LF", "VT", "FF", "CR", "SO", "SI",
+          "DLE", "DC1", "DC2", "DC3", "DC4", "NAK", "SYN", "ETB",
+          "CAN", "EM", "SUB", "ESC", "FS", "GS", "RS", "US"
+        ];
+
+        function mode() {
+          var selected = E.qsa("input[name=mode]").filter(function (radio) {
+            return radio.checked;
+          })[0];
+          return selected ? selected.value : "unicode";
+        }
+
+        /* Characters that render as nothing, or as something indistinguishable
+           from a space. Naming them is the whole point of the tool, so the table
+           is hoisted out of the per-character path — it used to be rebuilt, all
+           twenty-one entries, once for every row on the page. */
+        var INVISIBLE = {
+          160: "no-break space", 173: "soft hyphen", 8203: "zero-width space",
+          8204: "zero-width non-joiner", 8205: "zero-width joiner", 8206: "left-to-right mark",
+          8207: "right-to-left mark", 8232: "line separator", 8233: "paragraph separator",
+          8234: "left-to-right embedding", 8235: "right-to-left embedding", 8236: "pop directional formatting",
+          8237: "left-to-right override", 8238: "right-to-left override", 8239: "narrow no-break space",
+          8288: "word joiner", 8294: "left-to-right isolate", 8295: "right-to-left isolate",
+          8296: "first strong isolate", 8297: "pop directional isolate", 65279: "byte-order mark"
+        };
+        var WHITESPACE = /^\s$/u;
+        var encoder = new TextEncoder();
+        var HEX = new Array(256);
+        for (var hexByte = 0; hexByte < 256; hexByte++) HEX[hexByte] = (hexByte < 16 ? "0" : "") + hexByte.toString(16);
+
+        /* What to print in the character column: a name when the glyph itself
+           would show nothing useful, otherwise the character. */
+        function shown(character) {
+          var cp = character.codePointAt(0);
+          if (cp < 32) return names[cp];
+          if (cp === 127) return "DEL";
+          if (character === " ") return "space";
+          if (INVISIBLE[cp]) return INVISIBLE[cp];
+          if (WHITESPACE.test(character)) return "whitespace";
+          return character;
+        }
+
+        /* The UTF-8 bytes of one character, as spaced hex. */
+        function utf8(character) {
+          var bytes = encoder.encode(character), out = "", i;
+          for (i = 0; i < bytes.length; i++) out += (i ? " " : "") + HEX[bytes[i]];
+          return out;
+        }
+
+        function row(host, character, code, value) {
+          host.appendChild(E.el("div", { class: "inspect-row" }, [
+            E.el("span", { text: character }),
+            E.el("span", { text: code }),
+            E.el("span", { text: value })
+          ]));
+        }
+
+        function firstCharacters(value, limit) {
+          var rows = [];
+          var offset = 0;
+          while (offset < value.length && rows.length < limit) {
+            var codePoint = value.codePointAt(offset);
+            var character = String.fromCodePoint(codePoint);
+            rows.push(character);
+            offset += character.length;
+          }
+          return { rows: rows, truncated: offset < value.length };
+        }
+
+        function run() {
+          var scan = firstCharacters(input.value, MAX_ROWS);
+          var rows = scan.rows;
+          var ascii = mode() === "ascii";
+          var lines = [];
+          output.textContent = "";
+          error.textContent = "";
+          report = "";
+          copy.disabled = rows.length === 0;
+          download.disabled = rows.length === 0;
+
+          if (scan.truncated) {
+            error.textContent = "showing the first " + MAX_ROWS.toLocaleString() +
+              " characters to keep the page responsive";
+          }
+
+          /* Rows are assembled off-document and appended once. Ten thousand
+             live appends would lay the page out ten thousand times. */
+          var frag = document.createDocumentFragment();
+          var warnedNonAscii = false;
+          rows.forEach(function (character) {
+            var codePoint = character.codePointAt(0);
+            var bytes = utf8(character);
+            var code = ascii
+              ? (codePoint < 128 ? String(codePoint) : "outside ascii")
+              : "U+" + codePoint.toString(16).toUpperCase().padStart(4, "0");
+            var label = ascii && codePoint < 32
+              ? names[codePoint]
+              : ascii && codePoint === 127
+                ? "DEL"
+                : bytes;
+            if (ascii && codePoint > 127 && !warnedNonAscii) {
+              warnedNonAscii = true;
+              error.textContent += (error.textContent ? " · " : "") + "non-ascii characters are marked outside range";
+            }
+            var glyph = shown(character);
+            row(frag, glyph, code, label);
+            lines.push(glyph + "\t" + code + "\t" + label);
+          });
+          output.appendChild(frag);
+          report = lines.join("\n");
+        }
+
+        E.on(input, "input", run);
+        E.qsa("input[name=mode]").forEach(function (radio) {
+          E.on(radio, "change", run);
+        });
+        E.on(copy, "click", function () { E.copy(report, this); });
+        E.on(download, "click", function () {
+          var header = "character\t" + (mode() === "ascii" ? "ascii decimal\tname / utf-8 bytes" : "unicode\tutf-8 bytes");
+          E.download(header + "\n" + report, "characters.tsv", "text/tab-separated-values;charset=utf-8");
+          E.flash(this, "downloaded");
+        });
+        var query = E.param("t");
+        if (query) input.value = query;
+        run();
+      }());
+    </script>
+  </body>
+</html>

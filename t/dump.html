@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>dump · 𓁹𓁹</title>
+<meta name="description" content="write, sort, and clean up text in a scratchpad that autosaves in your browser.">
+<meta name="theme-color" content="#fbfbfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<style>
+  #line-tools > summary {
+    min-height: var(--control-size);
+    padding-block: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--color-dim);
+    cursor: pointer;
+  }
+  #line-tools > summary:hover,
+  #line-tools > summary:active { color: var(--color-ink); }
+</style>
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+</head>
+<body data-tool="dump">
+<div class="wrap">
+
+  <header class="top">
+    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+    <p class="crumb" data-crumb></p>
+    <span class="top__spacer"></span>
+    <button class="tbtn" type="button" data-theme-toggle>theme</button>
+  </header>
+
+  <div class="head">
+    <h1 class="h1" data-title></h1>
+    <p class="lede" data-lede></p>
+  </div>
+
+  <main class="stack-6">
+
+    <div>
+      <label class="lbl" for="pad">text</label>
+      <textarea class="field" id="pad" rows="14"></textarea>
+      <div aria-live="polite"><p class="err" id="err"></p></div>
+      <div class="hint" id="offer" hidden></div>
+    </div>
+
+    <details class="section--ruled" id="line-tools">
+      <summary>lines</summary>
+      <div class="stack mt-3">
+        <div>
+          <label class="lbl" for="line-order">order</label>
+          <select class="field" id="line-order"><option value="keep">keep original order</option><option value="asc">sort a → z</option><option value="desc">sort z → a</option><option value="reverse">reverse</option></select>
+          <div class="row mt-3">
+            <label class="check"><input type="checkbox" id="line-dedupe" checked><span>remove duplicates</span></label>
+            <label class="check"><input type="checkbox" id="line-trim" checked><span>trim each line</span></label>
+            <label class="check"><input type="checkbox" id="line-empty" checked><span>remove empty lines</span></label>
+            <label class="check"><input type="checkbox" id="line-ignore-case"><span>ignore case</span></label>
+          </div>
+        </div>
+        <p class="err" id="line-error" role="alert"></p>
+        <div>
+          <div class="out-head"><label class="lbl" for="line-preview">preview</label><span class="row__spacer"></span><span class="hint num" id="line-stats" aria-live="polite"></span></div>
+          <textarea class="field" id="line-preview" rows="6" readonly spellcheck="false" aria-describedby="line-error"></textarea>
+        </div>
+        <div class="row">
+          <button class="btn -sm" id="line-apply" type="button" disabled>apply to pad</button>
+          <button class="btn -ghost -sm" id="line-undo" type="button" disabled>undo</button>
+          <button class="btn -ghost -sm" id="line-copy" type="button" disabled>copy preview</button>
+          <button class="btn -ghost -sm" id="line-download" type="button" disabled>download preview</button>
+        </div>
+      </div>
+    </details>
+
+    <section class="section--ruled">
+      <div class="grid2">
+        <div><label class="lbl" for="find">find</label><input class="field" id="find" autocomplete="off"></div>
+        <div><label class="lbl" for="replace">replace with</label><input class="field" id="replace" autocomplete="off"></div>
+      </div>
+      <div class="row mt-3">
+        <button class="btn -ghost -sm" type="button" id="findnext">find next</button>
+        <button class="btn -ghost -sm" type="button" id="replaceone">replace</button>
+        <button class="btn -ghost -sm" type="button" id="replaceall">replace all</button>
+        <label class="check"><input type="checkbox" id="matchcase"><span>match case</span></label>
+      </div>
+      <p class="hint" id="findinfo" aria-live="polite"></p>
+    </section>
+
+    <div>
+      <div class="out-head">
+        <span class="lbl">count</span>
+        <span class="row__spacer"></span>
+        <button class="tbtn" type="button" id="copycount">copy</button>
+      </div>
+      <dl class="kv">
+        <dt>chars</dt><dd class="num" id="k-chars">0</dd>
+        <dt>words</dt><dd class="num" id="k-words">0</dd>
+        <dt>lines</dt><dd class="num" id="k-lines">0</dd>
+        <dt>utf-8</dt><dd class="num" id="k-bytes">0 B</dd>
+        <dt>saved</dt><dd class="num" id="k-saved">—</dd>
+      </dl>
+    </div>
+
+    <div>
+      <div class="row">
+        <button class="btn -sm" type="button" id="copyall">copy all</button>
+        <button class="btn -ghost -sm" type="button" id="dl">download .txt</button>
+        <button class="btn -ghost -sm" type="button" id="link">share by link</button>
+        <button class="btn -ghost -sm" type="button" id="clear">clear</button>
+      </div>
+      <p class="hint" id="linkinfo"></p>
+    </div>
+
+  </main>
+
+  <footer class="foot">
+    <a href="../index.html">← all tools</a>
+    <span class="row__spacer"></span>
+    <span>runs in your browser · nothing is uploaded</span>
+  </footer>
+
+</div>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* ── core ── pure, no dom; mirrored by the throwaway test ─────────── */
+
+  /* one pass over the string: code points, words, lines, utf-8 bytes.
+     one loop keeps a megabyte paste cheap. */
+  function scan(s) {
+    var chars = 0, words = 0, bytes = 0, lines = s.length ? 1 : 0, inWord = false;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i), lo;
+      if (c < 0x80) bytes += 1;
+      else if (c < 0x800) bytes += 2;
+      else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.length &&
+               (lo = s.charCodeAt(i + 1)) >= 0xDC00 && lo <= 0xDFFF) {
+        bytes += 4; i++;                    /* surrogate pair = one code point */
+      } else bytes += 3;                    /* lone surrogate encodes as U+FFFD, also 3 */
+      chars++;
+      if (c === 10) lines++;
+      var ws = c === 32 || (c >= 9 && c <= 13) || c === 0xA0 || c === 0x1680 ||
+               (c >= 0x2000 && c <= 0x200A) || c === 0x2028 || c === 0x2029 ||
+               c === 0x202F || c === 0x205F || c === 0x3000 || c === 0xFEFF;
+      if (ws) inWord = false;
+      else if (!inWord) { inWord = true; words++; }
+    }
+    return { chars: chars, words: words, lines: lines, bytes: bytes };
+  }
+
+  /* length of unpadded base64 for n bytes — lets us size the link
+     without building it */
+  function b64len(n) {
+    var r = n % 3;
+    return (n - r) / 3 * 4 + (r === 0 ? 0 : r + 1);
+  }
+
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+  function dateStamp(d) {
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+
+  /* filename from the first non-blank line, else a date-stamped fallback */
+  function fileName(text, now) {
+    var parts = text.slice(0, 4000).split("\n"), line = "", i;
+    for (i = 0; i < parts.length; i++) { if (parts[i].trim()) { line = parts[i].trim(); break; } }
+    var slug = "";
+    if (line) {
+      try { line = line.normalize("NFKD"); } catch (e) {}
+      slug = line.replace(/[\u0300-\u036f]/g, "")
+                 .toLowerCase()
+                 .replace(/[^a-z0-9]+/g, "-")
+                 .replace(/^-+/, "")
+                 .slice(0, 48)
+                 .replace(/-+$/, "");
+    }
+    return (slug || "dump-" + dateStamp(now)) + ".txt";
+  }
+
+  function processLines(raw, options) {
+    if (raw.length > 2000000) throw new Error("keep input under 2 million characters");
+    if (!raw) return { text: "", before: 0, after: 0 };
+    var lines = raw.split(/\r\n|\n|\r/), before = lines.length;
+    if (lines.length > 100000) throw new Error("keep input under 100,000 lines");
+    if (options.trim) lines = lines.map(function (line) { return line.trim(); });
+    if (options.empty) lines = lines.filter(function (line) { return line.trim().length > 0; });
+    if (options.dedupe) {
+      var seen = new Set();
+      lines = lines.filter(function (line) {
+        var key = options.ignoreCase ? line.toLowerCase() : line;
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      });
+    }
+    if (options.order === "reverse") lines.reverse();
+    else if (options.order === "asc" || options.order === "desc") {
+      var compare = new Intl.Collator(undefined, { numeric: true, sensitivity: options.ignoreCase ? "accent" : "variant" }).compare;
+      var sign = options.order === "desc" ? -1 : 1;
+      lines.sort(function (a, b) { return sign * compare(a, b); });
+    }
+    return { text: lines.join("\n"), before: before, after: lines.length };
+  }
+
+  /* ── end core ─────────────────────────────────────────────────────── */
+
+  var pad = E.qs("#pad"), err = E.qs("#err"), offer = E.qs("#offer"),
+      info = E.qs("#linkinfo"), clearBtn = E.qs("#clear"),
+      kChars = E.qs("#k-chars"), kWords = E.qs("#k-words"), kLines = E.qs("#k-lines"),
+      kBytes = E.qs("#k-bytes"), kSaved = E.qs("#k-saved");
+
+  var KEY = "eyes.dump", KEY_AT = "eyes.dump.at";
+  var BASE = location.href.split("#")[0].split("?")[0];
+  var LINK_SOFT = 2000;                 /* url length some clients start truncating */
+  var LINK_MAX_BYTES = 384 * 1024;      /* past this a link is useless, not just long */
+  var SAVE_MS = 400, STAT_MS = 90, CHEAP = 20000, UNDO_MS = 7000;
+
+  var saveTimer = null, statTimer = null, dirty = false, savedAt = null;
+  var undoText = null, undoTimer = null, undoOffered = false;
+  var errKind = null, storeOK = true;
+
+  function num(n) { try { return n.toLocaleString(); } catch (e) { return String(n); } }
+
+  function setErr(msg, kind) { errKind = kind; err.textContent = msg; }
+  function clearErr(kind) { if (errKind === kind) { errKind = null; err.textContent = ""; } }
+
+  /* ── storage ──────────────────────────────────────────────────────── */
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+  function isQuota(e) {
+    return !!e && (e.name === "QuotaExceededError" ||
+                   e.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+                   e.code === 22 || e.code === 1014);
+  }
+
+  try {
+    localStorage.setItem("eyes.dump.probe", "1");
+    localStorage.removeItem("eyes.dump.probe");
+  } catch (e) {
+    storeOK = false;
+    setErr("this browser is blocking local storage, so the pad cannot autosave. copy or download before you leave.", "store");
+  }
+
+  function saveNow() {
+    clearTimeout(saveTimer);
+    dirty = false;
+    if (!storeOK) return;
+    var v = pad.value;
+    try {
+      if (v) {
+        localStorage.setItem(KEY, v);
+        localStorage.setItem(KEY_AT, String(Date.now()));
+        savedAt = Date.now();
+      } else {
+        localStorage.removeItem(KEY);
+        localStorage.removeItem(KEY_AT);
+        savedAt = null;
+      }
+      clearErr("quota");
+      renderSaved();
+    } catch (e) {
+      if (isQuota(e)) {
+        setErr("this browser's storage is full — the autosaved copy is still the older, smaller one. download the .txt to be safe.", "quota");
+      } else {
+        setErr("autosave failed (" + ((e && e.name) || "unknown error") + ") — the pad still works, but it will not be restored.", "quota");
+      }
+    }
+  }
+
+  function scheduleSave() {
+    dirty = true;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, SAVE_MS);
+  }
+
+  function flushSave() { if (dirty) saveNow(); }
+
+  function renderSaved() {
+    if (!storeOK) { kSaved.textContent = "unavailable"; return; }
+    if (!savedAt) { kSaved.textContent = "—"; return; }
+    var d = new Date(savedAt), n = new Date();
+    var today = d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() &&
+                d.getDate() === n.getDate();
+    try { kSaved.textContent = today ? d.toLocaleTimeString() : d.toLocaleString(); }
+    catch (e) { kSaved.textContent = d.toISOString(); }
+  }
+
+  /* ── readout ──────────────────────────────────────────────────────── */
+
+  function update() {
+    var s = scan(pad.value);
+    kChars.textContent = num(s.chars);
+    kWords.textContent = num(s.words);
+    kLines.textContent = num(s.lines);
+    kBytes.textContent = s.bytes < 1024
+      ? num(s.bytes) + " B"
+      : E.bytes(s.bytes) + " · " + num(s.bytes) + " B";
+
+    var note = "the text rides inside the link itself — nothing is stored on a server.";
+    if (!s.bytes) { info.textContent = note; return; }
+    var len = BASE.length + 3 + b64len(s.bytes);
+    info.textContent = "link would be " + num(len) + " characters" +
+      (len > LINK_SOFT ? " — past about 2,000 some clients truncate urls. " : ". ") + note;
+  }
+
+  function queueUpdate() {
+    if (pad.value.length <= CHEAP) { clearTimeout(statTimer); update(); return; }
+    clearTimeout(statTimer);
+    statTimer = setTimeout(update, STAT_MS);
+  }
+
+  /* replace the pad's contents, wholesale and saved at once */
+  function setText(t) {
+    endLineUndo();
+    pad.value = t;
+    clearTimeout(statTimer);
+    update();
+    runLines();
+    saveNow();
+  }
+
+  function endUndo() {
+    if (undoText === null) return;
+    undoText = null;
+    clearTimeout(undoTimer);
+    clearBtn.textContent = "clear";
+  }
+
+  /* ── line cleanup: preview first, apply explicitly ────────────────── */
+
+  var lineTools = E.qs("#line-tools"), linePreview = E.qs("#line-preview"),
+      lineError = E.qs("#line-error"), lineStats = E.qs("#line-stats"),
+      lineApply = E.qs("#line-apply"), lineUndo = E.qs("#line-undo"),
+      lineCopy = E.qs("#line-copy"), lineDownload = E.qs("#line-download");
+  var lineTimer = null, lineSource = null, lineUndoText = null, lineUndoResult = null;
+
+  function endLineUndo() {
+    lineUndoText = lineUndoResult = null;
+    lineUndo.disabled = true;
+  }
+
+  function runLines() {
+    clearTimeout(lineTimer);
+    lineSource = null;
+    linePreview.value = "";
+    lineError.textContent = "";
+    lineStats.textContent = "";
+    lineApply.disabled = lineCopy.disabled = lineDownload.disabled = true;
+    if (!lineTools.open) return;
+    try {
+      var result = processLines(pad.value, {
+        order: E.qs("#line-order").value,
+        trim: E.qs("#line-trim").checked,
+        dedupe: E.qs("#line-dedupe").checked,
+        empty: E.qs("#line-empty").checked,
+        ignoreCase: E.qs("#line-ignore-case").checked
+      });
+      lineSource = pad.value;
+      linePreview.value = result.text;
+      lineStats.textContent = num(result.before) + " → " + num(result.after) + " lines";
+      lineApply.disabled = result.text === pad.value;
+      lineCopy.disabled = lineDownload.disabled = !result.text;
+    } catch (e) { lineError.textContent = e.message; }
+  }
+
+  function queueLines() {
+    lineSource = null;
+    lineApply.disabled = lineCopy.disabled = lineDownload.disabled = true;
+    clearTimeout(lineTimer);
+    if (!lineTools.open || pad.value.length <= CHEAP) { runLines(); return; }
+    lineTimer = setTimeout(runLines, 100);
+  }
+
+  E.on(lineTools, "toggle", runLines);
+  E.qsa("select, input[type=checkbox]", lineTools).forEach(function (control) {
+    E.on(control, "change", runLines);
+  });
+  E.on(lineCopy, "click", function () {
+    if (lineSource === pad.value) E.copy(linePreview.value, this);
+  });
+  E.on(lineDownload, "click", function () {
+    if (lineSource !== pad.value || !linePreview.value) return;
+    E.download(linePreview.value, "lines.txt", "text/plain;charset=utf-8");
+    E.flash(this, "downloaded");
+  });
+  E.on(lineApply, "click", function () {
+    if (lineSource !== pad.value || linePreview.value === pad.value) return;
+    var previous = pad.value;
+    endUndo();
+    if (undoOffered) { undoOffered = false; offer.hidden = true; }
+    setText(linePreview.value);
+    lineUndoText = previous;
+    lineUndoResult = pad.value;
+    lineUndo.disabled = false;
+    E.flash(this, "applied");
+  });
+  E.on(lineUndo, "click", function () {
+    if (lineUndoText === null || pad.value !== lineUndoResult) return;
+    var previous = lineUndoText;
+    setText(previous);
+    pad.focus();
+  });
+
+  /* ── input ────────────────────────────────────────────────────────── */
+
+  E.on(pad, "input", function () {
+    endUndo();
+    endLineUndo();
+    if (undoOffered) { undoOffered = false; offer.hidden = true; }
+    queueUpdate();
+    queueLines();
+    scheduleSave();
+  });
+
+  /* ── literal find and replace ────────────────────────────────────── */
+
+  var findInput = E.qs("#find"), replaceInput = E.qs("#replace"),
+      findInfo = E.qs("#findinfo"), matchCase = E.qs("#matchcase");
+
+  function literalPattern(needle) {
+    return new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), matchCase.checked ? "gu" : "giu");
+  }
+
+  function matchingSelection(value, needle) {
+    var match = literalPattern(needle).exec(value);
+    return !!match && match.index === 0 && match[0].length === value.length;
+  }
+
+  function findNext(from) {
+    var needle = findInput.value;
+    if (!needle) { findInfo.textContent = "enter text to find."; return -1; }
+    var pattern = literalPattern(needle), start = from == null ? pad.selectionEnd : from;
+    pattern.lastIndex = start;
+    var match = pattern.exec(pad.value);
+    if (!match && start > 0) { pattern.lastIndex = 0; match = pattern.exec(pad.value); }
+    if (!match) { findInfo.textContent = "no matches."; return -1; }
+    var at = match.index;
+    pad.focus();
+    pad.setSelectionRange(at, at + match[0].length);
+    findInfo.textContent = "match at character " + num(Array.from(pad.value.slice(0, at)).length + 1) + ".";
+    return at;
+  }
+
+  E.on(E.qs("#findnext"), "click", function () { findNext(); });
+
+  E.on(E.qs("#replaceone"), "click", function () {
+    var needle = findInput.value, selected = pad.value.slice(pad.selectionStart, pad.selectionEnd);
+    if (!needle) { findInfo.textContent = "enter text to find."; return; }
+    if (!matchingSelection(selected, needle)) {
+      if (findNext() < 0) return;
+    }
+    var at = pad.selectionStart, value = replaceInput.value;
+    pad.setRangeText(value, pad.selectionStart, pad.selectionEnd, "end");
+    endLineUndo();
+    queueUpdate(); queueLines(); scheduleSave();
+    findInfo.textContent = "replaced one match.";
+    findNext(at + value.length);
+  });
+
+  E.on(E.qs("#replaceall"), "click", function () {
+    var needle = findInput.value;
+    if (!needle) { findInfo.textContent = "enter text to find."; return; }
+    var hits = 0;
+    var result = pad.value.replace(literalPattern(needle), function () { hits++; return replaceInput.value; });
+    if (!hits) { findInfo.textContent = "no matches."; return; }
+    setText(result);
+    findInfo.textContent = "replaced " + num(hits) + (hits === 1 ? " match." : " matches.");
+    pad.focus();
+  });
+
+  E.on(E.qs("#copyall"), "click", function () { E.copy(pad.value, this); });
+
+  E.on(E.qs("#copycount"), "click", function () {
+    var s = scan(pad.value);
+    E.copy("chars " + s.chars + "\nwords " + s.words + "\nlines " + s.lines +
+           "\nutf-8 bytes " + s.bytes, this);
+  });
+
+  E.on(E.qs("#dl"), "click", function () {
+    if (!pad.value) { E.flash(this, "nothing to save"); return; }
+    E.download(pad.value, fileName(pad.value, new Date()), "text/plain;charset=utf-8");
+    E.flash(this, "downloaded");
+  });
+
+  E.on(E.qs("#link"), "click", function () {
+    var v = pad.value, btn = this;
+    if (!v) { E.flash(btn, "nothing to share"); return; }
+    var bytes = scan(v).bytes;
+    if (bytes > LINK_MAX_BYTES) {
+      setErr(E.bytes(bytes) + " is far too much text for a url — download the .txt instead.", "link");
+      return;
+    }
+    var url;
+    try { url = BASE + "#d=" + E.b64url.enc(v); }
+    catch (e) { setErr("could not encode this text into a link.", "link"); return; }
+    clearErr("link");
+    E.copy(url, btn);
+  });
+
+  /* clear is optimistic: the button becomes its own undo for a few seconds */
+  E.on(clearBtn, "click", function () {
+    if (undoText !== null) {
+      var back = undoText;
+      endUndo();
+      setText(back);
+      pad.focus();
+      return;
+    }
+    if (!pad.value) { E.flash(clearBtn, "already empty"); return; }
+    undoText = pad.value;
+    setText("");
+    clearBtn.textContent = "cleared · undo";
+    undoTimer = setTimeout(function () { undoText = null; clearBtn.textContent = "clear"; }, UNDO_MS);
+    pad.focus();
+  });
+
+  /* ── shared links ─────────────────────────────────────────────────── */
+
+  function fromHash() {
+    var h = location.hash.replace(/^#/, "");
+    if (h.slice(0, 2) !== "d=") return null;
+    h = h.slice(2);
+    if (!h) return null;
+    if (h.length > Math.ceil(LINK_MAX_BYTES / 3) * 4) {
+      setErr("the link carries too much text. ask for a text file instead.", "hash");
+      return null;
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(h)) {
+      setErr("the link's payload is not valid base64url.", "hash");
+      return null;
+    }
+    try { return E.b64url.dec(h); }
+    catch (e) { setErr("the link's payload is not valid base64url.", "hash"); return null; }
+  }
+
+  function offerText(text) {
+    if (!text || text === pad.value) return;
+    if (!pad.value) { setText(text); return; }   /* pad empty — nothing to destroy */
+
+    offer.textContent = "";
+    offer.appendChild(document.createTextNode(
+      "this link carries " + num(scan(text).chars) + " characters of text. "));
+    var load = E.el("button", { class: "tbtn", type: "button", text: "load it" });
+    E.on(load, "click", function () {
+      var prev = pad.value;
+      setText(text);
+      offer.textContent = "loaded from the link. ";
+      var undo = E.el("button", { class: "tbtn", type: "button", text: "undo" });
+      E.on(undo, "click", function () {
+        setText(prev);
+        undoOffered = false;
+        offer.hidden = true;
+        pad.focus();
+      });
+      offer.appendChild(undo);
+      undoOffered = true;
+      pad.focus();
+    });
+    offer.appendChild(load);
+    offer.hidden = false;
+  }
+
+  E.on(window, "hashchange", function () {
+    clearErr("hash");
+    offerText(fromHash());
+  });
+
+  /* ── boot ─────────────────────────────────────────────────────────── */
+
+  pad.value = lsGet(KEY) || "";
+  lineTools.open = E.param("mode") === "lines";
+  savedAt = parseInt(lsGet(KEY_AT), 10) || null;
+  if (!pad.value) savedAt = null;
+  update();
+  runLines();
+  renderSaved();
+
+  offerText(fromHash() || E.param("t") || "");
+
+  E.on(window, "pagehide", flushSave);
+  E.on(document, "visibilitychange", function () { if (document.hidden) flushSave(); });
+
+  try { pad.setSelectionRange(pad.value.length, pad.value.length); } catch (e) {}
+})();
+</script>
+</body>
+</html>

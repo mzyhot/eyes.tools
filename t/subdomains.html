@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>subdomains · 𓁹𓁹</title>
+<meta name="description" content="search certificate-transparency subdomains through crt.name.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<style>
+  .sub-list { border-top: var(--rule) solid var(--color-rule); }
+  .sub-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: var(--rule) solid var(--color-rule); }
+  .sub-row a { min-width: 0; overflow-wrap: anywhere; text-decoration: underline; text-decoration-thickness: var(--rule); text-underline-offset: var(--space-1); }
+  .sub-row time { color: var(--color-dim); font-family: var(--font-mono); font-size: var(--text-xs); white-space: nowrap; }
+  @media (max-width: 420px) { .sub-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } }
+</style>
+</head>
+<body data-tool="subdomains">
+<div class="wrap">
+  <header class="top">
+    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+    <p class="crumb" data-crumb></p>
+    <span class="top__spacer"></span>
+    <button class="tbtn" type="button" data-theme-toggle>theme</button>
+  </header>
+
+  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
+
+  <main class="stack-6">
+    <section>
+      <label class="lbl" for="domain">apex domain</label>
+      <input class="field" id="domain" inputmode="url" autocomplete="url" autocapitalize="none" spellcheck="false" placeholder="example.com">
+      <button class="btn mt-2" type="button" id="search">search</button>
+      <p class="hint">queries crt.name through this site's api · public certificate-transparency history</p>
+      <p class="err" id="err"></p>
+    </section>
+
+    <p class="hint">all sites and subdomains shown in searches are not confirmed, trusted, or affiliated with this site. view them at your own warning, we are not responsible.</p>
+
+    <section id="results" hidden>
+      <label class="lbl" for="filter">filter results</label>
+      <input class="field" id="filter" type="search" autocomplete="off" spellcheck="false" placeholder="filter">
+      <label class="lbl mt-3" for="sort">sort</label>
+      <select class="field" id="sort"><option value="name">name a–z</option><option value="newest">first seen · newest</option><option value="oldest">first seen · oldest</option></select>
+      <div class="out-head mt-4">
+        <span class="lbl" id="result-label">results</span>
+        <span class="row__spacer"></span>
+        <button class="tbtn" type="button" id="copy">copy</button>
+        <button class="tbtn" type="button" id="download">download</button>
+        <button class="tbtn" type="button" id="csv">download csv</button>
+      </div>
+      <ul class="sub-list" id="list" aria-live="polite"></ul>
+      <p class="hint" id="empty" hidden>no matching names.</p>
+      <p class="hint" id="limited" hidden>results were limited by the site's safety cap.</p>
+    </section>
+  </main>
+
+  <footer class="foot"><a href="../index.html">← all tools</a><span class="row__spacer"></span><span>query leaves this site for crt.name</span></footer>
+</div>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+(function () {
+  "use strict";
+  var input = E.qs("#domain"), button = E.qs("#search"), err = E.qs("#err"), results = E.qs("#results"),
+      filter = E.qs("#filter"), list = E.qs("#list"), empty = E.qs("#empty"), limited = E.qs("#limited"),
+      resultLabel = E.qs("#result-label"), copyButton = E.qs("#copy"), downloadButton = E.qs("#download"),
+      sort = E.qs("#sort"), csvButton = E.qs("#csv"), rows = [], shown = [], wasLimited = false, requestSeq = 0, activeRequest = null, CLIENT_RESULT_LIMIT = 10000;
+
+  function domain(value) {
+    value = String(value || "").trim().toLowerCase().replace(/^\*\./, "");
+    if (!value) throw new Error("enter an apex domain.");
+    if (value.length > 1024 || Array.from(value).some(function (c) { return c.codePointAt(0) < 128 && !/[a-z0-9.-]/.test(c); })) throw new Error("enter only the domain, without a url or path.");
+    var host;
+    try { host = new URL("https://" + value).hostname; } catch (e) { throw new Error("domain is not valid."); }
+    if (host.length > 253 || host.indexOf(".") < 1 || !/^(?:[a-z]{2,63}|xn--[a-z0-9](?:[a-z0-9-]{0,57}[a-z0-9])?)$/.test(host.split(".").pop())) throw new Error("enter an apex domain such as example.com.");
+    if (host.split(".").some(function (x) { return !x || x.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(x); })) throw new Error("domain contains an invalid label.");
+    return host;
+  }
+
+  function clearResults() {
+    rows = [];
+    shown = [];
+    wasLimited = false;
+    filter.value = "";
+    list.textContent = "";
+    empty.hidden = true;
+    limited.hidden = true;
+    resultLabel.textContent = "results";
+    copyButton.disabled = true;
+    downloadButton.disabled = true;
+    csvButton.disabled = true;
+    results.hidden = true;
+  }
+
+  function render() {
+    var term = filter.value.trim().toLowerCase();
+    shown = rows.filter(function (r) { return !term || r.sub.indexOf(term) > -1; });
+    shown.sort(function (a, b) {
+      if (sort.value !== "name") {
+        if (!a.first_seen && b.first_seen) return 1;
+        if (a.first_seen && !b.first_seen) return -1;
+        var dateOrder = a.first_seen.localeCompare(b.first_seen);
+        if (dateOrder) return sort.value === "newest" ? -dateOrder : dateOrder;
+      }
+      return a.sub.localeCompare(b.sub);
+    });
+    list.textContent = "";
+    var fragment = document.createDocumentFragment();
+    shown.forEach(function (r) {
+      var a = E.el("a", { href: "https://" + r.sub, text: r.sub, target: "_blank", rel: "noopener noreferrer" });
+      var time = E.el("time", { text: r.first_seen || "date unknown", dateTime: r.first_seen || "" });
+      fragment.appendChild(E.el("li", { class: "sub-row" }, [a, time]));
+    });
+    list.appendChild(fragment);
+    empty.hidden = shown.length > 0;
+    limited.hidden = !wasLimited;
+    resultLabel.textContent = shown.length + " of " + rows.length;
+    copyButton.disabled = shown.length === 0;
+    downloadButton.disabled = shown.length === 0;
+    csvButton.disabled = shown.length === 0;
+  }
+
+  function safeRows(body, apex) {
+    if (!body || body.apex !== apex || !Array.isArray(body.results)) throw new Error("subdomain api returned an invalid response");
+    var clean = [], seen = Object.create(null);
+    for (var i = 0; i < body.results.length && clean.length < CLIENT_RESULT_LIMIT; i++) {
+      var row = body.results[i] || {}, sub = String(row.sub || "").trim().toLowerCase();
+      if (sub.length > 253 || (sub !== apex && !sub.endsWith("." + apex))) continue;
+      if (sub.split(".").some(function (label) { return !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label); })) continue;
+      if (seen[sub]) continue;
+      seen[sub] = true;
+      var date = /^\d{4}-\d{2}-\d{2}$/.test(String(row.first_seen || "")) ? String(row.first_seen) : "";
+      if (date && (!Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) date = "";
+      clean.push({ sub: sub, first_seen: date });
+    }
+    wasLimited = body.truncated === true || (body.results.length > clean.length && clean.length === CLIENT_RESULT_LIMIT);
+    return clean;
+  }
+
+  function search() {
+    var seq = ++requestSeq;
+    if (activeRequest) activeRequest.abort();
+    button.disabled = false;
+    delete button.dataset.state;
+    clearResults();
+    var host;
+    try { host = domain(input.value); } catch (e) { err.textContent = e.message; return; }
+    input.value = host; err.textContent = ""; button.disabled = true; button.dataset.state = "loading";
+    var controller = activeRequest = new AbortController();
+    var timeout = setTimeout(function () { controller.abort(); }, 15000);
+    fetch("../api/subdomains?apex=" + encodeURIComponent(host), { headers: { Accept: "application/json" }, signal: controller.signal })
+      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (body) { if (!res.ok) throw new Error(body.error || "subdomain lookup failed"); return body; }); })
+      .then(function (body) {
+        if (seq !== requestSeq) return;
+        rows = safeRows(body, host);
+        filter.value = ""; results.hidden = false; render(); E.flash(button, "loaded");
+      })
+      .catch(function (e) {
+        if (seq !== requestSeq) return;
+        results.hidden = true;
+        err.textContent = e.name === "AbortError" ? "lookup timed out; try again." : e && (e.name === "TypeError" || /failed to fetch|network/i.test(e.message || ""))
+          ? "the subdomain api is not available on this host yet."
+          : (e.message || "subdomain lookup failed");
+      })
+      .finally(function () {
+        clearTimeout(timeout);
+        if (seq !== requestSeq) return;
+        activeRequest = null;
+        button.disabled = false;
+        delete button.dataset.state;
+      });
+  }
+
+  E.on(button, "click", search);
+  E.on(window, "pagehide", function () { if (activeRequest) activeRequest.abort(); });
+  E.on(input, "keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); search(); } });
+  E.on(filter, "input", render);
+  E.on(sort, "change", render);
+  E.on(copyButton, "click", function () { E.copy(shown.map(function (r) { return r.sub; }).join("\n"), this); });
+  E.on(downloadButton, "click", function () {
+    if (shown.length) E.download(shown.map(function (r) { return r.sub; }).join("\n") + "\n", "subdomains.txt");
+  });
+  E.on(csvButton, "click", function () {
+    if (!shown.length) return;
+    E.download("subdomain,first_seen\r\n" + shown.map(function (row) { return row.sub + "," + row.first_seen; }).join("\r\n") + "\r\n", "subdomains.csv", "text/csv;charset=utf-8");
+    E.flash(this, "downloaded");
+  });
+  clearResults();
+  var q = E.param("q"); if (q) { input.value = q; search(); }
+})();
+</script>
+</body>
+</html>

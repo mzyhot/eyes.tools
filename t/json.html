@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>json · 𓁹𓁹</title>
+<meta name="description" content="format, minify, validate, and escape json.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<style>.status-ok{color:var(--color-dim)}</style>
+</head>
+<body data-tool="json">
+<div class="wrap">
+  <header class="top"><a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" type="button" data-theme-toggle>theme</button></header>
+  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
+  <main class="stack-6">
+    <section>
+      <label class="lbl" for="in">json</label>
+      <textarea class="field" id="in"></textarea>
+      <div class="grid2 mt-2"><div><label class="lbl" for="indent">indent</label><select class="field" id="indent"><option value="2">2 spaces</option><option value="4">4 spaces</option><option value="tab">tabs</option></select></div></div>
+      <div class="row mt-2"><button class="btn" id="fmt" type="button">format</button><button class="btn -ghost" id="min" type="button">minify</button><button class="btn -ghost" id="esc" type="button">escape</button><button class="btn -ghost" id="unesc" type="button">unescape</button><button class="btn -ghost" type="button" data-copy="#out">copy</button></div>
+      <p class="err" id="err" role="alert" aria-live="polite"></p>
+    </section>
+    <section><label class="lbl" for="out">result</label><textarea class="field" id="out" readonly aria-live="polite"></textarea></section>
+  </main>
+  <footer class="foot"><a href="../index.html">← all tools</a></footer>
+</div>
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+(function () {
+  "use strict";
+  var input = E.qs("#in"), output = E.qs("#out"), error = E.qs("#err");
+  var mode = "format";
+  var actions = [["#fmt", "format"], ["#min", "minify"], ["#esc", "escape"], ["#unesc", "unescape"]];
+  function clearStatus() { error.classList.remove("status-ok"); }
+  function formatJSON(source, indent) {
+    // Validate without serializing the parsed values: JSON.stringify would
+    // silently round large integers, normalize exponents, and lose duplicate keys.
+    JSON.parse(source);
+    var tokens = source.match(/"(?:[^"\\]|\\[\s\S])*"|true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],:]/g) || [];
+    if (!indent) return tokens.join("");
+    var parts = [], depth = 0, size = 0;
+    function append(value) {
+      size += value.length;
+      if (size > 8 * 1024 * 1024) throw new Error("formatted output is too large; use minify or reduce the input");
+      parts.push(value);
+    }
+    function line() { append("\n" + indent.repeat(depth)); }
+    tokens.forEach(function (token, i) {
+      if (token === "{" || token === "[") {
+        append(token);
+        if (++depth > 128) throw new Error("json is nested too deeply to format");
+        if (tokens[i + 1] !== "}" && tokens[i + 1] !== "]") line();
+      } else if (token === "}" || token === "]") {
+        depth--;
+        if (tokens[i - 1] !== "{" && tokens[i - 1] !== "[") line();
+        append(token);
+      } else if (token === ",") { append(token); line(); }
+      else append(token === ":" ? ": " : token);
+    });
+    return parts.join("");
+  }
+  function run() {
+    actions.forEach(function (action) {
+      var button = E.qs(action[0]), selected = mode === action[1];
+      button.classList.toggle("-ghost", !selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+    if (!input.value.trim() && mode !== "escape") { output.value = ""; clearStatus(); error.textContent = ""; return; }
+    try {
+      if (input.value.length > 2 * 1024 * 1024) throw new Error("keep json input under 2 million characters");
+      if (mode === "escape") {
+        output.value = JSON.stringify(input.value);
+      } else {
+        if (mode === "unescape") {
+          var parsed = JSON.parse(input.value);
+          if (typeof parsed !== "string") throw new Error("unescape needs a json string enclosed in double quotes");
+          output.value = parsed;
+        } else {
+          var indent = E.qs("#indent").value;
+          output.value = formatJSON(input.value, mode === "minify" ? "" : indent === "tab" ? "\t" : " ".repeat(+indent));
+        }
+      }
+      error.classList.add("status-ok");
+      error.textContent = mode === "unescape" ? "decoded string" : "valid json";
+    } catch (e) {
+      output.value = "";
+      clearStatus();
+      error.textContent = e.message || "invalid json";
+    }
+  }
+  actions.forEach(function (action) {
+    E.on(E.qs(action[0]), "click", function () { mode = action[1]; run(); });
+  });
+  E.on(E.qs("#indent"), "change", function () { mode = "format"; run(); });
+  E.on(input, "input", E.debounce(run, 120));
+  input.value = E.param("t") || "";
+  run();
+})();
+</script>
+</body>
+</html>

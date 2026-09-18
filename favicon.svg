@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-3 -1 62 40">
+  <style>
+    .ink { stroke: #171717; fill: none; stroke-width: 3.2; }
+    .pupil { fill: #171717; }
+    @media (prefers-color-scheme: dark) {
+      .ink { stroke: #ededed; }
+      .pupil { fill: #ededed; }
+    }
+  </style>
+  <path class="ink" d="M3 11C14 1 42 1 53 11" stroke-linecap="round"/>
+  <path class="ink" d="M1 22C10 8 46 8 55 22C46 36 10 36 1 22Z" stroke-linejoin="round"/>
+  <circle class="pupil" cx="28" cy="22" r="6"/>
+</svg>

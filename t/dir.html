@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>dir · 𓁹𓁹</title>
+<meta name="description" content="a filterable directory of real, long-lived websites worth knowing.">
+<meta name="theme-color" content="#fbfbfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<style>
+  /* one class the shared sheet has no equivalent for: the host, trailing each row */
+  .grp + .grp { margin-top: var(--space-8); }
+  .item__host {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: var(--track-tight);
+    color: var(--color-dim);
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    margin-left: 0;
+    padding-left: 0;
+    overflow-wrap: anywhere;
+    transition: color var(--dur-1) var(--ease-out);
+  }
+  .item:hover .item__host,
+  .item.is-cursor .item__host { color: var(--color-paper); }
+  @media (min-width: 40rem) {
+    .item__host { margin-left: auto; padding-left: var(--space-2); }
+  }
+</style>
+</head>
+<body data-tool="dir">
+<div class="wrap">
+
+  <header class="top">
+    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+    <p class="crumb" data-crumb></p>
+    <span class="top__spacer"></span>
+    <button class="tbtn" type="button" data-theme-toggle>theme</button>
+  </header>
+
+  <div class="head">
+    <h1 class="h1" data-title></h1>
+    <p class="lede" data-lede></p>
+  </div>
+
+  <main class="stack-6">
+
+    <div>
+      <label class="vh" for="q">filter sites</label>
+      <input class="field" id="q" type="search" autocomplete="off" autocorrect="off"
+             autocapitalize="off" spellcheck="false" placeholder="filter">
+      <p class="hint">
+        <span class="kbd">/</span> to filter · <span class="kbd">↑↓</span> to move ·
+        <span class="kbd">↵</span> to open in a new tab
+      </p>
+      <p class="err" id="err"></p>
+    </div>
+
+    <div>
+      <div class="out-head">
+        <span class="lbl num" id="count" aria-live="polite"></span>
+        <span class="row__spacer"></span>
+        <button class="tbtn" type="button" id="copy">copy</button>
+        <button class="tbtn" type="button" id="copy-urls">copy urls</button>
+        <button class="tbtn" type="button" id="dl">download md</button>
+        <button class="tbtn" type="button" id="bookmarks">bookmarks</button>
+      </div>
+      <div id="out"></div>
+      <p class="hint" id="empty" hidden>nothing here.</p>
+    </div>
+
+  </main>
+
+  <footer class="foot">
+    <a href="../index.html">← all tools</a>
+    <span class="row__spacer"></span>
+    <span>runs in your browser · nothing is uploaded</span>
+  </footer>
+
+</div>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* ═══ data ══════════════════════════════════════════════
+     One array. Add, remove or reorder freely — everything below
+     is derived from it, including the host shown on each row.   */
+
+  var DIR = [
+    { group: "reference", sites: [
+      { name: "wikipedia",            url: "https://wikipedia.org",            desc: "collaborative online encyclopedia" },
+      { name: "mdn",                  url: "https://developer.mozilla.org",    desc: "web platform documentation" },
+      { name: "stack overflow",       url: "https://stackoverflow.com",        desc: "programming questions and answers" },
+      { name: "can i use",            url: "https://caniuse.com",              desc: "browser feature support tables" },
+      { name: "rfc editor",           url: "https://www.rfc-editor.org",       desc: "internet standards documents" },
+      { name: "wiktionary",           url: "https://wiktionary.org",           desc: "multilingual dictionary" },
+      { name: "etymonline",           url: "https://www.etymonline.com",       desc: "english word etymologies" },
+      { name: "stanford encyclopedia", url: "https://plato.stanford.edu",      desc: "peer-reviewed philosophy encyclopedia" },
+      { name: "oeis",                 url: "https://oeis.org",                 desc: "integer sequence database" },
+      { name: "wolframalpha",         url: "https://www.wolframalpha.com",     desc: "computational knowledge engine" },
+      { name: "google scholar",       url: "https://scholar.google.com",        desc: "scholarly literature search" },
+      { name: "semantic scholar",     url: "https://www.semanticscholar.org",   desc: "academic search and citations" },
+      { name: "openalex",             url: "https://openalex.org",              desc: "open scholarly works catalogue" },
+      { name: "crossref",             url: "https://search.crossref.org",       desc: "research metadata and dois" },
+      { name: "internet encyclopedia of philosophy", url: "https://iep.utm.edu", desc: "open philosophy encyclopedia" }
+    ]},
+
+    { group: "archives", sites: [
+      { name: "internet archive",     url: "https://archive.org",              desc: "digital media archive" },
+      { name: "wayback machine",      url: "https://web.archive.org",          desc: "archived web pages" },
+      { name: "project gutenberg",    url: "https://www.gutenberg.org",        desc: "public-domain text ebooks" },
+      { name: "standard ebooks",      url: "https://standardebooks.org",       desc: "typeset public-domain ebooks" },
+      { name: "open library",         url: "https://openlibrary.org",          desc: "open book catalogue" },
+      { name: "imslp",                url: "https://imslp.org",                desc: "public-domain music scores" },
+      { name: "library of congress",  url: "https://www.loc.gov",              desc: "american cultural collections" },
+      { name: "textfiles",            url: "http://textfiles.com",             desc: "bulletin-board era textfiles" },
+      { name: "librivox",             url: "https://librivox.org",              desc: "volunteer-read public-domain audiobooks" },
+      { name: "public domain review", url: "https://publicdomainreview.org",    desc: "public-domain essays and collections" },
+      { name: "smithsonian open access", url: "https://www.si.edu/openaccess", desc: "open museum images and records" },
+      { name: "europeana",            url: "https://www.europeana.eu",          desc: "european digital collections" },
+      { name: "chronicling america",  url: "https://chroniclingamerica.loc.gov", desc: "searchable historic american newspapers" },
+      { name: "prelinger archives",   url: "https://archive.org/details/prelinger", desc: "preserved ephemeral films" }
+    ]},
+
+    { group: "tools", sites: [
+      { name: "excalidraw",           url: "https://excalidraw.com",           desc: "hand-drawn diagrams" },
+      { name: "squoosh",              url: "https://squoosh.app",              desc: "browser image compression" },
+      { name: "photopea",             url: "https://www.photopea.com",         desc: "photoshop-style browser editor" },
+      { name: "compiler explorer",    url: "https://godbolt.org",              desc: "compiler and assembly explorer" },
+      { name: "cyberchef",            url: "https://gchq.github.io/CyberChef/", desc: "data encoding and analysis" },
+      { name: "regex101",             url: "https://regex101.com",             desc: "regular expression tester" },
+      { name: "try it online",        url: "https://tio.run",                  desc: "online code runner" },
+      { name: "mermaid live",         url: "https://mermaid.live",             desc: "text-based diagram editor" },
+      { name: "have i been pwned",    url: "https://haveibeenpwned.com",       desc: "breach exposure checker" },
+      { name: "ezgif",                url: "https://ezgif.com",                 desc: "animated image editor" },
+      { name: "diagrams.net",         url: "https://app.diagrams.net",          desc: "browser diagram editor" },
+      { name: "json crack",           url: "https://jsoncrack.com",             desc: "json graph visualizer" },
+      { name: "transform",            url: "https://transform.tools",           desc: "code and data converter" },
+      { name: "tableconvert",         url: "https://tableconvert.com",          desc: "csv markdown json converter" },
+      { name: "crontab guru",         url: "https://crontab.guru",              desc: "cron schedule editor" },
+      { name: "bundlephobia",         url: "https://bundlephobia.com",          desc: "npm package size checker" },
+      { name: "carbon",               url: "https://carbon.now.sh",             desc: "code screenshot generator" },
+      { name: "ray.so",               url: "https://ray.so",                    desc: "code image generator" },
+      { name: "web check",            url: "https://web-check.xyz",             desc: "website technical footprint inspector" }
+    ]},
+
+    { group: "learning", sites: [
+      { name: "mit opencourseware",   url: "https://ocw.mit.edu",              desc: "free mit course materials" },
+      { name: "khan academy",         url: "https://www.khanacademy.org",      desc: "maths and science lessons" },
+      { name: "arxiv",                url: "https://arxiv.org",                desc: "science and computing preprints" },
+      { name: "3blue1brown",          url: "https://www.3blue1brown.com",      desc: "animated mathematics explanations" },
+      { name: "nand2tetris",          url: "https://www.nand2tetris.org",      desc: "logic-to-computer course" },
+      { name: "project euler",        url: "https://projecteuler.net",         desc: "programming mathematics problems" },
+      { name: "teach yourself cs",    url: "https://teachyourselfcs.com",      desc: "computer science reading guide" },
+      { name: "explorable explanations", url: "https://ncase.me",              desc: "interactive explorable explanations" },
+      { name: "freecodecamp",         url: "https://www.freecodecamp.org",      desc: "project-based programming lessons" },
+      { name: "cs50",                 url: "https://cs50.harvard.edu/x",        desc: "introductory computer science course" },
+      { name: "the odin project",     url: "https://www.theodinproject.com",    desc: "web development curriculum" },
+      { name: "full stack open",      url: "https://fullstackopen.com/en",      desc: "full-stack web curriculum" },
+      { name: "openstax",             url: "https://openstax.org",              desc: "free peer-reviewed textbooks" },
+      { name: "libretexts",           url: "https://libretexts.org",            desc: "open academic textbooks" },
+      { name: "ossu computer science", url: "https://cs.ossu.dev",              desc: "free computer science curriculum" },
+      { name: "roadmap.sh",           url: "https://roadmap.sh",                desc: "technical career roadmaps" }
+    ]},
+
+    { group: "reading", sites: [
+      { name: "hacker news",          url: "https://news.ycombinator.com",     desc: "technology links and discussion" },
+      { name: "lobsters",             url: "https://lobste.rs",                desc: "curated technology discussion" },
+      { name: "metafilter",           url: "https://www.metafilter.com",       desc: "moderated community weblog" },
+      { name: "quanta",               url: "https://www.quantamagazine.org",   desc: "mathematics and physics journalism" },
+      { name: "aeon",                 url: "https://aeon.co",                  desc: "philosophy and science essays" },
+      { name: "propublica",           url: "https://www.propublica.org",       desc: "nonprofit investigative journalism" },
+      { name: "paul graham",          url: "https://paulgraham.com",           desc: "essays on startups and writing" },
+      { name: "kottke",               url: "https://kottke.org",               desc: "long-running link blog" },
+      { name: "longreads",            url: "https://longreads.com",            desc: "curated long-form journalism" },
+      { name: "arts & letters daily", url: "https://www.aldaily.com",           desc: "daily essays and reviews" },
+      { name: "nautilus",             url: "https://nautil.us",                 desc: "narrative science journalism" },
+      { name: "jstor daily",          url: "https://daily.jstor.org",           desc: "scholarship-based stories" },
+      { name: "the conversation",     url: "https://theconversation.com",       desc: "academic news analysis" },
+      { name: "marginalia search",    url: "https://search.marginalia.nu",      desc: "non-commercial web search" }
+    ]},
+
+    { group: "maps & data", sites: [
+      { name: "openstreetmap",        url: "https://www.openstreetmap.org",    desc: "editable world map" },
+      { name: "our world in data",    url: "https://ourworldindata.org",       desc: "sourced global data charts" },
+      { name: "data.gov",             url: "https://data.gov",                 desc: "us government datasets" },
+      { name: "world bank data",      url: "https://data.worldbank.org",       desc: "global development indicators" },
+      { name: "usgs earthquakes",     url: "https://earthquake.usgs.gov",      desc: "live earthquake data" },
+      { name: "earth observatory",    url: "https://earthobservatory.nasa.gov", desc: "nasa satellite imagery" },
+      { name: "windy",                url: "https://www.windy.com",            desc: "interactive weather models" },
+      { name: "flightradar24",        url: "https://www.flightradar24.com",    desc: "live aircraft tracking" },
+      { name: "natural earth",        url: "https://www.naturalearthdata.com", desc: "public-domain map datasets" },
+      { name: "gapminder",            url: "https://www.gapminder.org/tools",  desc: "animated global indicators" },
+      { name: "nasa worldview",       url: "https://worldview.earthdata.nasa.gov", desc: "near-real-time satellite imagery" },
+      { name: "noaa climate",         url: "https://www.climate.gov/maps-data", desc: "climate maps and datasets" },
+      { name: "open topography",      url: "https://opentopography.org",       desc: "high-resolution terrain data" },
+      { name: "global forest watch",  url: "https://www.globalforestwatch.org", desc: "satellite forest monitoring" }
+    ]},
+
+    { group: "directories & discovery", sites: [
+      { name: "fmhy",                 url: "https://fmhy.net",                   desc: "free media and tools index" },
+      { name: "alternativeTo",        url: "https://alternativeto.net",          desc: "software alternatives directory" },
+      { name: "the indie web index",  url: "https://theindex.fyi",               desc: "small web directories" },
+      { name: "curlie",               url: "https://curlie.org",                 desc: "volunteer-edited web directory" },
+      { name: "indieweb",             url: "https://indieweb.org",               desc: "independent web community" },
+      { name: "awesome",              url: "https://github.com/sindresorhus/awesome", desc: "curated technical resource lists" },
+      { name: "open source alternative", url: "https://opensourcealternative.to", desc: "open-source software alternatives" },
+      { name: "tiny alternatives",    url: "https://tinyalternatives.com",       desc: "independent software alternatives" }
+    ]},
+
+    { group: "the weird web", sites: [
+      { name: "neal.fun",             url: "https://neal.fun",                 desc: "interactive web experiments" },
+      { name: "atlas obscura",        url: "https://www.atlasobscura.com",     desc: "unusual places directory" },
+      { name: "the pudding",          url: "https://pudding.cool",             desc: "data-driven visual essays" },
+      { name: "neocities",            url: "https://neocities.org",            desc: "personal website hosting" },
+      { name: "wiby",                 url: "https://wiby.me",                  desc: "small web search engine" },
+      { name: "cameron's world",      url: "https://www.cameronsworld.net",    desc: "geocities collage" },
+      { name: "r74n",                 url: "https://r74n.com",                 desc: "web collective" },
+      { name: "radio garden",         url: "https://radio.garden",             desc: "global live radio map" },
+      { name: "music for programming", url: "https://musicforprogramming.net", desc: "focus music mixes" },
+      { name: "xkcd",                 url: "https://xkcd.com",                 desc: "science and technology comic" },
+      { name: "the useless web",      url: "https://theuselessweb.com",        desc: "random novelty websites" },
+      { name: "window swap",          url: "https://www.window-swap.com",      desc: "window-view videos" },
+      { name: "drive & listen",       url: "https://driveandlisten.app",       desc: "city drives with local radio" },
+      { name: "radiooooo",            url: "https://radiooooo.com",            desc: "music by place and decade" },
+      { name: "pointer pointer",      url: "https://pointerpointer.com",       desc: "cursor-pointing photographs" },
+      { name: "zoomquilt",            url: "https://zoomquilt.org",            desc: "endless zoom artwork" },
+      { name: "this is colossal",     url: "https://www.thisiscolossal.com",   desc: "art and visual culture" },
+      { name: "windows 93",           url: "https://www.windows93.net",        desc: "fictional browser operating system" }
+    ]}
+  ];
+
+  var MAX_TERM = 100;   /* longer than any real query; keeps a paste from doing work */
+
+  /* the host as shown on a row: no scheme, no www., no trailing slash */
+  function host(url) {
+    return String(url)
+      .replace(/^[a-z]+:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\/+$/, "");
+  }
+
+  /* Searchable text for one site, computed once at boot rather than rebuilt for
+     all 118 sites on every keystroke: the host extraction alone is three
+     regular expressions, and the join and lowercase are not free either. */
+  function haystack(site, group) {
+    return (site.name + " " + site.desc + " " + host(site.url) + " " + group).toLowerCase();
+  }
+
+  /* filter, preserving group order and dropping groups with no survivors */
+  function match(dir, term) {
+    term = String(term == null ? "" : term).slice(0, MAX_TERM).trim().toLowerCase();
+    var words = term ? term.split(/\s+/) : [];
+    var out = [], i, j, w;
+    for (i = 0; i < dir.length; i++) {
+      var keep = [];
+      for (j = 0; j < dir[i].sites.length; j++) {
+        var site = dir[i].sites[j];
+        var hay = site.hay || (site.hay = haystack(site, dir[i].group));
+        var ok = true;
+        for (w = 0; w < words.length; w++) {
+          if (hay.indexOf(words[w]) === -1) { ok = false; break; }
+        }
+        if (ok) keep.push(site);
+      }
+      if (keep.length) out.push({ group: dir[i].group, sites: keep });
+    }
+    return out;
+  }
+
+  function count(groups) {
+    var n = 0;
+    for (var i = 0; i < groups.length; i++) n += groups[i].sites.length;
+    return n;
+  }
+
+  function markdown(groups) {
+    var out = [];
+    for (var i = 0; i < groups.length; i++) {
+      out.push("## " + groups[i].group, "");
+      for (var j = 0; j < groups[i].sites.length; j++) {
+        var s = groups[i].sites[j];
+        out.push("- [" + s.name + "](" + s.url + ") — " + s.desc);
+      }
+      out.push("");
+    }
+    var text = out.join("\n").replace(/\n+$/, "");
+    return text ? text + "\n" : "";
+  }
+
+  /* ═══ end pure ══════════════════════════════════════════ */
+
+  var q = E.qs("#q"), outEl = E.qs("#out"), countEl = E.qs("#count"),
+      emptyEl = E.qs("#empty"), errEl = E.qs("#err");
+
+  var TOTAL = count(DIR);
+  var groups = [], nodes = [], flat = [], cursor = 0, showCursor = false;
+
+  /* Only the row losing the highlight and the row gaining it are touched, so
+     holding an arrow key does not restyle every row on every repeat. */
+  var marked = null;
+  function mark() {
+    var next = showCursor && cursor >= 0 ? nodes[cursor] : null;
+    if (marked === next) return;
+    if (marked) marked.classList.remove("is-cursor");
+    if (next) next.classList.add("is-cursor");
+    marked = next || null;
+  }
+
+  function render() {
+    var raw = q.value;
+    errEl.textContent = raw.length > MAX_TERM
+      ? "filter is longer than " + MAX_TERM + " characters; the rest is ignored"
+      : "";
+
+    groups = match(DIR, raw);
+    if (marked) { marked.classList.remove("is-cursor"); marked = null; }
+    nodes = []; flat = [];
+
+    /* One row element per site, built once and reused. Filtering reorders the
+       nodes that already exist instead of discarding 118 of them and building
+       118 more on every keystroke. The whole list reaches the document in a
+       single append, so the browser lays it out once. */
+    var frag = document.createDocumentFragment();
+    groups.forEach(function (g) {
+      var ul = E.el("ul", { class: "list" });
+      g.sites.forEach(function (s) {
+        if (!s.row) {
+          s.row = E.el("a", { class: "item", href: s.url, target: "_blank", rel: "noopener" }, [
+            E.el("span", { class: "item__name", text: s.name }),
+            E.el("span", { class: "item__desc", text: s.desc }),
+            E.el("span", { class: "item__host", text: host(s.url) })
+          ]);
+          s.item = E.el("li", {}, [s.row]);
+        }
+        ul.appendChild(s.item);
+        nodes.push(s.row); flat.push(s);
+      });
+      frag.appendChild(E.el("section", { class: "grp" }, [
+        E.el("p", { class: "lbl", text: g.group }), ul
+      ]));
+    });
+    outEl.textContent = "";
+    outEl.appendChild(frag);
+
+    var n = flat.length;
+    cursor = 0;
+    showCursor = !!raw.trim() && n > 0;
+    emptyEl.hidden = n > 0;
+    countEl.textContent = n === TOTAL ? TOTAL + " sites" : n + " of " + TOTAL;
+    ["#copy", "#copy-urls", "#dl", "#bookmarks"].forEach(function (selector) { E.qs(selector).disabled = n === 0; });
+    mark();
+  }
+
+  function move(d) {
+    if (!nodes.length) return;
+    cursor = showCursor ? (cursor + d + nodes.length) % nodes.length : (d > 0 ? 0 : nodes.length - 1);
+    showCursor = true;
+    nodes[cursor].scrollIntoView({ block: "nearest" });
+    mark();
+  }
+
+  function open() {
+    var s = flat[cursor];
+    if (!s) return;
+    window.open(s.url, "_blank", "noopener");
+  }
+
+  E.on(q, "input", render);
+
+  E.on(q, "keydown", function (e) {
+    if (e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+    else if (e.key === "Enter") {
+      if (!showCursor || !flat.length) return;
+      e.preventDefault();
+      open();
+    } else if (e.key === "Escape" && q.value) {
+      /* first Escape clears; a second one is left to s.js, which blurs */
+      e.stopPropagation();
+      q.value = "";
+      render();
+    }
+  });
+
+  E.on(document, "keydown", function (e) {
+    if (e.key !== "/" || e.target === q || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.target.isContentEditable) return;
+    var t = e.target.tagName;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    e.preventDefault();
+    q.focus();
+    q.select();
+  });
+
+  E.on(E.qs("#copy"), "click", function () { E.copy(markdown(groups), this); });
+  E.on(E.qs("#copy-urls"), "click", function () { E.copy(flat.map(function (site) { return site.url; }).join("\n"), this); });
+  E.on(E.qs("#bookmarks"), "click", function () {
+    if (!flat.length) return;
+    var lines = ['<!DOCTYPE NETSCAPE-Bookmark-file-1>', '<meta charset="utf-8">', '<title>bookmarks</title>', '<h1>bookmarks</h1>', '<dl><p>'];
+    groups.forEach(function (group) {
+      lines.push('<dt><h3>' + E.esc(group.group) + '</h3>', '<dl><p>');
+      group.sites.forEach(function (site) { lines.push('<dt><a href="' + E.esc(site.url) + '">' + E.esc(site.name) + '</a>'); });
+      lines.push('</dl><p>');
+    });
+    lines.push('</dl><p>');
+    E.download(lines.join("\n"), "bookmarks.html", "text/html;charset=utf-8"); E.flash(this, "downloaded");
+  });
+
+  E.on(E.qs("#dl"), "click", function () {
+    var md = markdown(groups);
+    if (!md) { E.flash(this, "nothing to save"); return; }
+    E.download(md, "dir.md", "text/markdown;charset=utf-8");
+    E.flash(this, "saved");
+  });
+
+  q.value = E.param("q") || "";
+  render();
+})();
+</script>
+</body>
+</html>

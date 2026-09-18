@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>barcode · 𓁹𓁹</title>
+    <meta name="description" content="generate ean-13 barcodes as svg.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+    <link rel="stylesheet" href="../tokens.css">
+    <link rel="stylesheet" href="../s.css">
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("eyes.theme");
+          if (theme) document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {}
+      }());
+    </script>
+    <style>
+      #svg {
+        width: 100%;
+        min-width: 0;
+        height: auto;
+        background: var(--color-paper);
+        color: var(--color-ink);
+      }
+      .figure { overflow: auto; }
+    </style>
+  </head>
+  <body data-tool="barcode">
+    <div class="wrap">
+      <header class="top">
+        <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+        <p class="crumb" data-crumb></p>
+        <span class="top__spacer"></span>
+        <button class="tbtn" type="button" data-theme-toggle>theme</button>
+      </header>
+
+      <div class="head">
+        <h1 class="h1" data-title></h1>
+        <p class="lede" data-lede></p>
+      </div>
+
+      <main class="stack-6">
+        <section>
+          <label class="lbl" for="in">ean-13 digits</label>
+          <input class="field" id="in" type="text" inputmode="numeric" maxlength="32"
+                 value="590123412345" autocomplete="off" spellcheck="false">
+          <p class="hint">enter 12 digits; the check digit is added. a valid 13th digit is accepted.</p>
+          <p class="err" id="err" role="alert" aria-live="polite"></p>
+        </section>
+
+        <section>
+          <figure class="figure">
+            <svg id="svg" viewBox="0 0 226 112" role="img" aria-label="generated barcode"></svg>
+          </figure>
+          <div class="row mt-2">
+            <button class="btn" id="dl" type="button" disabled>download svg</button>
+            <button class="btn -ghost" id="png" type="button" disabled>download png</button>
+            <button class="btn -ghost" id="copy" type="button" disabled>copy number</button>
+          </div>
+        </section>
+      </main>
+
+      <footer class="foot"><a href="../index.html">← all tools</a></footer>
+    </div>
+
+    <script src="../tools.js"></script>
+    <script src="../s.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        var LEFT = [
+          "0001101", "0011001", "0010011", "0111101", "0100011",
+          "0110001", "0101111", "0111011", "0110111", "0001011"
+        ];
+        var LEFT_G = [
+          "0100111", "0110011", "0011011", "0100001", "0011101",
+          "0111001", "0000101", "0010001", "0001001", "0010111"
+        ];
+        var RIGHT = [
+          "1110010", "1100110", "1101100", "1000010", "1011100",
+          "1001110", "1010000", "1000100", "1001000", "1110100"
+        ];
+        var PARITY = [
+          "LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG",
+          "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"
+        ];
+        var input = E.qs("#in");
+        var svg = E.qs("#svg");
+        var error = E.qs("#err");
+        var download = E.qs("#dl");
+        var copy = E.qs("#copy");
+        var png = E.qs("#png");
+        var number = "";
+
+        function check(value) {
+          var sum = 0;
+          for (var index = 0; index < 12; index += 1) {
+            sum += +value[index] * (index % 2 ? 3 : 1);
+          }
+          return String((10 - sum % 10) % 10);
+        }
+
+        function clear() {
+          number = "";
+          svg.textContent = "";
+          download.disabled = true;
+          copy.disabled = true;
+          png.disabled = true;
+        }
+
+        function run() {
+          var value = input.value.trim().replace(/[\s-]/g, "");
+          clear();
+          error.textContent = "";
+          if (!value) return;
+          if (!/^\d+$/.test(value)) { error.textContent = "use digits, spaces or hyphens only"; return; }
+
+          if (value.length === 12) value += check(value);
+          if (value.length !== 13 || check(value) !== value[12]) {
+            error.textContent = "enter 12 digits, or 13 with a valid check digit";
+            return;
+          }
+
+          number = value;
+          download.disabled = false;
+          copy.disabled = false;
+          png.disabled = false;
+
+          var bits = "101";
+          var parity = PARITY[+value[0]];
+          for (var index = 1; index <= 6; index += 1) {
+            bits += (parity[index - 1] === "L" ? LEFT : LEFT_G)[+value[index]];
+          }
+          bits += "01010";
+          for (index = 7; index < 13; index += 1) bits += RIGHT[+value[index]];
+          bits += "101";
+
+          var namespace = "http://www.w3.org/2000/svg";
+          var scale = 2;
+          var background = document.createElementNS(namespace, "rect");
+          background.setAttribute("width", "226");
+          background.setAttribute("height", "112");
+          background.setAttribute("fill", "white");
+          svg.appendChild(background);
+
+          for (index = 0; index < bits.length; index += 1) {
+            if (bits[index] !== "1") continue;
+            var bar = document.createElementNS(namespace, "rect");
+            bar.setAttribute("x", String(18 + index * scale));
+            bar.setAttribute("y", "8");
+            bar.setAttribute(
+              "height",
+              index < 3 || (index >= 45 && index < 50) || index >= 92 ? "82" : "74"
+            );
+            bar.setAttribute("width", String(scale));
+            bar.setAttribute("fill", "black");
+            svg.appendChild(bar);
+          }
+
+          var label = document.createElementNS(namespace, "text");
+          label.setAttribute("x", "113");
+          label.setAttribute("y", "106");
+          label.setAttribute("text-anchor", "middle");
+          label.setAttribute("font-family", "monospace");
+          label.setAttribute("font-size", "14");
+          label.setAttribute("fill", getComputedStyle(document.documentElement).getPropertyValue("--color-qr-ink").trim());
+          label.textContent = value;
+          svg.appendChild(label);
+        }
+
+        E.on(input, "input", run);
+        E.on(copy, "click", function () { E.copy(number, this); });
+        E.on(download, "click", function () {
+          if (!number) return;
+          var data = new XMLSerializer().serializeToString(svg);
+          E.download(data, "ean-13-" + number + ".svg", "image/svg+xml");
+          E.flash(this, "downloaded");
+        });
+        E.on(png, "click", function () {
+          if (!number) return;
+          var button = this, currentNumber = number, image = new Image(), url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
+          button.disabled = true;
+          image.onload = function () {
+            var canvas = document.createElement("canvas"); canvas.width = 904; canvas.height = 448;
+            canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+            canvas.toBlob(function (blob) { button.disabled = !number; if (!blob) { error.textContent = "the browser could not create a png"; return; } E.download(blob, "ean-13-" + currentNumber + ".png", "image/png"); E.flash(button, "downloaded"); }, "image/png");
+          };
+          image.onerror = function () { URL.revokeObjectURL(url); button.disabled = !number; error.textContent = "the browser could not create a png"; };
+          image.src = url;
+        });
+        var query = E.param("t"); if (query !== null) input.value = query;
+        run();
+      }());
+    </script>
+  </body>
+</html>

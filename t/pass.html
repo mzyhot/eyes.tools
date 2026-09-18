@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>pass · 𓁹𓁹</title>
+    <meta name="description" content="generate passwords and passphrases from local randomness.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+    <link rel="stylesheet" href="../tokens.css">
+    <link rel="stylesheet" href="../s.css">
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("eyes.theme");
+          if (theme) document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {}
+      }());
+    </script>
+  </head>
+  <body data-tool="pass">
+    <div class="wrap">
+      <header class="top">
+        <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+        <p class="crumb" data-crumb></p>
+        <span class="top__spacer"></span>
+        <button class="tbtn" type="button" data-theme-toggle>theme</button>
+      </header>
+
+      <div class="head">
+        <h1 class="h1" data-title></h1>
+        <p class="lede" data-lede></p>
+      </div>
+
+      <main class="stack-6">
+        <section>
+          <span class="lbl" id="kind-label">kind</span>
+          <div class="seg" role="radiogroup" aria-labelledby="kind-label">
+            <label><input type="radio" name="kind" value="password" checked><span>password</span></label>
+            <label><input type="radio" name="kind" value="phrase"><span>passphrase</span></label>
+            <label><input type="radio" name="kind" value="pin"><span>pin</span></label>
+          </div>
+        </section>
+
+        <section class="grid2">
+          <div>
+            <label class="lbl" for="len" id="len-label">length</label>
+            <input class="field" id="len" type="number" min="4" max="128" value="20"
+                   inputmode="numeric" autocomplete="off">
+          </div>
+          <div>
+            <label class="lbl" for="n">how many</label>
+            <input class="field" id="n" type="number" min="1" max="100" value="5"
+                   inputmode="numeric" autocomplete="off">
+          </div>
+        </section>
+
+        <section>
+          <div class="out" id="out" aria-live="polite"></div>
+          <p class="err" id="err" role="alert" aria-live="polite"></p>
+          <p class="hint" id="strength"></p>
+          <div class="row mt-2">
+            <button class="btn" id="again" type="button">regenerate</button>
+            <button class="btn -ghost" id="copy" type="button" disabled>copy</button>
+          </div>
+        </section>
+      </main>
+
+      <footer class="foot"><a href="../index.html">← all tools</a></footer>
+    </div>
+
+    <script src="../tools.js"></script>
+    <script src="../s.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        var ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*-_=+";
+        var WORDS = "amber anchor apple atlas birch black bloom brass brick cedar cloud coast coral crane dusk ember field flint frost glass grain grove harbor hazel ivory juniper lake linen maple moss night north oak ocean olive orbit paper pearl pine quartz rain reed river slate solar stone tide umber vale west willow wind".split(" ");
+        var output = E.qs("#out");
+        var error = E.qs("#err");
+        var copy = E.qs("#copy");
+        var lengthInput = E.qs("#len"), lengthLabel = E.qs("#len-label"), strength = E.qs("#strength");
+        var lengths = { password: "20", phrase: "12", pin: "6" };
+        var previousKind = "password";
+
+        function pick(alphabet) {
+          var limit = 256 - (256 % alphabet.length);
+          var value;
+          do {
+            value = E.rand(1)[0];
+          } while (value >= limit);
+          return alphabet[value % alphabet.length];
+        }
+
+        function whole(input, min, max, label) {
+          var raw = input.value.trim();
+          if (!/^[0-9]+$/.test(raw)) throw new Error(label + " must be a whole number");
+          var value = Number(raw);
+          if (!Number.isSafeInteger(value) || value < min || value > max) {
+            throw new Error(label + " must be between " + min + " and " + max);
+          }
+          return value;
+        }
+
+        function kind() {
+          var selected = E.qsa("input[name=kind]").filter(function (input) {
+            return input.checked;
+          })[0];
+          return selected ? selected.value : "password";
+        }
+
+        function run() {
+          output.textContent = "";
+          error.textContent = "";
+          copy.disabled = true;
+          strength.textContent = "";
+
+          try {
+            var selectedKind = kind();
+            var length = whole(E.qs("#len"), 4, 128, selectedKind === "phrase" ? "word count" : "length");
+            var count = whole(E.qs("#n"), 1, 100, "how many");
+            var values = [];
+
+            for (var index = 0; index < count; index += 1) {
+              if (selectedKind === "phrase") {
+                var words = [];
+                for (var word = 0; word < length; word += 1) words.push(pick(WORDS));
+                values.push(words.join("-"));
+              } else {
+                var alphabet = selectedKind === "pin" ? "0123456789" : ALPHABET;
+                var value = "";
+                for (var character = 0; character < length; character += 1) value += pick(alphabet);
+                values.push(value);
+              }
+            }
+
+            output.textContent = values.join("\n");
+            copy.disabled = values.length === 0;
+            var choices = selectedKind === "phrase" ? WORDS.length : selectedKind === "pin" ? 10 : ALPHABET.length;
+            strength.textContent = Math.floor(length * Math.log2(choices)) + " bits of randomness per value" +
+              (selectedKind === "phrase" ? " · " + WORDS.length + "-word list" : "");
+          } catch (generationError) {
+            error.textContent = generationError && generationError.message
+              ? generationError.message
+              : "could not generate a value in this browser";
+          }
+        }
+
+        E.qsa("input[name=kind]").forEach(function (input) {
+          E.on(input, "change", function () {
+            lengths[previousKind] = lengthInput.value;
+            previousKind = kind();
+            lengthInput.value = lengths[previousKind];
+            lengthLabel.textContent = previousKind === "phrase" ? "words" : "length";
+            run();
+          });
+        });
+        E.on(E.qs("#len"), "input", run);
+        E.on(E.qs("#n"), "input", run);
+        E.on(E.qs("#again"), "click", run);
+        E.on(copy, "click", function () { E.copy(output.textContent, this); });
+        run();
+      }());
+    </script>
+  </body>
+</html>

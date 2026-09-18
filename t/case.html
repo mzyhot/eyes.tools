@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>case · 𓁹𓁹</title>
+<meta name="description" content="camel, snake, kebab, title, constant — and back.">
+<meta name="theme-color" content="#fbfbfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+</head>
+<body data-tool="case">
+<div class="wrap">
+
+  <header class="top">
+    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+    <p class="crumb" data-crumb></p>
+    <span class="top__spacer"></span>
+    <button class="tbtn" type="button" data-theme-toggle>theme</button>
+  </header>
+
+  <div class="head">
+    <h1 class="h1" data-title></h1>
+    <p class="lede" data-lede></p>
+  </div>
+
+  <main class="stack-6">
+
+    <div>
+      <label class="lbl" for="in">text</label>
+      <textarea class="field" id="in" rows="4" spellcheck="false"
+                placeholder="the quick brown fox"></textarea>
+      <div class="row mt-3">
+        <button class="btn -ghost -sm" type="button" id="paste">paste</button>
+        <button class="btn -ghost -sm" type="button" id="clear">clear</button>
+      </div>
+    </div>
+
+    <div id="out"></div>
+
+  </main>
+
+  <footer class="foot">
+    <a href="../index.html">← all tools</a>
+    <span class="row__spacer"></span>
+    <span>runs in your browser · nothing is uploaded</span>
+  </footer>
+
+</div>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var input = E.qs("#in"), out = E.qs("#out");
+
+  /* split any convention into lowercase word tokens */
+  function words(s) {
+    return String(s)
+      .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1 $2")
+      .replace(/(\p{Lu}+)(\p{Lu}\p{Ll})/gu, "$1 $2")
+      .replace(/(\p{L})(\p{N})/gu, "$1 $2")
+      .replace(/(\p{N})(\p{L})/gu, "$1 $2")
+      .split(/[^\p{L}\p{M}\p{N}]+/u)
+      .filter(Boolean)
+      .map(function (w) { return w.toLowerCase(); });
+  }
+
+  function cap(w) { var first = String.fromCodePoint(w.codePointAt(0) || 0); return w ? first.toUpperCase() + w.slice(first.length) : ""; }
+
+  var FORMS = [
+    ["camel",    function (w) { return w.map(function (x, i) { return i ? cap(x) : x; }).join(""); }],
+    ["pascal",   function (w) { return w.map(cap).join(""); }],
+    ["snake",    function (w) { return w.join("_"); }],
+    ["kebab",    function (w) { return w.join("-"); }],
+    ["constant", function (w) { return w.join("_").toUpperCase(); }],
+    ["dot",      function (w) { return w.join("."); }],
+    ["path",     function (w) { return w.join("/"); }],
+    ["title",    function (w) { return w.map(cap).join(" "); }],
+    ["sentence", function (w) { return w.length ? cap(w.join(" ")) : ""; }],
+    ["lower",    function (w, raw) { return raw.toLowerCase(); }],
+    ["upper",    function (w, raw) { return raw.toUpperCase(); }]
+  ];
+
+  var rows = FORMS.map(function (f) {
+    var v = E.el("div", { class: "res__v" });
+    var b = E.el("button", { class: "tbtn", type: "button", text: "copy", "aria-label": "copy " + f[0] + " case" });
+    E.on(b, "click", function () { E.copy(v.textContent, b); });
+    var row = E.el("div", { class: "res" }, [
+      E.el("div", { class: "res__k", text: f[0] }), v, b
+    ]);
+    out.appendChild(row);
+    return { fn: f[1], v: v, button: b };
+  });
+
+  function run() {
+    var raw = input.value;
+    var w = words(raw);
+    rows.forEach(function (r) { r.v.textContent = raw.trim() ? r.fn(w, raw) : ""; r.button.disabled = !r.v.textContent; });
+  }
+
+  E.on(input, "input", run);
+
+  E.on(E.qs("#paste"), "click", function () {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      E.flash(this, "use ⌘V");
+      input.focus();
+      return;
+    }
+    var btn = this;
+    navigator.clipboard.readText().then(function (t) {
+      input.value = t; run();
+    }, function () { E.flash(btn, "blocked"); input.focus(); });
+  });
+
+  E.on(E.qs("#clear"), "click", function () { input.value = ""; run(); input.focus(); });
+
+  input.value = E.param("t") || "";
+  run();
+})();
+</script>
+</body>
+</html>

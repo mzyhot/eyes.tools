@@ -1,0 +1,65 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>lorem · 𓁹𓁹</title><meta name="description" content="generate placeholder text by paragraph."><link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css"><link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script></head><body data-tool="lorem"><div class="wrap"><header class="top"><a class="eyes" href="../index.html" data-eyes>𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" data-theme-toggle>theme</button></header><div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div><main class="stack-6">
+<section class="grid3">
+  <div><label class="lbl" for="n">how many</label><input class="field" id="n" type="number" min="1" max="100" value="3" inputmode="numeric"></div>
+  <div><label class="lbl" for="unit">unit</label><select class="field" id="unit"><option value="paragraphs">paragraphs</option><option value="sentences">sentences</option><option value="words">words</option></select></div>
+  <div><label class="lbl" for="len">paragraph length</label><select class="field" id="len"><option value="short">short</option><option value="medium" selected>medium</option><option value="long">long</option></select></div>
+</section>
+<section>
+  <p class="err" id="err" role="alert"></p>
+  <div class="out out--scroll" id="out" aria-live="polite"></div>
+  <div class="row mt-2"><button class="btn" id="copy" type="button">copy</button><button class="btn -ghost" id="dl" type="button">download txt</button></div>
+</section>
+</main><footer class="foot"><a href="../index.html">← all tools</a></footer></div><script src="../tools.js"></script><script src="../s.js"></script><script>
+(function () {
+  "use strict";
+  var sentences = [
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+    "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+    "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
+    "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
+    "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+  ];
+  var out = E.qs("#out"), quantity = E.qs("#n"), unit = E.qs("#unit"), length = E.qs("#len");
+  function run() {
+    var raw = quantity.value.trim(), n = Number(raw), kind = unit.value;
+    var max = kind === "words" ? 10000 : kind === "sentences" ? 1000 : 100;
+    quantity.max = max;
+    length.disabled = kind !== "paragraphs";
+    out.textContent = "";
+    E.qs("#err").textContent = "";
+    E.qs("#copy").disabled = true;
+    E.qs("#dl").disabled = true;
+    if (!raw) return;
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 1 || n > max) {
+      E.qs("#err").textContent = "enter a whole number from 1 to " + max.toLocaleString();
+      return;
+    }
+    var parts = [], i;
+    if (kind === "words") {
+      var words = sentences.join(" ").split(/\s+/);
+      for (i = 0; i < n; i++) parts.push(words[i % words.length]);
+      out.textContent = parts.join(" ").replace(/[,.]$/, "") + ".";
+    } else if (kind === "sentences") {
+      for (i = 0; i < n; i++) parts.push(sentences[i % sentences.length]);
+      out.textContent = parts.join(" ");
+    } else {
+      var count = length.value === "short" ? 2 : length.value === "long" ? 5 : 3;
+      var paragraph = sentences.slice(0, count).join(" ");
+      for (i = 0; i < n; i++) parts.push(paragraph);
+      out.textContent = parts.join("\n\n");
+    }
+    E.qs("#copy").disabled = false;
+    E.qs("#dl").disabled = false;
+  }
+  E.on(quantity, "input", run);
+  E.on(unit, "change", run);
+  E.on(length, "change", run);
+  E.on(E.qs("#copy"), "click", function () { E.copy(out.textContent, this); });
+  E.on(E.qs("#dl"), "click", function () { E.download(out.textContent, "lorem.txt", "text/plain;charset=utf-8"); E.flash(this, "downloaded"); });
+  run();
+}());
+</script></body></html>

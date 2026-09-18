@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>diff · 𓁹𓁹</title>
+<meta name="description" content="compare two texts line by line.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<style>.add{background:var(--color-paper-2)}.del{text-decoration:line-through;color:var(--color-dim)}</style>
+</head>
+<body data-tool="diff">
+<div class="wrap">
+  <header class="top"><a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" type="button" data-theme-toggle>theme</button></header>
+  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
+  <main class="stack-6">
+    <section class="grid2">
+      <div><label class="lbl" for="a">before</label><textarea class="field" id="a"></textarea></div>
+      <div><label class="lbl" for="b">after</label><textarea class="field" id="b"></textarea></div>
+    </section>
+    <div class="row"><label class="check"><input type="checkbox" id="ignore-space"><span>ignore leading / trailing spaces</span></label><button class="tbtn" id="swap" type="button">swap</button></div>
+    <section>
+      <p class="hint" id="summary" aria-live="polite"></p>
+      <div class="out out--scroll" id="out" aria-live="polite"></div>
+      <p class="err" id="err" role="alert"></p>
+      <button class="btn -ghost mt-2" id="copy" type="button">copy diff</button>
+    </section>
+  </main>
+  <footer class="foot"><a href="../index.html">← all tools</a></footer>
+</div>
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+/* Line diff. A longest-common-subsequence alignment, rendered as a unified
+   listing: two leading spaces for a shared line, "+ " for one only in the
+   after text, "- " for one only in the before text.
+
+   Three things keep it fast enough to run live on every keystroke.
+
+   Interning. Lines are compared by an integer id from a Map rather than by
+   string. The table is quadratic in the number of lines, so a full string
+   comparison per cell is the single largest cost in the naive version; after
+   interning, each cell is one integer comparison.
+
+   Prefix trimming. While the two texts agree from the top, the backtrack can
+   only match those lines, so they are emitted directly and never enter the
+   table. Editing the end of a file — the normal case — therefore shrinks the
+   table to the part that actually differs. Trailing agreement is deliberately
+   *not* trimmed: when a line repeats, forcing the match to the end picks a
+   different, equally valid alignment than this backtrack produces, and the
+   listing must not change.
+
+   A flat typed table. The table is one Int32Array indexed by hand rather than
+   an array of arrays: two million cells cost eight megabytes and a contiguous
+   walk, instead of thousands of separate heap arrays.
+
+   Because the table now covers only the untrimmed remainder, the cell ceiling
+   applies to that remainder. Large files that share a long head, which the
+   earlier bound refused outright, now diff. */
+(function () {
+  "use strict";
+  var a = E.qs("#a"), b = E.qs("#b"), o = E.qs("#out"), er = E.qs("#err"), copy = E.qs("#copy");
+  var MAX_CELLS = 2000000, MAX_LINES = 5000;
+  function lines(value) { return value ? value.split(/\r\n|\r|\n/) : []; }
+
+  /**
+   * Replace each line with an integer id, equal ids meaning equal lines.
+   * @param {string[]} left
+   * @param {string[]} right
+   * @returns {{left: Int32Array, right: Int32Array}}
+   */
+  function intern(left, right) {
+    var ids = new Map(), next = 0, i;
+    var lx = new Int32Array(left.length), ly = new Int32Array(right.length);
+    for (i = 0; i < left.length; i++) {
+      var idl = ids.get(left[i]);
+      if (idl === undefined) { idl = next++; ids.set(left[i], idl); }
+      lx[i] = idl;
+    }
+    for (i = 0; i < right.length; i++) {
+      var idr = ids.get(right[i]);
+      if (idr === undefined) { idr = next++; ids.set(right[i], idr); }
+      ly[i] = idr;
+    }
+    return { left: lx, right: ly };
+  }
+
+  function run() {
+    var x = lines(a.value), y = lines(b.value), n = x.length, m = y.length;
+    var ignoreSpace = E.qs("#ignore-space").checked;
+    /* Comparison keys. With the option on they are the trimmed lines; the
+       output always shows the untrimmed originals. */
+    var left = ignoreSpace ? x.map(function (line) { return line.trim(); }) : x;
+    var right = ignoreSpace ? y.map(function (line) { return line.trim(); }) : y;
+    er.textContent = "";
+    o.textContent = "";
+    E.qs("#summary").textContent = "";
+    copy.disabled = true;
+    if (n > MAX_LINES || m > MAX_LINES) {
+      er.textContent = "these inputs are too large for a safe line diff; keep each side under " + MAX_LINES + " lines or reduce the combined size";
+      copy.disabled = true;
+      return;
+    }
+    if (!n && !m) return;
+
+    var keys = intern(left, right), kx = keys.left, ky = keys.right;
+
+    /* Shared head: emitted as matches without entering the table. */
+    var head = 0, limit = n < m ? n : m;
+    while (head < limit && kx[head] === ky[head]) head++;
+
+    var coreN = n - head, coreM = m - head;
+    if ((coreN + 1) * (coreM + 1) > MAX_CELLS) {
+      er.textContent = "these inputs are too large for a safe line diff; keep each side under " + MAX_LINES + " lines or reduce the combined size";
+      copy.disabled = true;
+      return;
+    }
+
+    var result = [], added = 0, removed = 0, k;
+    for (k = 0; k < head; k++) result.push("  " + y[k]);
+
+    if (coreN || coreM) {
+      /* dp[i][j] is the length of the longest common subsequence of the core
+         from i and j onward, so the table is filled from the bottom right and
+         read from the top left. Row stride is coreM + 1. */
+      var stride = coreM + 1;
+      var dp = new Int32Array((coreN + 1) * stride);
+      var i, j, row, below;
+      for (i = coreN - 1; i >= 0; i--) {
+        row = i * stride;
+        below = row + stride;
+        var value = kx[head + i];
+        for (j = coreM - 1; j >= 0; j--) {
+          if (value === ky[head + j]) dp[row + j] = dp[below + j + 1] + 1;
+          else {
+            var down = dp[below + j], across = dp[row + j + 1];
+            dp[row + j] = down > across ? down : across;
+          }
+        }
+      }
+
+      i = 0; j = 0;
+      while (i < coreN || j < coreM) {
+        row = i * stride;
+        if (i < coreN && j < coreM && kx[head + i] === ky[head + j]) { result.push("  " + y[head + j]); i++; j++; }
+        else if (j < coreM && (i === coreN || dp[row + j + 1] >= dp[row + stride + j])) { result.push("+ " + y[head + j++]); added++; }
+        else { result.push("- " + x[head + i++]); removed++; }
+      }
+    }
+
+    o.textContent = result.join("\n");
+    E.qs("#summary").textContent = added || removed ? added + " added · " + removed + " removed" : ignoreSpace ? "no changes beyond surrounding whitespace" : "no changes";
+    copy.disabled = false;
+  }
+  E.on(a, "input", E.debounce(run));
+  E.on(b, "input", E.debounce(run));
+  E.on(E.qs("#ignore-space"), "change", run);
+  E.on(E.qs("#swap"), "click", function () { var value = a.value; a.value = b.value; b.value = value; run(); });
+  E.on(copy, "click", function () { E.copy(o.textContent, this); });
+  run();
+})();
+</script>
+</body>
+</html>

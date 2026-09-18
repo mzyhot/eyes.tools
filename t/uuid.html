@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>uuid · 𓁹𓁹</title>
+<meta name="description" content="uuid v4, uuid v7, ulid and short ids, generated in bulk in your browser.">
+<meta name="theme-color" content="#fbfbfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<style>
+  /* scoped: the shared .out-head is a single line; three affordances need to wrap at 320px */
+  .out-head { flex-wrap: wrap; }
+  .check input:disabled { cursor: not-allowed; }
+  .check:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+</style>
+</head>
+<body data-tool="uuid">
+<div class="wrap">
+
+  <header class="top">
+    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+    <p class="crumb" data-crumb></p>
+    <span class="top__spacer"></span>
+    <button class="tbtn" type="button" data-theme-toggle>theme</button>
+  </header>
+
+  <div class="head">
+    <h1 class="h1" data-title></h1>
+    <p class="lede" data-lede></p>
+  </div>
+
+  <main class="stack-6">
+
+    <div class="stack">
+
+      <div>
+        <span class="lbl" id="kind-lbl">kind</span>
+        <div class="seg" role="radiogroup" aria-labelledby="kind-lbl">
+          <label><input type="radio" name="kind" value="v4" checked><span>uuid v4</span></label>
+          <label><input type="radio" name="kind" value="v7"><span>uuid v7</span></label>
+          <label><input type="radio" name="kind" value="ulid"><span>ulid</span></label>
+          <label><input type="radio" name="kind" value="short"><span>short</span></label>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <label class="lbl" for="n">how many</label>
+          <input class="field" id="n" type="number" min="1" max="1000" step="1" value="10"
+                 inputmode="numeric" autocomplete="off">
+        </div>
+        <div id="lenwrap" hidden>
+          <label class="lbl" for="len">length</label>
+          <input class="field" id="len" type="number" min="1" max="64" step="1" value="21"
+                 inputmode="numeric" autocomplete="off">
+        </div>
+      </div>
+
+      <div id="alphawrap" hidden>
+        <label class="lbl" for="alpha">alphabet</label>
+        <input class="field" id="alpha" type="text" spellcheck="false" autocomplete="off"
+               autocapitalize="off" autocorrect="off">
+        <p class="hint" id="alphahint"></p>
+      </div>
+
+      <div class="row">
+        <label class="check"><input type="checkbox" id="upper"><span>uppercase</span></label>
+        <label class="check"><input type="checkbox" id="braces"><span>braces</span></label>
+        <label class="check"><input type="checkbox" id="hyphens" checked><span>hyphens</span></label>
+      </div>
+
+      <p class="err" id="err" role="alert"></p>
+
+    </div>
+
+    <div>
+      <div class="out-head">
+        <span class="lbl" id="stat" aria-live="polite"></span>
+        <span class="row__spacer"></span>
+        <button class="tbtn" type="button" id="regen">regenerate</button>
+        <button class="tbtn" type="button" id="copy" disabled>copy all</button>
+        <button class="tbtn" type="button" id="dl" disabled>download .txt</button>
+      </div>
+      <div class="out out--scroll" id="out"></div>
+    </div>
+
+    <div class="section--ruled">
+      <span class="lbl">notes</span>
+      <dl class="kv">
+        <dt>v4</dt>
+        <dd>122 random bits from crypto.getRandomValues; version nibble 4 and variant bits 10 fixed per RFC 9562.</dd>
+        <dt>v7</dt>
+        <dd>48-bit unix millisecond, then a 12-bit counter seeded low at each new millisecond, then 62 random bits. Ids from one run are strictly increasing, so sorting them as text restores generation order.</dd>
+        <dt>ulid</dt>
+        <dd>48-bit millisecond in 10 crockford base32 characters, 80 random bits in 16 more. Within one millisecond the random field is incremented, keeping the run ordered.</dd>
+        <dt>short</dt>
+        <dd>Characters drawn uniformly from the alphabet by rejection sampling over random bytes — no modulo bias.</dd>
+      </dl>
+    </div>
+
+  </main>
+
+  <footer class="foot">
+    <a href="../index.html">← all tools</a>
+    <span class="row__spacer"></span>
+    <span>runs in your browser · nothing is uploaded</span>
+  </footer>
+
+</div>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var HEX = "0123456789abcdef";
+  var CROCK = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  var DEFAULT_ALPHA = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
+  var MAX_N = 1000, MAX_LEN = 64;
+
+  /* ── buffered crypto bytes ───────────────────────────── */
+
+  var pool = null, poolAt = 0;
+  function rb(n) {
+    var out = new Uint8Array(n), i = 0;
+    while (i < n) {
+      if (!pool || poolAt >= pool.length) { pool = E.rand(4096); poolAt = 0; }
+      var take = Math.min(n - i, pool.length - poolAt);
+      out.set(pool.subarray(poolAt, poolAt + take), i);
+      poolAt += take; i += take;
+    }
+    return out;
+  }
+
+  /* unbiased integer in [0, n) — rejection sampling, never a bare modulo */
+  function below(n) {
+    if (n <= 1) return 0;
+    var k = 1, span = 256;
+    while (span < n) { span *= 256; k++; }
+    var limit = span - (span % n);
+    for (;;) {
+      var b = rb(k), v = 0;
+      for (var i = 0; i < k; i++) v = v * 256 + b[i];
+      if (v < limit) return v % n;
+    }
+  }
+
+  function hex(bytes) {
+    var s = "";
+    for (var i = 0; i < bytes.length; i++) s += HEX[bytes[i] >> 4] + HEX[bytes[i] & 15];
+    return s;
+  }
+
+  function dash(h) {
+    return h.slice(0, 8) + "-" + h.slice(8, 12) + "-" + h.slice(12, 16) + "-" +
+           h.slice(16, 20) + "-" + h.slice(20);
+  }
+
+  /* ── uuid v4 ─────────────────────────────────────────── */
+
+  function v4() {
+    var b = rb(16);
+    b[6] = (b[6] & 0x0f) | 0x40;   /* version 4 */
+    b[8] = (b[8] & 0x3f) | 0x80;   /* variant 10x */
+    return dash(hex(b));
+  }
+
+  /* ── uuid v7, monotonic within a millisecond ─────────── */
+
+  var v7ms = 0, v7seq = 0;
+  /* 10 random bits: the counter starts low enough to hold 3072 more ids in the
+     same millisecond before it has to borrow from the next one */
+  function seed() { var s = rb(2); return ((s[0] << 8) | s[1]) & 0x03ff; }
+  function v7() {
+    var now = Date.now();
+    if (now > v7ms) { v7ms = now; v7seq = seed(); }
+    else { v7seq++; if (v7seq > 0x0fff) { v7ms++; v7seq = seed(); } }
+    var b = rb(16), t = v7ms;
+    for (var i = 5; i >= 0; i--) { b[i] = t % 256; t = Math.floor(t / 256); }
+    b[6] = 0x70 | (v7seq >> 8);    /* version 7 + counter high nibble */
+    b[7] = v7seq & 0xff;
+    b[8] = (b[8] & 0x3f) | 0x80;   /* variant 10x */
+    return dash(hex(b));
+  }
+
+  /* ── ulid, monotonic within a millisecond ────────────── */
+
+  var ulms = 0, ulrand = null;
+  function ulid() {
+    var now = Date.now();
+    if (now > ulms || !ulrand) { ulms = now; ulrand = rb(10); }
+    else {
+      var i = 9;
+      while (i >= 0) { if (ulrand[i] < 255) { ulrand[i]++; break; } ulrand[i] = 0; i--; }
+      if (i < 0) { ulms++; ulrand = rb(10); }
+    }
+    var t = ulms, s = "";
+    for (var j = 0; j < 10; j++) { s = CROCK[t % 32] + s; t = Math.floor(t / 32); }
+    var acc = 0, bits = 0;
+    for (var k = 0; k < 10; k++) {
+      acc = ((acc << 8) | ulrand[k]) & 0xfff;
+      bits += 8;
+      while (bits >= 5) { bits -= 5; s += CROCK[(acc >>> bits) & 31]; }
+    }
+    return s;
+  }
+
+  /* ── short id ────────────────────────────────────────── */
+
+  function shortId(alpha, len) {
+    var s = "";
+    for (var i = 0; i < len; i++) s += alpha[below(alpha.length)];
+    return s;
+  }
+
+  /* ── page ────────────────────────────────────────────── */
+
+  var out = E.qs("#out"), err = E.qs("#err"), stat = E.qs("#stat");
+  var copyButton = E.qs("#copy"), downloadButton = E.qs("#dl");
+  var nIn = E.qs("#n"), lenIn = E.qs("#len"), alphaIn = E.qs("#alpha");
+  var lenWrap = E.qs("#lenwrap"), alphaWrap = E.qs("#alphawrap"), alphaHint = E.qs("#alphahint");
+  var cbUpper = E.qs("#upper"), cbBraces = E.qs("#braces"), cbHyphens = E.qs("#hyphens");
+  var lines = [], rawLines = [];
+
+  alphaIn.value = DEFAULT_ALPHA;
+
+  function kind() {
+    var r = E.qsa("input[name=kind]").filter(function (x) { return x.checked; })[0];
+    return r ? r.value : "v4";
+  }
+
+  function whole(el, min, max) {
+    var raw = el.value.trim();
+    if (!raw) return { bad: "empty" };
+    if (!/^[0-9]+$/.test(raw)) return { bad: "not a whole number" };
+    var v = parseInt(raw, 10);
+    if (v < min || v > max) return { bad: "out of range" };
+    return { v: v };
+  }
+
+  function uniqueChars(s) {
+    var seen = Object.create(null), list = [], cps = Array.from(s);
+    for (var i = 0; i < cps.length; i++) {
+      var c = cps[i];
+      if (!seen[c]) { seen[c] = 1; list.push(c); }
+    }
+    return list;
+  }
+
+  function shape(id, k) {
+    if (k === "v4" || k === "v7") {
+      if (!cbHyphens.checked) id = id.replace(/-/g, "");
+      if (cbUpper.checked) id = id.toUpperCase();
+      if (cbBraces.checked) id = "{" + id + "}";
+    }
+    return id;
+  }
+
+  function run() {
+    lines = [];
+    rawLines = [];
+    out.textContent = "";
+    stat.textContent = "";
+    copyButton.disabled = true;
+    downloadButton.disabled = true;
+    var k = kind();
+    var isUuid = (k === "v4" || k === "v7");
+
+    lenWrap.hidden = alphaWrap.hidden = (k !== "short");
+    cbUpper.disabled = cbBraces.disabled = cbHyphens.disabled = !isUuid;
+
+    var n = whole(nIn, 1, MAX_N);
+    if (n.bad) {
+      nIn.setAttribute("aria-invalid", "true");
+      err.textContent = "how many: " + n.bad + " — needs 1 to " + MAX_N;
+      return;
+    }
+    nIn.removeAttribute("aria-invalid");
+
+    var alpha = null, len = 0;
+    if (k === "short") {
+      var l = whole(lenIn, 1, MAX_LEN);
+      if (l.bad) {
+        lenIn.setAttribute("aria-invalid", "true");
+        err.textContent = "length: " + l.bad + " — needs 1 to " + MAX_LEN;
+        return;
+      }
+      lenIn.removeAttribute("aria-invalid");
+      len = l.v;
+      alpha = uniqueChars(alphaIn.value);
+      if (alpha.length < 2) {
+        alphaIn.setAttribute("aria-invalid", "true");
+        err.textContent = "alphabet: needs at least 2 different characters";
+        alphaHint.textContent = "";
+        return;
+      }
+      alphaIn.removeAttribute("aria-invalid");
+      var bits = Math.log2(alpha.length) * len;
+      alphaHint.textContent = alpha.length + " unique characters · " +
+        (Math.round(bits * 10) / 10) + " bits per id, assuming every character is drawn " +
+        "independently and uniformly";
+    }
+
+    err.textContent = "";
+
+    var gen = k === "v4" ? v4 : k === "v7" ? v7 : k === "ulid" ? ulid
+            : function () { return shortId(alpha, len); };
+
+    try {
+      rawLines = new Array(n.v);
+      for (var i = 0; i < n.v; i++) rawLines[i] = gen();
+    } catch (error) {
+      rawLines = [];
+      err.textContent = error && error.message
+        ? error.message
+        : "could not generate ids in this browser";
+      return;
+    }
+
+    paint();
+  }
+
+  function paint() {
+    var k = kind();
+    lines = rawLines.map(function (id) { return shape(id, k); });
+    var text = lines.join("\n");
+    out.textContent = text;
+    copyButton.disabled = downloadButton.disabled = !lines.length;
+    stat.textContent = lines.length ? lines.length + (lines.length === 1 ? " id · " : " ids · ") +
+      (k === "short" ? "short" : k) + " · " + E.bytes(new TextEncoder().encode(text + "\n").length) : "";
+  }
+
+  E.qsa("input[name=kind]").forEach(function (r) { E.on(r, "change", run); });
+  [cbUpper, cbBraces, cbHyphens].forEach(function (c) { E.on(c, "change", paint); });
+  E.on(nIn, "input", run);
+  E.on(lenIn, "input", run);
+  E.on(alphaIn, "input", E.debounce(run, 160));
+
+  E.on(E.qs("#regen"), "click", run);
+
+  E.on(E.qs("#copy"), "click", function () { E.copy(out.textContent, this); });
+
+  E.on(E.qs("#dl"), "click", function () {
+    if (!lines.length) { E.flash(this, "nothing to save"); return; }
+    var k = kind();
+    E.download(lines.join("\n") + "\n", (k === "short" ? "short-id" : k) + ".txt");
+    E.flash(this, "saved");
+  });
+
+  /* deep link: ?kind=v7&n=100 */
+  (function () {
+    var k = E.param("kind");
+    if (k) {
+      E.qsa("input[name=kind]").forEach(function (r) { if (r.value === k) r.checked = true; });
+    }
+    var n = E.param("n");
+    if (n && /^[0-9]+$/.test(n) && +n >= 1 && +n <= MAX_N) nIn.value = String(+n);
+  })();
+
+  run();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>calculator · 𓁹𓁹</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>
+(function () {
+  "use strict";
+  try {
+    var theme = localStorage.getItem("eyes.theme");
+    if (theme) document.documentElement.setAttribute("data-theme", theme);
+  } catch (e) {}
+  var destination = new URL(location.protocol === "file:" ? "calc.html" : "/calc", location.href);
+  destination.search = location.search;
+  destination.searchParams.set("mode", "units");
+  destination.hash = location.hash;
+  location.replace(destination.href);
+})();
+</script>
+</head>
+<body>
+<main class="wrap"><a href="calc.html?mode=units">open calculator →</a></main>
+</body>
+</html>

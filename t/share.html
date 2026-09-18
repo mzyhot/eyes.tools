@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>share · 𓁹𓁹</title>
+<meta name="description" content="send files or text over an encrypted WebRTC connection.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<style>
+html, body { overflow-x: clip; }
+body[data-tool="share"] [hidden] { display: none !important; }
+.share-toolbar { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); flex-wrap:wrap; padding-bottom:var(--space-4); border-bottom:var(--rule) solid var(--color-rule); }
+.share-toolbar .lbl { margin:0; }
+.share-space { min-height:18rem; display:grid; align-content:center; padding:var(--space-8) 0; }
+.share-empty { text-align:center; padding:var(--space-8) var(--space-3); }
+.share-empty p:first-child { font-size:var(--text-xl); margin-bottom:var(--space-2); }
+.device-list { list-style:none; padding:0; margin:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-4); }
+.device { min-width:0; border:var(--rule) solid var(--color-rule); display:flex; flex-direction:column; transition:background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
+.device__head { min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--space-2); min-height:9rem; padding:var(--space-5) var(--space-3); text-align:center; }
+.device__type { font-family:var(--font-mono); font-size:var(--text-xs); color:var(--color-dim); }
+.device__name { font-size:var(--text-xl); letter-spacing:var(--track-tight); overflow-wrap:anywhere; }
+.device__action { font-size:var(--text-xs); font-family:var(--font-mono); color:var(--color-dim); }
+.device__buttons { display:flex; flex-wrap:wrap; gap:var(--space-2); padding:var(--space-3); border-top:var(--rule) solid var(--color-rule); }
+.device__buttons .btn { flex:1 1 auto; }
+/* A file dragged over the tile inverts it: the whole tile is the drop target. */
+.device[data-drag] { background:var(--color-ink); color:var(--color-paper); }
+.device[data-drag] .device__type, .device[data-drag] .device__action { color:inherit; }
+.self { border-top:var(--rule) solid var(--color-rule); padding:var(--space-4) 0; display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); flex-wrap:wrap; }
+.self p { margin:0; }
+#your-name { color:var(--color-ink); }
+.room-panel { border:var(--rule) solid var(--color-rule); padding:var(--space-5); display:grid; grid-template-columns:minmax(0,1fr) 8rem; align-items:center; gap:var(--space-5); }
+#room-qr { background:var(--color-qr-paper); padding:4px; }
+#room-qr canvas { width:100%; height:auto; display:block; }
+#room-link { min-width:0; font-size:var(--text-xs); }
+.transfer-list { list-style:none; margin:0; padding:0; }
+.transfer { padding:var(--space-5) 0; border-top:var(--rule) solid var(--color-rule); }
+.transfer__name { font-size:var(--text-lg); overflow-wrap:anywhere; margin:0; }
+.transfer__state { font-size:var(--text-xs); margin:var(--space-3) 0; }
+.transfer progress { display:block; width:100%; height:var(--space-1); margin:var(--space-4) 0; border:0; appearance:none; background:var(--color-rule); accent-color:var(--color-ink); }
+.transfer progress::-webkit-progress-bar { background:var(--color-rule); }
+.transfer progress::-webkit-progress-value { background:var(--color-ink); }
+.transfer progress::-moz-progress-bar { background:var(--color-ink); }
+.download-file { font-family:var(--font-mono); font-size:var(--text-sm); overflow-wrap:anywhere; padding:var(--space-2) 0; }
+.file-names { font-size:var(--text-sm); padding-left:var(--space-5); overflow-wrap:anywhere; }
+.received-files { margin:var(--space-3) 0; }
+.share-help { border-top:var(--rule) solid var(--color-rule); padding-top:var(--space-4); }
+.share-help summary, .transfer summary { cursor:pointer; font-family:var(--font-mono); font-size:var(--text-xs); padding:var(--space-2) 0; }
+.share-help p { max-width:60ch; }
+#text-dialog { width:calc(100% - var(--space-8)); max-width:32rem; padding:var(--space-6); border:var(--rule) solid var(--color-rule); background:var(--color-paper); color:var(--color-ink); }
+#text-dialog::backdrop { background:var(--color-paper); opacity:0.8; }
+#text-to { overflow-wrap:anywhere; }
+#text-error { min-height:var(--space-4); }
+@media(max-width:420px) {
+  .device-list { grid-template-columns:minmax(0,1fr); }
+  .device__head { min-height:7rem; }
+  .room-panel { grid-template-columns:minmax(0,1fr); }
+  #room-qr { max-width:8rem; }
+  .share-toolbar { align-items:flex-start; }
+}
+</style>
+</head>
+<body data-tool="share">
+<div class="wrap">
+  <header class="top">
+    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+    <p class="crumb" data-crumb></p><span class="top__spacer"></span>
+    <button class="tbtn" type="button" data-theme-toggle>theme</button>
+  </header>
+  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
+  <main class="stack-6">
+    <section aria-label="devices">
+      <div class="share-toolbar">
+        <p class="lbl"><span id="device-count">devices</span> · <span id="network-label">on your network</span></p>
+        <button class="btn -ghost -sm" type="button" id="room-button" disabled>connect another network</button>
+      </div>
+      <div class="share-space">
+        <div id="empty" class="share-empty">
+          <p>ready when you are.</p>
+          <p class="hint" id="empty-note">Open share on another device using the same Wi-Fi.</p>
+        </div>
+        <ul class="device-list" id="devices" aria-label="available devices"></ul>
+      </div>
+      <div class="self">
+        <p class="hint">you are <span class="mono" id="your-name">…</span></p>
+        <p class="hint" id="status" role="status">finding devices…</p>
+      </div>
+      <p class="hint">press send files on a device · or drop files onto it</p>
+      <p class="err" id="err" role="alert"></p>
+      <input type="file" id="files" aria-label="files to send" multiple hidden>
+    </section>
+    <section class="room-panel" id="room-panel" aria-label="room invitation" hidden>
+      <div class="stack-2">
+        <label class="lbl" for="room-link">one link. both devices.</label>
+        <p class="hint">Open this link or scan the code on the other device. Anyone with the link can join.</p>
+        <input class="field" id="room-link" readonly>
+        <div class="row"><button class="btn -sm" id="copy-room" type="button">copy link</button><button class="tbtn" id="leave-room" type="button">leave room</button></div>
+      </div>
+      <div id="room-qr" role="img" aria-label="scan to join this room"></div>
+    </section>
+    <section id="transfers-section" aria-label="transfers" hidden>
+      <p class="lbl">transfers</p>
+      <ul class="transfer-list" id="transfers"></ul>
+    </section>
+    <details class="share-help">
+      <summary>can’t see your device?</summary>
+      <p class="hint">Keep share open on both devices. On the same Wi-Fi, they appear automatically. On another network, open the same room link on both devices. VPNs and some networks may need a room link too.</p>
+      <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Up to 256 MB per transfer; remove received files to free space.</p>
+      <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site’s server storage. The server handles device discovery and connection details. A relay may carry encrypted data when configured.</p>
+      <button class="tbtn" id="retry" type="button">refresh devices</button>
+    </details>
+  </main>
+  <footer class="foot"><a href="../index.html">← all tools</a><span class="row__spacer"></span><span>device to device · keep both tabs open</span></footer>
+</div>
+<dialog id="text-dialog" aria-labelledby="text-title">
+  <div class="stack">
+    <div><p class="lbl" id="text-title">send text to</p><p id="text-to"></p></div>
+    <div><label class="lbl" for="text">text</label><textarea class="field" id="text" placeholder="a note, a link, anything written"></textarea></div>
+    <p class="err" id="text-error" role="alert"></p>
+    <div class="row"><button class="btn" id="send-text" type="button">send text</button><button class="tbtn" id="text-cancel" type="button">cancel</button></div>
+  </div>
+</dialog>
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script src="../qrcode.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = s => document.querySelector(s);
+  const LIMIT = 256 * 1024 * 1024, RETAIN = 512 * 1024 * 1024, CHUNK = 16384;
+  /* Automatic reconnection gives up after this many consecutive failures; after
+     that, pressing send on the device tries again. */
+  const MAX_RETRIES = 5;
+  const peers = new Map();
+  let session = null, stream = null, epoch = 0, stopped = false, retained = 0, reserved = 0, chosen = null, textPeer = null;
+  let room = '', online = false, creatingRoom = false;
+  /* lastBeat: when the discovery stream last delivered anything, so a tab
+     returning from the background can tell a silently dead stream from a live one.
+     wake: cuts the current reconnect backoff short. */
+  let lastBeat = 0, wake = null;
+  const random = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b.toString(16).padStart(2, '0')).join('');
+  const error = message => { $('#err').textContent = message || ''; };
+  function safeName(value) { return String(value || 'file').normalize('NFC').replace(/[\u0000-\u001f\u007f\\/:\u202a-\u202e\u2066-\u2069]/g, '_').trim().slice(0, 180) || 'file'; }
+  const button = (label, action, primary = false) => {
+    const b = E.el('button', { class: primary ? 'btn -sm' : 'tbtn', type: 'button', text: label });
+    b.addEventListener('click', action); return b;
+  };
+  function activity() { return [...peers.values()].some(p => p.outgoing || p.incoming || p.queue.length); }
+  function render() {
+    $('#empty').hidden = peers.size > 0;
+    $('#device-count').textContent = peers.size ? peers.size + (peers.size === 1 ? ' device' : ' devices') : 'devices';
+    $('#status').textContent = online ? (room ? 'room open' : 'you’re visible') : 'reconnecting…';
+    $('#room-button').disabled = !online || activity() || creatingRoom;
+    $('#leave-room').disabled = activity();
+    $('#network-label').textContent = room ? 'in this room' : 'on your network';
+  }
+  async function api(path, body, current = session) {
+    const response = await fetch('/api/share/' + path + (current ? '?id=' + current.id : ''), {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(current ? { Authorization: 'Bearer ' + current.token } : {}) },
+      body: JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout(15000)
+    });
+    let data; try { data = await response.json(); } catch { throw new Error('sharing needs the updated server. please try again after it is restarted.'); }
+    if (!response.ok) throw new Error(data.error || 'could not reach the sharing service');
+    return data;
+  }
+  function clearPeers(message) { for (const p of peers.values()) p.close(message); peers.clear(); render(); }
+  function dropPeer(id) {
+    const p = peers.get(id); if (!p) return;
+    p.close(p.name + ' left. send again when they return.'); peers.delete(id); render();
+  }
+  /* The lower session id always makes the offer, so two devices never both do. */
+  const initiator = p => !!session && session.id < p.id;
+  function addPeer(info) {
+    if (!info || info.id === session.id) return;
+    const known = peers.get(info.id);
+    if (known) {
+      /* Seen again after dropping out of discovery: it is back. If its direct
+         connection did not survive, start over with a fresh retry budget. */
+      known.away = false; known.attempts = 0;
+      if (!known.pc && initiator(known)) known.connect().catch(e => known.fail(e.message));
+      render(); return;
+    }
+    const p = new Peer(info); peers.set(info.id, p); render();
+    if (initiator(p)) p.connect().catch(e => p.fail(e.message));
+  }
+  /* A peer that left discovery but still has an open data channel has only lost
+     its signaling connection — a backgrounded phone, a Wi-Fi blip. The direct
+     connection does not depend on the server, so keep it; if the peer really is
+     gone, that channel closes within seconds and the tile goes with it. */
+  function peerLeft(id) {
+    const p = peers.get(id); if (!p) return;
+    if (p.dc?.readyState === 'open') { p.away = true; return; }
+    dropPeer(id);
+  }
+  function onEvent(type, data) {
+    if (type === 'peers') {
+      /* A snapshot arrives on every (re)connection. Anyone missing from it left
+         while this tab was not listening. */
+      const present = new Set(data.map(info => info.id));
+      for (const id of [...peers.keys()]) if (!present.has(id)) peerLeft(id);
+      data.forEach(addPeer); return;
+    }
+    if (type === 'joined') { addPeer(data); return; }
+    if (type === 'left') { data.removed ? dropPeer(data.id) : peerLeft(data.id); return; }
+    if (type === 'signal') {
+      const p = peers.get(data.from);
+      if (p) p.readChain = p.readChain.then(() => p.signal(data.signal)).catch(e => p.fail(e.message));
+    }
+  }
+  /* A sleep that can be cut short, so returning to the tab or regaining the
+     network reconnects now instead of at the end of a backoff. */
+  function nap(ms) {
+    return new Promise(resolve => {
+      const done = () => { clearTimeout(timer); if (wake === done) wake = null; resolve(); };
+      const timer = setTimeout(done, ms); wake = done;
+    });
+  }
+  const hurry = () => { if (wake) wake(); };
+
+  /**
+   * Join discovery and stay joined.
+   *
+   * The session outlives its event stream. When the stream drops — a phone
+   * backgrounded, a Wi-Fi blip, a proxy recycling a connection — the same
+   * session reopens it, so this device keeps its name and every peer keeps its
+   * direct connection and any transfer in flight. Only when the server has
+   * already expired the session (it holds one for about 45 seconds without a
+   * stream) does this rejoin as a new device.
+   */
+  async function discover() {
+    const version = ++epoch;
+    stream?.abort();
+    const old = session; session = null;
+    if (old) api('leave', {}, old).catch(() => {});
+    clearPeers('room changed');
+    online = false; render();
+    let backoff = 1000;
+    while (!stopped && version === epoch) {
+      let watchdog;
+      try {
+        if (!session) {
+          const device = /iPad|Tablet/i.test(navigator.userAgent) ? 'tablet' : /Mobi|Android/i.test(navigator.userAgent) ? 'phone' : 'computer';
+          const joined = await api('join', { device, ...(room ? { room } : {}) }, null);
+          if (version !== epoch || stopped) { api('leave', {}, joined).catch(() => {}); return; }
+          session = joined;
+          $('#your-name').textContent = joined.name;
+          $('#empty-note').textContent = room ? 'Open the room link on another device. It will appear here.' : 'Open share on another device using the same Wi-Fi.';
+          if (!room && !joined.networkKnown) $('#empty-note').textContent = 'Use a room link to connect your devices.';
+        }
+        const current = session;
+        const connection = stream = new AbortController();
+        const armWatchdog = () => { lastBeat = Date.now(); clearTimeout(watchdog); watchdog = setTimeout(() => connection.abort(), 45000); };
+        armWatchdog();
+        const response = await fetch('/api/share/events?id=' + current.id, { headers: { Authorization: 'Bearer ' + current.token }, signal: connection.signal, cache: 'no-store' });
+        if (response.status === 401) {
+          /* Gone longer than the server's grace period. Peers have already been
+             told this device left, so its connections are dead either way. */
+          response.body?.cancel().catch(() => {});
+          if (session === current) { session = null; clearPeers('connection interrupted. please send again.'); }
+          continue;
+        }
+        if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream')) throw new Error('the sharing service is unavailable');
+        online = true; backoff = 1000; error(''); render();
+        const reader = response.body.getReader(), decoder = new TextDecoder();
+        let buffer = '';
+        while (version === epoch && !stopped) {
+          const { value, done } = await reader.read();
+          if (done) throw new Error('connection lost');
+          armWatchdog();
+          buffer += decoder.decode(value, { stream: true });
+          let end;
+          while ((end = buffer.indexOf('\n\n')) !== -1) {
+            const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+            const type = event.match(/^event: (.+)$/m)?.[1], data = event.match(/^data: (.+)$/m)?.[1];
+            if (type && data) onEvent(type, JSON.parse(data));
+          }
+          if (buffer.length > 131072) throw new Error('invalid discovery response');
+        }
+      } catch (e) {
+        if (version !== epoch || stopped) return;
+        online = false; render(); error(e.message === 'connection lost' || e.name === 'AbortError' ? 'reconnecting to your devices…' : e.message);
+      } finally {
+        clearTimeout(watchdog);
+      }
+      if (version !== epoch || stopped) return;
+      stream?.abort();
+      await nap(backoff); backoff = Math.min(backoff * 2, 10000);
+    }
+  }
+  function transferRow(name, detail) {
+    $('#transfers-section').hidden = false;
+    const row = E.el('li', { class: 'transfer' });
+    const title = E.el('p', { class: 'transfer__name', text: name });
+    const meta = E.el('p', { class: 'hint', text: detail });
+    const state = E.el('p', { class: 'mono transfer__state', text: 'waiting…', role: 'status' });
+    const progress = E.el('progress', { max: 1, value: 0, 'aria-label': name + ' transfer progress' });
+    const actions = E.el('div', { class: 'row' });
+    row.append(title, meta, state, progress, actions); $('#transfers').prepend(row);
+    return { row, state, progress, actions, update(text, value) { if (state.textContent !== text) state.textContent = text; if (value !== undefined) progress.value = value; },
+      finish(text) { state.textContent = text; progress.hidden = true; actions.replaceChildren(button('dismiss', () => { row.remove(); $('#transfers-section').hidden = !$('#transfers').children.length; })); } };
+  }
+  class Peer {
+    constructor(info) {
+      this.id = info.id; this.name = info.name; this.device = info.device;
+      this.pc = null; this.dc = null; this.connection = ''; this.pendingICE = []; this.readChain = Promise.resolve(); this.sendChain = Promise.resolve();
+      this.queue = []; this.outgoing = null; this.incoming = null; this.closed = false;
+      /* away: dropped out of discovery but still directly connected.
+         attempts: consecutive failed connections, for the retry backoff. */
+      this.away = false; this.attempts = 0; this.retryTimer = null; this.lastError = '';
+      this.tile = E.el('li', { class: 'device' });
+      this.label = E.el('span', { class: 'device__action', text: 'connecting…' });
+      const head = E.el('div', { class: 'device__head' }, [
+        E.el('span', { class: 'device__type', text: this.device }),
+        E.el('span', { class: 'device__name', text: this.name }),
+        this.label
+      ]);
+      /* Sending does not wait for the connection: a batch queues and goes the
+         moment the channel opens, and pressing send also retries a device that
+         gave up reconnecting. */
+      this.sendButton = E.el('button', { class: 'btn -sm', type: 'button', text: 'send files', 'aria-label': 'send files to ' + this.name });
+      this.sendButton.addEventListener('click', () => { chosen = this; $('#files').click(); });
+      this.textButton = E.el('button', { class: 'btn -ghost -sm', type: 'button', text: 'send text', 'aria-label': 'send text to ' + this.name });
+      this.textButton.addEventListener('click', () => {
+        textPeer = this; $('#text-to').textContent = this.name; $('#text-error').textContent = ''; $('#text-dialog').showModal(); $('#text').focus();
+      });
+      this.tile.append(head, E.el('div', { class: 'device__buttons' }, [this.sendButton, this.textButton])); $('#devices').append(this.tile);
+      this.tile.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); this.tile.dataset.drag = 'true'; } });
+      this.tile.addEventListener('dragleave', e => { if (!this.tile.contains(e.relatedTarget)) delete this.tile.dataset.drag; });
+      this.tile.addEventListener('drop', e => { e.preventDefault(); delete this.tile.dataset.drag; this.files([...e.dataTransfer.files]); });
+    }
+    status(text) { this.label.textContent = text; }
+    async emit(signal) {
+      const current = session;
+      this.sendChain = this.sendChain.then(() => {
+        if (this.closed || session !== current) return;
+        return api('signal', { to: this.id, signal }, current);
+      });
+      return this.sendChain;
+    }
+    setup(connection) {
+      const pc = new RTCPeerConnection({ iceServers: session.iceServers });
+      this.pc = pc; this.connection = connection; this.status('connecting…'); this.pendingICE = [];
+      this.timer = setTimeout(() => this.fail('could not connect to ' + this.name + '. some networks need a relay server.'), 30000);
+      pc.onicecandidate = e => {
+        if (e.candidate && this.pc === pc) this.emit({ connection, candidate: e.candidate.toJSON() }).catch(e => this.fail(e.message));
+      };
+      pc.onconnectionstatechange = () => {
+        if (this.pc !== pc) return;
+        if (pc.connectionState === 'failed') this.fail('connection to ' + this.name + ' failed.');
+        if (pc.connectionState === 'disconnected') this.status('reconnecting…');
+        if (pc.connectionState === 'connected' && this.dc?.readyState === 'open') this.status('ready');
+      };
+      pc.ondatachannel = e => { if (this.pc === pc && !this.dc) this.attach(e.channel); else e.channel.close(); };
+      return pc;
+    }
+    async connect() {
+      clearTimeout(this.retryTimer);
+      if (this.closed || this.pc) return;
+      const pc = this.setup(random(12));
+      this.attach(pc.createDataChannel('eyes-share-v2', { ordered: true }));
+      await pc.setLocalDescription(await pc.createOffer());
+      await this.emit({ connection: this.connection, description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+    }
+    async signal(data) {
+      if (this.closed) return;
+      if (data.description?.type === 'offer') {
+        if (this.pc && this.connection !== data.connection) {
+          // Deterministic glare resolution when both users retry simultaneously.
+          if (session.id < this.id && this.pc.signalingState === 'have-local-offer') return;
+          this.reset('connection restarted');
+        }
+        const pc = this.pc || this.setup(data.connection);
+        await pc.setRemoteDescription(data.description);
+        for (const ice of this.pendingICE.splice(0)) await pc.addIceCandidate(ice);
+        await pc.setLocalDescription(await pc.createAnswer());
+        await this.emit({ connection: this.connection, description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+      } else if (data.description?.type === 'answer') {
+        if (!this.pc || data.connection !== this.connection) return;
+        await this.pc.setRemoteDescription(data.description);
+        for (const ice of this.pendingICE.splice(0)) await this.pc.addIceCandidate(ice);
+      } else if (data.candidate) {
+        // Outbound signals are serialized, but ICE may still precede an offer.
+        if (!this.pc) this.setup(data.connection);
+        if (data.connection !== this.connection) return;
+        if (this.pc.remoteDescription) await this.pc.addIceCandidate(data.candidate);
+        else if (this.pendingICE.length < 100) this.pendingICE.push(data.candidate);
+      }
+    }
+    attach(dc) {
+      if (dc.label !== 'eyes-share-v2' || !dc.ordered) { dc.close(); return; }
+      this.dc = dc; dc.binaryType = 'arraybuffer'; dc.bufferedAmountLowThreshold = 262144;
+      dc.onopen = () => {
+        clearTimeout(this.timer); this.attempts = 0; this.status('ready');
+        /* Connected again: retract this device's own connection error, but never
+           someone else's. */
+        if (this.lastError && $('#err').textContent === this.lastError) error('');
+        this.lastError = ''; this.pump();
+      };
+      dc.onclose = () => {
+        if (this.dc !== dc || this.closed) return;
+        /* Already gone from discovery, and now the direct link is gone too. */
+        if (this.away) { dropPeer(this.id); return; }
+        this.fail('connection to ' + this.name + ' closed.');
+      };
+      dc.onerror = () => { if (this.dc === dc) this.fail('transfer connection failed. please try again.'); };
+      dc.onmessage = e => { try { this.message(e.data); } catch (error) { this.fail(error.message || 'invalid transfer data'); } };
+    }
+    control(data) { if (this.dc?.readyState !== 'open') throw new Error('device is not connected'); this.dc.send(JSON.stringify(data)); }
+    reset(message) {
+      clearTimeout(this.timer); const dc = this.dc, pc = this.pc; this.dc = null; this.pc = null;
+      if (dc) { dc.onclose = null; dc.onerror = null; dc.onmessage = null; dc.close(); }
+      pc?.close();
+      if (this.outgoing) this.finishOutgoing(message);
+      if (this.incoming) this.finishIncoming(message);
+      for (const item of this.queue) item.ui.finish(message);
+      this.queue = []; this.sendChain = Promise.resolve(); this.pendingICE = []; render();
+    }
+    fail(message) {
+      if (this.closed) return;
+      this.reset(message); this.lastError = message; error(message);
+      this.retry();
+    }
+    /**
+     * Reconnect after a failure, backing off 1, 2, 4, 8 then 15 seconds.
+     * Only the initiator makes the offer; the other side waits to receive one,
+     * but counts the same attempts so both give up together. A peer that has
+     * left discovery is not retried — `joined` brings it back if it returns.
+     */
+    retry() {
+      clearTimeout(this.retryTimer);
+      if (this.closed || this.away) return;
+      if (++this.attempts > MAX_RETRIES) { this.status('not connected · send to retry'); return; }
+      this.status('reconnecting…');
+      if (!initiator(this)) return;
+      const wait = Math.min(15000, 1000 * 2 ** (this.attempts - 1));
+      this.retryTimer = setTimeout(() => {
+        if (!this.closed && !this.pc && session) this.connect().catch(e => this.fail(e.message));
+      }, wait);
+    }
+    close(message) { this.closed = true; clearTimeout(this.retryTimer); this.reset(message); this.tile.remove(); }
+    files(files) {
+      if (!files.length) return;
+      try { this.enqueue(files.map(f => ({ blob: f, name: safeName(f.name), size: f.size, kind: 'file' }))); }
+      catch (e) { error(e.message); }
+    }
+    enqueue(items) {
+      if (this.closed) throw new Error('that device left. ask them to reopen share.');
+      if (!items.length || items.length > 100) throw new Error('choose up to 100 files at a time.');
+      const size = items.reduce((n, item) => n + item.size, 0);
+      if (size > LIMIT) throw new Error('send up to 256 MB at a time. choose fewer files.');
+      if (this.queue.length + (this.outgoing ? 1 : 0) >= 10) throw new Error('wait for the queued transfers to finish.');
+      error('');
+      const name = items.length === 1 ? items[0].name : items.length + ' files';
+      const batch = { id: random(12), items, size, ui: transferRow(name, 'to ' + this.name + ' · ' + E.bytes(size)), cancelled: false };
+      batch.ui.update(this.dc?.readyState === 'open' ? 'queued' : 'connecting…');
+      batch.ui.actions.append(button('cancel', () => this.cancelOutgoing(batch)));
+      this.queue.push(batch);
+      /* Choosing to send is a request to connect now, whatever the backoff said. */
+      this.attempts = 0;
+      if (!this.pc) this.connect().catch(e => this.fail(e.message));
+      this.pump(); render();
+    }
+    pump() {
+      if (this.outgoing || !this.queue.length || this.dc?.readyState !== 'open') return;
+      const batch = this.outgoing = this.queue.shift(); batch.state = 'offered';
+      batch.ui.update('waiting for ' + this.name + ' to accept');
+      this.control({ t: 'offer', id: batch.id, items: batch.items.map(({ name, size, kind }) => ({ name, size, kind })) });
+      batch.timer = setTimeout(() => this.cancelOutgoing(batch, 'no response. send again when they’re ready.'), 120000);
+    }
+    finishOutgoing(message) {
+      const batch = this.outgoing; if (!batch) return;
+      batch.cancelled = true; clearTimeout(batch.timer); batch.ui.finish(message); this.outgoing = null; render();
+    }
+    cancelOutgoing(batch, message = 'cancelled') {
+      batch.cancelled = true; clearTimeout(batch.timer);
+      if (this.outgoing === batch) {
+        // Close the channel to discard already-buffered binary chunks safely.
+        if (batch.state === 'sending' || batch.state === 'receipt') { this.fail(message + '.'); return; }
+        try { this.control({ t: 'cancel', id: batch.id }); } catch {}
+        this.finishOutgoing(message); this.pump();
+      } else { this.queue = this.queue.filter(item => item !== batch); batch.ui.finish(message); }
+      render();
+    }
+    finishIncoming(message) {
+      const batch = this.incoming; if (!batch) return;
+      clearTimeout(batch.timer);
+      if (batch.accepted) reserved -= batch.size;
+      batch.chunks = []; batch.files = []; batch.ui.finish(message); this.incoming = null; render();
+    }
+    incomingTimeout(batch) {
+      clearTimeout(batch.timer);
+      batch.timer = setTimeout(() => { if (this.incoming === batch) this.fail('transfer timed out. please send again.'); }, 60000);
+    }
+    offer(data) {
+      if (this.incoming) { this.control({ t: 'reject', id: data.id, reason: 'busy with another transfer' }); return; }
+      if (!/^[a-f0-9]{24}$/.test(data.id || '') || !Array.isArray(data.items) || !data.items.length || data.items.length > 100) throw new Error('invalid file offer');
+      const items = data.items.map(item => {
+        if (!item || typeof item.name !== 'string' || !item.name.length || item.name.length > 180 || !Number.isSafeInteger(item.size) || item.size < 0 || !['text', 'file'].includes(item.kind) || (item.kind === 'text' && item.size > 8 * 1024 * 1024)) throw new Error('invalid file details');
+        return { name: safeName(item.name), size: item.size, kind: item.kind };
+      });
+      const size = items.reduce((n, f) => n + f.size, 0);
+      if (size > LIMIT || size + retained + reserved > RETAIN) { this.control({ t: 'reject', id: data.id, reason: 'not enough space; remove received files first' }); return; }
+      const title = items.length === 1 ? items[0].name : items.length + ' files';
+      const batch = this.incoming = { id: data.id, items, size, accepted: false, index: 0, fileBytes: 0, bytes: 0, chunks: [], files: [], ui: transferRow(title, 'from ' + this.name + ' · ' + E.bytes(size)) };
+      batch.ui.update(this.name + ' wants to send ' + (items[0].kind === 'text' ? 'text' : items.length === 1 ? 'a file' : 'files'));
+      batch.ui.progress.hidden = true;
+      if (items.length > 1) {
+        const details = E.el('details'), summary = E.el('summary', { text: 'view files' });
+        const names = E.el('ul', { class: 'file-names' });
+        items.forEach(item => names.append(E.el('li', { text: item.name + ' · ' + E.bytes(item.size) })));
+        details.append(summary, names); batch.ui.row.insertBefore(details, batch.ui.actions);
+      }
+      batch.ui.actions.append(button('accept', () => {
+        if (this.incoming !== batch || batch.accepted) return;
+        if (retained + reserved + size > RETAIN) { error('remove received files to make room first.'); return; }
+        batch.accepted = true; reserved += size; batch.ui.progress.hidden = false; batch.ui.update('receiving…', 0);
+        batch.ui.actions.replaceChildren(button('cancel', () => this.fail('transfer cancelled.')));
+        this.incomingTimeout(batch); this.control({ t: 'accept', id: batch.id }); render();
+      }, true), button('decline', () => { this.control({ t: 'reject', id: batch.id, reason: 'declined' }); this.finishIncoming('declined'); }));
+      batch.timer = setTimeout(() => { if (this.incoming === batch && !batch.accepted) { this.control({ t: 'reject', id: batch.id, reason: 'no response' }); this.finishIncoming('request expired'); } }, 120000);
+      render();
+    }
+    message(raw) {
+      if (typeof raw !== 'string') {
+        const b = this.incoming;
+        if (!(raw instanceof ArrayBuffer) || !raw.byteLength || raw.byteLength > CHUNK || !b?.accepted || !b.started || b.chunks.length >= 65536 || b.fileBytes + raw.byteLength > b.items[b.index].size) throw new Error('received unexpected file data');
+        b.chunks.push(raw); b.fileBytes += raw.byteLength; b.bytes += raw.byteLength; this.incomingTimeout(b);
+        const percent = b.size ? Math.floor(b.bytes / b.size * 100) : 100;
+        b.ui.update('receiving · ' + percent + '%', b.size ? b.bytes / b.size : 1); return;
+      }
+      if (raw.length > 65536) throw new Error('transfer message too large');
+      const data = JSON.parse(raw);
+      if (!data || typeof data.t !== 'string') throw new Error('invalid transfer message');
+      if (data.t === 'offer') { this.offer(data); return; }
+      const out = this.outgoing, incoming = this.incoming;
+      if (data.t === 'accept' && out?.id === data.id && out.state === 'offered') { clearTimeout(out.timer); this.transmit(out).catch(e => { if (this.outgoing === out) this.fail(e.message); }); return; }
+      if (data.t === 'reject' && out?.id === data.id && out.state === 'offered') { this.finishOutgoing('not sent · ' + String(data.reason || 'declined').slice(0, 120)); this.pump(); return; }
+      if (data.t === 'cancel' && incoming?.id === data.id) { this.finishIncoming('sender cancelled'); return; }
+      if (data.t === 'file' && incoming?.id === data.id && incoming.accepted) {
+        if (incoming.started || data.index !== incoming.index || incoming.index >= incoming.items.length) throw new Error('invalid file order');
+        incoming.started = true; this.incomingTimeout(incoming); return;
+      }
+      if (data.t === 'file-end' && incoming?.id === data.id && incoming.accepted) {
+        const b = incoming;
+        if (!b.started || data.index !== b.index || b.fileBytes !== b.items[b.index].size) throw new Error('received file is incomplete');
+        b.files.push(new Blob(b.chunks, { type: b.items[b.index].kind === 'text' ? 'text/plain;charset=utf-8' : 'application/octet-stream' }));
+        b.chunks = []; b.fileBytes = 0; b.started = false; b.index++; this.incomingTimeout(b); return;
+      }
+      if (data.t === 'done' && incoming?.id === data.id && incoming.accepted) {
+        if (incoming.index !== incoming.items.length || incoming.bytes !== incoming.size) throw new Error('transfer is incomplete');
+        this.control({ t: 'received', id: incoming.id }); this.received(incoming); return;
+      }
+      if (data.t === 'received' && out?.id === data.id && out.state === 'receipt') { this.finishOutgoing('sent to ' + this.name); this.pump(); return; }
+      // Late cancellation/acknowledgment may arrive after a user cancels an offer.
+      if (['cancel', 'reject', 'accept', 'received'].includes(data.t)) return;
+      throw new Error('unexpected transfer message');
+    }
+    async buffer(dc) {
+      if (dc.readyState !== 'open') throw new Error('connection closed during transfer');
+      if (dc.bufferedAmount <= 1048576) return;
+      await new Promise((resolve, reject) => {
+        const done = error => { clearTimeout(timer); dc.removeEventListener('bufferedamountlow', low); dc.removeEventListener('close', close); error ? reject(error) : resolve(); };
+        const low = () => { if (dc.bufferedAmount <= dc.bufferedAmountLowThreshold) done(); };
+        const close = () => done(new Error('connection closed during transfer'));
+        const timer = setTimeout(() => done(new Error('the receiver stopped responding')), 30000);
+        dc.addEventListener('bufferedamountlow', low); dc.addEventListener('close', close); low();
+      });
+    }
+    async transmit(batch) {
+      batch.state = 'sending'; const dc = this.dc; let sent = 0;
+      const check = () => { if (batch.cancelled || this.outgoing !== batch || this.dc !== dc || dc.readyState !== 'open') throw new Error('transfer cancelled'); };
+      const chunkSize = Math.min(CHUNK, this.pc.sctp?.maxMessageSize || CHUNK);
+      for (let i = 0; i < batch.items.length; i++) {
+        check(); this.control({ t: 'file', id: batch.id, index: i });
+        const file = batch.items[i].blob;
+        for (let offset = 0; offset < file.size; offset += chunkSize) {
+          check(); await this.buffer(dc);
+          const data = await file.slice(offset, offset + chunkSize).arrayBuffer(); check(); dc.send(data); sent += data.byteLength;
+          batch.ui.update('sending · ' + Math.floor(sent / batch.size * 100) + '%', sent / batch.size);
+        }
+        check(); this.control({ t: 'file-end', id: batch.id, index: i });
+      }
+      check(); batch.state = 'receipt'; this.control({ t: 'done', id: batch.id }); batch.ui.update('finishing…', 1);
+      batch.timer = setTimeout(() => { if (this.outgoing === batch) this.fail('receipt timed out. ask the receiver whether it arrived.'); }, 60000);
+    }
+    received(batch) {
+      clearTimeout(batch.timer); reserved -= batch.size; retained += batch.size; this.incoming = null;
+      batch.ui.update('received from ' + this.name, 1); batch.ui.progress.hidden = true; batch.ui.actions.replaceChildren();
+      const links = E.el('div', { class: 'received-files stack-2' }); const urls = [];
+      batch.items.forEach((item, i) => {
+        const blob = batch.files[i], url = URL.createObjectURL(blob); urls.push(url);
+        const link = E.el('a', { class: 'download-file', href: url, download: safeName(item.name), text: 'download ' + item.name }); links.append(link);
+        if (item.kind === 'text') blob.text().then(value => {
+          if (!batch.ui.row.isConnected) return;
+          const pre = E.el('pre', { class: 'out out--scroll', text: value }); links.append(pre, button('copy text', function () { E.copy(value, this); }));
+        }).catch(() => error('could not read the received text'));
+      });
+      batch.ui.actions.before(links);
+      batch.ui.actions.append(button('remove', () => { urls.forEach(url => URL.revokeObjectURL(url)); retained -= batch.size; batch.files = []; batch.ui.row.remove(); $('#transfers-section').hidden = !$('#transfers').children.length; }));
+      render();
+    }
+  }
+  function showRoom() {
+    $('#room-panel').hidden = !room;
+    $('#room-button').textContent = room ? 'copy room link' : 'connect another network';
+    if (room) {
+      const link = new URL(location.href); link.hash = 'room=' + room;
+      $('#room-link').value = link.href;
+      const host = $('#room-qr'); host.replaceChildren();
+      // Render the vendored QR matrix with the existing theme-independent QR tokens.
+      const qr = new QRCode(document.createElement('div'), { text: link.href, correctLevel: QRCode.CorrectLevel.M });
+      const matrix = qr._oQRCode, count = matrix.getModuleCount(), canvas = document.createElement('canvas');
+      // CSS supplies the 4px white border so it stays fixed as the QR scales.
+      canvas.width = canvas.height = count * 4;
+      const ctx = canvas.getContext('2d'), style = getComputedStyle(document.documentElement);
+      ctx.fillStyle = style.getPropertyValue('--color-qr-paper').trim(); ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = style.getPropertyValue('--color-qr-ink').trim();
+      for (let y = 0; y < count; y++) for (let x = 0; x < count; x++) if (matrix.isDark(y, x)) ctx.fillRect(x * 4, y * 4, 4, 4);
+      host.append(canvas);
+    }
+    render();
+  }
+  function readRoom() {
+    const hash = new URLSearchParams(location.hash.slice(1)); room = hash.get('room') || '';
+    if (room && !/^[a-f0-9]{32}$/.test(room)) { error('this room link is incomplete. ask for a new link.'); $('#status').textContent = 'invalid room'; return false; }
+    return true;
+  }
+  $('#room-button').addEventListener('click', async () => {
+    if (room) { E.copy($('#room-link').value, $('#room-button')); return; }
+    if (creatingRoom || !online || activity()) return;
+    const current = session, version = epoch;
+    creatingRoom = true; $('#room-button').dataset.state = 'loading'; render();
+    try {
+      const result = await api('room', {}, current);
+      if (session !== current || epoch !== version || stopped) return;
+      if (activity()) throw new Error('finish the current transfer before opening a room.');
+      if (!/^[a-f0-9]{32}$/.test(result.room || '')) throw new Error('could not create a room link. please try again.');
+      room = result.room; history.replaceState(null, '', '#room=' + room); showRoom(); discover();
+    } catch (e) { if (epoch === version) error(e.message); }
+    finally { creatingRoom = false; delete $('#room-button').dataset.state; render(); }
+  });
+  $('#copy-room').addEventListener('click', () => E.copy($('#room-link').value, $('#copy-room')));
+  $('#leave-room').addEventListener('click', () => { if (activity()) return; room = ''; history.replaceState(null, '', location.pathname + location.search); showRoom(); discover(); });
+  $('#retry').addEventListener('click', () => { if (!activity()) discover(); });
+  $('#files').addEventListener('change', () => { chosen?.files([...$('#files').files]); $('#files').value = ''; });
+  $('#text-cancel').addEventListener('click', () => $('#text-dialog').close());
+  $('#send-text').addEventListener('click', () => {
+    const value = $('#text').value; if (!value.trim()) { $('#text-error').textContent = 'write some text first.'; return; }
+    const blob = new Blob([value], { type: 'text/plain;charset=utf-8' });
+    if (blob.size > 8 * 1024 * 1024) { $('#text-error').textContent = 'text is limited to 8 MB.'; return; }
+    try { textPeer.enqueue([{ blob, name: 'shared-text.txt', size: blob.size, kind: 'text' }]); $('#text-dialog').close(); $('#text').value = ''; }
+    catch (e) { $('#text-error').textContent = e.message; }
+  });
+  window.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
+  window.addEventListener('drop', e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
+  window.addEventListener('beforeunload', e => { if (activity()) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('pagehide', () => { stopped = true; stream?.abort(); if (session) fetch('/api/share/leave?id=' + session.id, { method: 'POST', headers: { Authorization: 'Bearer ' + session.token }, keepalive: true }).catch(() => {}); clearPeers('page closed'); });
+  window.addEventListener('pageshow', e => { if (e.persisted) { stopped = false; discover(); } });
+  /* Coming back to the tab. A phone suspends background tabs, and the event
+     stream can die without either end noticing; the server pings every 15
+     seconds, so silence for longer than that means it is dead. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || stopped) return;
+    if (online && Date.now() - lastBeat > 20000) stream?.abort();
+    hurry();
+  });
+  window.addEventListener('online', hurry);
+  window.addEventListener('hashchange', () => { if (readRoom()) { showRoom(); discover(); } });
+  if (!window.isSecureContext || !window.RTCPeerConnection || !window.crypto?.subtle) { error('open share over https in a browser that supports WebRTC.'); $('#status').textContent = 'unavailable'; }
+  else if (location.protocol === 'file:') { error('open share on the website to find other devices.'); $('#status').textContent = 'offline'; }
+  else if (readRoom()) { showRoom(); discover(); }
+})();
+
+</script>
+</body>
+</html>

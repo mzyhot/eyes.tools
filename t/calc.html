@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>calc · 𓁹𓁹</title>
+<meta name="description" content="calculate expressions and convert length, weight, temperature, data, and other units.">
+<meta name="theme-color" content="#070707">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+</head>
+<body data-tool="calc">
+<div class="wrap">
+
+  <header class="top">
+    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+    <p class="crumb" data-crumb></p>
+    <span class="top__spacer"></span>
+    <button class="tbtn" type="button" data-theme-toggle>theme</button>
+  </header>
+
+  <div class="head">
+    <h1 class="h1" data-title></h1>
+    <p class="lede" data-lede></p>
+  </div>
+
+  <main class="stack-6">
+    <div class="seg" role="radiogroup" aria-label="calculator mode">
+      <label><input type="radio" name="mode" value="calculate" aria-controls="calc-panel" checked><span>calculate</span></label>
+      <label><input type="radio" name="mode" value="units" aria-controls="units-panel"><span>units</span></label>
+    </div>
+    <section class="stack-6" id="calc-panel" aria-label="calculate">
+      <div>
+        <label class="lbl" for="expression">expression</label>
+        <input class="field" id="expression" type="text" autocomplete="off" spellcheck="false" placeholder="(125 + 75) * 1.08" aria-describedby="syntax">
+        <p class="hint" id="syntax">+ − × ÷ ^ · parentheses · sqrt, abs, round · pi, e<br>percent means divide by 100: 200 × 10% = 20</p>
+        <p class="err" id="error" role="alert"></p>
+      </div>
+      <div>
+        <div class="out-head"><span class="lbl" id="result-label">result</span></div>
+        <div class="out" id="result" role="status" aria-labelledby="result-label" aria-live="polite"></div>
+      </div>
+      <div class="row">
+        <button class="btn" type="button" id="copy" disabled>copy result</button>
+        <button class="btn -ghost" type="button" id="convert-result" disabled>convert result</button>
+        <button class="btn -ghost" type="button" id="clear">clear</button>
+      </div>
+    </section>
+    <section class="stack-6" id="units-panel" aria-label="convert units" hidden>
+      <div class="grid2">
+        <div><label class="lbl" for="quantity">quantity</label><select class="field" id="quantity" aria-describedby="note"></select></div>
+        <div><label class="lbl" for="value">value</label><input class="field" id="value" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="grid2">
+        <div><label class="lbl" for="from">from</label><select class="field" id="from"></select></div>
+        <div><label class="lbl" for="to">to</label><select class="field" id="to"></select></div>
+      </div>
+      <p class="hint" id="note"></p>
+      <p class="err" id="unit-error" role="alert"></p>
+      <div>
+        <div class="out-head"><span class="lbl" id="unit-result-label">result</span></div>
+        <div class="out" id="unit-result" role="status" aria-labelledby="unit-result-label" aria-live="polite"></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="unit-copy" type="button">copy value</button>
+        <button class="btn -ghost" id="swap" type="button">swap units</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <a href="../index.html">← all tools</a>
+    <span class="row__spacer"></span>
+    <span>runs in your browser · nothing is uploaded</span>
+  </footer>
+
+</div>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+(function () {
+  "use strict";
+  /* Arithmetic parser: user input is never executed as JavaScript. */
+  function calculate(text) {
+    if (text.length > 2000) throw new Error("keep expressions under 2,000 characters");
+    var source = text.replace(/×/g, "*").replace(/[÷]/g, "/").replace(/−/g, "-").trim();
+    if (!source) return null;
+    var position = 0, tokens = [], token;
+    var matcher = /\s*(?:(\d+(?:\.\d*)?|\.\d+)(?:[eE]([+-]?\d+))?|([a-zA-Z]+)|([+\-*/^()%]))/y;
+    while (position < source.length) {
+      matcher.lastIndex = position;
+      token = matcher.exec(source);
+      if (!token) throw new Error("unexpected character at position " + (position + 1));
+      if (token[1]) tokens.push({ kind: "number", value: Number(token[1] + (token[2] ? "e" + token[2] : "")) });
+      else if (token[3]) tokens.push({ kind: "name", value: token[3].toLowerCase() });
+      else tokens.push({ kind: token[4] });
+      position = matcher.lastIndex;
+    }
+    var at = 0, depth = 0;
+    function peek(kind) { return tokens[at] && tokens[at].kind === kind; }
+    function take(kind) { if (peek(kind)) { at++; return true; } return false; }
+    function finite(value) {
+      if (!Number.isFinite(value)) throw new Error("result is outside the supported number range");
+      return value;
+    }
+    function expression() {
+      var value = product();
+      while (peek("+") || peek("-")) {
+        var operator = tokens[at++].kind, right = product();
+        value = finite(operator === "+" ? value + right : value - right);
+      }
+      return value;
+    }
+    function product() {
+      var value = unary();
+      while (peek("*") || peek("/")) {
+        var operator = tokens[at++].kind, right = unary();
+        if (operator === "/" && right === 0) throw new Error("cannot divide by zero");
+        value = finite(operator === "*" ? value * right : value / right);
+      }
+      return value;
+    }
+    function unary() {
+      if (++depth > 100) throw new Error("expression is nested too deeply");
+      var value;
+      if (take("+")) value = unary();
+      else if (take("-")) value = -unary();
+      else value = power();
+      depth--;
+      return value;
+    }
+    function power() {
+      var value = primary();
+      while (take("%")) value /= 100;
+      if (take("^")) value = finite(Math.pow(value, unary()));
+      return value;
+    }
+    function primary() {
+      var current = tokens[at];
+      if (!current) throw new Error("finish the expression");
+      if (take("number")) return finite(current.value);
+      if (take("(")) {
+        var value = expression();
+        if (!take(")")) throw new Error("missing closing parenthesis");
+        return value;
+      }
+      if (take("name")) {
+        if (current.value === "pi") return Math.PI;
+        if (current.value === "e") return Math.E;
+        var functions = { sqrt: Math.sqrt, abs: Math.abs, round: Math.round, floor: Math.floor, ceil: Math.ceil };
+        if (!Object.prototype.hasOwnProperty.call(functions, current.value)) throw new Error("unknown name: " + current.value);
+        if (!take("(")) throw new Error("use parentheses after " + current.value);
+        var argument = expression();
+        if (!take(")")) throw new Error("missing closing parenthesis");
+        if (current.value === "sqrt" && argument < 0) throw new Error("square root needs a nonnegative number");
+        return finite(functions[current.value](argument));
+      }
+      throw new Error("expected a number or opening parenthesis");
+    }
+    var value = expression();
+    if (at !== tokens.length) throw new Error("add an operator between values, or check parentheses");
+    return Object.is(value, -0) ? 0 : value;
+  }
+  /* Units use a common base; temperature additionally has an offset. */
+  var quantities = [
+    { id: "length", name: "length", units: [["m", "meters", 1], ["cm", "centimeters", 0.01], ["mm", "millimeters", 0.001], ["km", "kilometers", 1000], ["in", "inches", 0.0254], ["ft", "feet", 0.3048], ["yd", "yards", 0.9144], ["mi", "miles", 1609.344]] },
+    { id: "mass", name: "weight", units: [["kg", "kilograms", 1], ["g", "grams", 0.001], ["mg", "milligrams", 0.000001], ["lb", "pounds", 0.45359237], ["oz", "ounces", 0.028349523125], ["t", "metric tonnes", 1000]] },
+    { id: "temperature", name: "temperature", units: [["°C", "celsius", 1, 273.15], ["°F", "fahrenheit", 5/9, 459.67 * 5/9], ["K", "kelvin", 1, 0]] },
+    { id: "area", name: "area", units: [["m²", "square meters", 1], ["km²", "square kilometers", 1000000], ["ft²", "square feet", 0.09290304], ["ha", "hectares", 10000], ["ac", "acres", 4046.8564224]] },
+    { id: "volume", name: "volume", note: "gallons, quarts, pints, cups, and fluid ounces are US liquid units.", units: [["L", "liters", 1], ["mL", "milliliters", 0.001], ["m³", "cubic meters", 1000], ["gal", "gallons", 3.785411784], ["qt", "quarts", 0.946352946], ["pt", "pints", 0.473176473], ["cup", "cups", 0.2365882365], ["fl oz", "fluid ounces", 0.0295735295625]] },
+    { id: "speed", name: "speed", units: [["km/h", "kilometers per hour", 1/3.6], ["mph", "miles per hour", 0.44704], ["m/s", "meters per second", 1], ["kn", "knots", 1852/3600]] },
+    { id: "duration", name: "duration", units: [["s", "seconds", 1], ["ms", "milliseconds", 0.001], ["min", "minutes", 60], ["h", "hours", 3600], ["d", "days", 86400], ["wk", "weeks", 604800]] },
+    { id: "data", name: "data", note: "kB, MB, and GB use powers of 1,000. KiB, MiB, and GiB use powers of 1,024.", units: [["B", "bytes", 1], ["bit", "bits", 0.125], ["kB", "kilobytes", 1000], ["MB", "megabytes", 1000000], ["GB", "gigabytes", 1000000000], ["TB", "terabytes", 1000000000000], ["KiB", "kibibytes", 1024], ["MiB", "mebibytes", 1048576], ["GiB", "gibibytes", 1073741824], ["TiB", "tebibytes", 1099511627776]] }
+  ];
+  function convert(value, from, to, temperature) {
+    if (!Number.isFinite(value)) throw new Error("enter a finite number");
+    var base = value * from[2] + (from[3] || 0);
+    if (temperature && base < -1e-10) throw new Error("temperature cannot be below absolute zero");
+    if (temperature && Math.abs(base) < 1e-10) base = 0;
+    var result = (base - (to[3] || 0)) / to[2];
+    if (!Number.isFinite(result)) throw new Error("result is outside the supported number range");
+    return Object.is(result, -0) ? 0 : result;
+  }
+  /* Calculator UI */
+  var input = E.qs("#expression"), output = E.qs("#result"), error = E.qs("#error"), copy = E.qs("#copy");
+  var convertResult = E.qs("#convert-result"), calculation = null;
+  function runCalculation() {
+    output.textContent = "";
+    error.textContent = "";
+    input.removeAttribute("aria-invalid");
+    copy.disabled = true; convertResult.disabled = true; calculation = null;
+    try {
+      var value = calculate(input.value);
+      if (value !== null) {
+        calculation = value;
+        output.textContent = String(Number(value.toPrecision(15)));
+        copy.disabled = false; convertResult.disabled = false;
+      }
+    } catch (e) {
+      error.textContent = e.message;
+      input.setAttribute("aria-invalid", "true");
+    }
+  }
+  var update = E.debounce(runCalculation, 120);
+  E.on(input, "input", function () { copy.disabled = true; convertResult.disabled = true; calculation = null; output.textContent = ""; update(); });
+  E.on(input, "keydown", function (e) { if (e.key === "Enter") runCalculation(); });
+  E.on(copy, "click", function () { E.copy(output.textContent, this); });
+  E.on(E.qs("#clear"), "click", function () { input.value = ""; runCalculation(); input.focus(); });
+
+  /* Unit conversion UI */
+  var quantity = E.qs("#quantity"), unitInput = E.qs("#value"), from = E.qs("#from"), to = E.qs("#to");
+  var unitOutput = E.qs("#unit-result"), unitError = E.qs("#unit-error"), unitCopy = E.qs("#unit-copy"), resultText = "";
+  var selected = quantities[0], selections = {};
+  quantities.forEach(function (group) { quantity.appendChild(E.el("option", { value: group.id, text: group.name })); });
+  function choose() {
+    selected = quantities.find(function (group) { return group.id === quantity.value; });
+    from.textContent = ""; to.textContent = "";
+    selected.units.forEach(function (unit, i) {
+      [from, to].forEach(function (select) { select.appendChild(E.el("option", { value: String(i), text: unit[1] + " (" + unit[0] + ")" })); });
+    });
+    var saved = selections[selected.id];
+    from.value = saved ? saved[0] : "0";
+    to.value = saved ? saved[1] : selected.id === "length" ? "5" : "1";
+    E.qs("#note").textContent = selected.note || "";
+    E.qs("#note").hidden = !selected.note;
+    runConversion();
+  }
+  function runConversion() {
+    unitError.textContent = ""; unitOutput.textContent = ""; resultText = ""; unitCopy.disabled = true;
+    unitInput.removeAttribute("aria-invalid");
+    selections[selected.id] = [from.value, to.value];
+    var raw = unitInput.value.trim();
+    if (!raw) return;
+    try {
+      if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(raw)) throw new Error("enter a number, without unit names or separators");
+      var result = convert(Number(raw), selected.units[Number(from.value)], selected.units[Number(to.value)], selected.id === "temperature");
+      resultText = String(Number(result.toPrecision(12)));
+      unitOutput.textContent = resultText + " " + selected.units[Number(to.value)][0];
+      unitCopy.disabled = false;
+    } catch (e) { unitError.textContent = e.message; unitInput.setAttribute("aria-invalid", "true"); }
+  }
+  E.on(quantity, "change", choose);
+  E.on(unitInput, "input", runConversion);
+  E.on(from, "change", runConversion); E.on(to, "change", runConversion);
+  E.on(unitCopy, "click", function () { E.copy(resultText, this); });
+  E.on(E.qs("#swap"), "click", function () {
+    var previous = from.value; from.value = to.value; to.value = previous;
+    if (resultText) unitInput.value = resultText;
+    runConversion();
+  });
+
+  /* Switching modes leaves both sets of inputs intact. */
+  var modes = E.qsa('input[name="mode"]');
+  function setMode(mode) {
+    modes.forEach(function (radio) { radio.checked = radio.value === mode; });
+    E.qs("#calc-panel").hidden = mode !== "calculate";
+    E.qs("#units-panel").hidden = mode !== "units";
+  }
+  modes.forEach(function (radio) { E.on(radio, "change", function () { if (radio.checked) setMode(radio.value); }); });
+  E.on(convertResult, "click", function () {
+    if (calculation === null) return;
+    unitInput.value = String(calculation);
+    runConversion();
+    setMode("units");
+    unitInput.focus();
+  });
+  input.value = E.param("t") || "";
+  runCalculation();
+  choose();
+  setMode(E.param("mode") === "units" ? "units" : "calculate");
+})();
+</script>
+</body>
+</html>

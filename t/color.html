@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>color · 𓁹𓁹</title>
+    <meta name="description" content="convert colors and check contrast.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+    <link rel="stylesheet" href="../tokens.css">
+    <link rel="stylesheet" href="../s.css">
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("eyes.theme");
+          if (theme) document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {}
+      }());
+    </script>
+    <style>
+      .swatch {
+        display: grid;
+        place-items: center;
+        min-height: calc(var(--space-16) * 3);
+        padding: var(--space-6);
+        font-size: var(--text-display);
+        font-weight: 500;
+        line-height: var(--lh-tight);
+        letter-spacing: var(--track-tight);
+        border: var(--rule) solid var(--color-rule);
+        background: var(--swatch, var(--color-paper-2));
+      }
+    </style>
+  </head>
+  <body data-tool="color">
+    <div class="wrap">
+      <header class="top">
+        <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+        <p class="crumb" data-crumb></p>
+        <span class="top__spacer"></span>
+        <button class="tbtn" type="button" data-theme-toggle>theme</button>
+      </header>
+
+      <div class="head">
+        <h1 class="h1" data-title></h1>
+        <p class="lede" data-lede></p>
+      </div>
+
+      <main class="stack-6">
+        <section class="grid2">
+          <div>
+            <label class="lbl" for="fg">foreground</label>
+            <input class="field" id="fg" value="#111111" autocomplete="off" spellcheck="false">
+          </div>
+          <div>
+            <label class="lbl" for="bg">background</label>
+            <input class="field" id="bg" value="#ffffff" autocomplete="off" spellcheck="false">
+          </div>
+        </section>
+        <p class="err" id="err" role="alert" aria-live="polite"></p>
+        <div class="swatch" id="swatch" role="img" aria-label="color sample"></div>
+        <dl class="kv" id="readout" aria-live="polite">
+          <dt>foreground hex</dt><dd id="hex"></dd>
+          <dt>foreground rgb</dt><dd id="rgb"></dd>
+          <dt>foreground hsl</dt><dd id="hsl"></dd>
+          <dt>contrast</dt><dd id="ratio"></dd>
+          <dt>wcag</dt><dd id="wcag"></dd>
+        </dl>
+        <div class="row">
+          <button class="btn -ghost" id="copy-hex" type="button" disabled>copy hex</button>
+          <button class="btn -ghost" id="copy-rgb" type="button" disabled>copy rgb</button>
+          <button class="btn -ghost" id="copy-hsl" type="button" disabled>copy hsl</button>
+          <button class="btn -ghost" id="swap" type="button">swap</button>
+          <button class="tbtn" id="copy-report" type="button" disabled>copy contrast</button>
+        </div>
+      </main>
+
+      <footer class="foot"><a href="../index.html">← all tools</a></footer>
+    </div>
+
+    <script src="../tools.js"></script>
+    <script src="../s.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        var f = E.qs("#fg");
+        var b = E.qs("#bg");
+        var er = E.qs("#err");
+        var swatch = E.qs("#swatch");
+        var readout = E.qs("#readout");
+        var copyRgb = E.qs("#copy-rgb");
+        var copyHsl = E.qs("#copy-hsl");
+        var copyHex = E.qs("#copy-hex"), copyReport = E.qs("#copy-report");
+
+        function parse(value) {
+          value = String(value).trim().toLowerCase();
+          var match = value.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+          if (!match) {
+            var functional = value.match(/^(rgb|hsl)\(([^()]+)\)$/);
+            if (!functional) return null;
+            var parts = functional[2].trim().split(/\s*,\s*|\s+/);
+            if (parts.length !== 3 || parts.some(function (part) { return !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:%|deg)?$/.test(part); })) return null;
+            var values = parts.map(parseFloat);
+            if (functional[1] === "rgb") {
+              if (parts.some(function (part) { return /deg$/.test(part); })) return null;
+              if (values.some(function (n, index) { return n < 0 || n > (/%$/.test(parts[index]) ? 100 : 255); })) return null;
+              return values.map(function (n, index) { return Math.round(/%$/.test(parts[index]) ? n * 255 / 100 : n); });
+            }
+            if (/%$/.test(parts[0]) || !/%$/.test(parts[1]) || !/%$/.test(parts[2]) || values[1] < 0 || values[1] > 100 || values[2] < 0 || values[2] > 100) return null;
+            var hue = ((values[0] % 360) + 360) % 360 / 30, saturation = values[1] / 100, lightness = values[2] / 100;
+            var amplitude = saturation * Math.min(lightness, 1 - lightness);
+            return [0, 8, 4].map(function (offset) { var k = (offset + hue) % 12; return Math.round((lightness - amplitude * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255); });
+          }
+          var hex = match[1];
+          if (hex.length === 3) hex = hex.replace(/./g, function (c) { return c + c; });
+          return [
+            parseInt(hex.slice(0, 2), 16),
+            parseInt(hex.slice(2, 4), 16),
+            parseInt(hex.slice(4, 6), 16)
+          ];
+        }
+
+        function cssHex(color) {
+          return "#" + color.map(function (value) {
+            return value.toString(16).padStart(2, "0");
+          }).join("");
+        }
+
+        function luminance(color) {
+          return color.map(function (value) {
+            value /= 255;
+            return value <= 0.04045
+              ? value / 12.92
+              : Math.pow((value + 0.055) / 1.055, 2.4);
+          }).reduce(function (sum, value, index) {
+            return sum + value * [0.2126, 0.7152, 0.0722][index];
+          }, 0);
+        }
+
+        function hsl(color) {
+          var r = color[0] / 255;
+          var g = color[1] / 255;
+          var blue = color[2] / 255;
+          var max = Math.max(r, g, blue);
+          var min = Math.min(r, g, blue);
+          var h = 0;
+          var saturation = 0;
+          var lightness = (max + min) / 2;
+          var delta = max - min;
+
+          if (delta) {
+            saturation = delta / (1 - Math.abs(2 * lightness - 1));
+            if (max === r) h = 60 * (((g - blue) / delta) % 6);
+            else if (max === g) h = 60 * ((blue - r) / delta + 2);
+            else h = 60 * ((r - g) / delta + 4);
+          }
+          return "hsl(" + Math.round((h + 360) % 360) + " " +
+            Math.round(saturation * 100) + "% " + Math.round(lightness * 100) + "%)";
+        }
+
+        function clearReadout() {
+          ["#hex", "#rgb", "#hsl", "#ratio", "#wcag"].forEach(function (selector) {
+            E.qs(selector).textContent = "";
+          });
+          swatch.removeAttribute("style");
+          swatch.textContent = "";
+          copyRgb.disabled = true;
+          copyHsl.disabled = true;
+          copyHex.disabled = true; copyReport.disabled = true;
+        }
+
+        function run() {
+          var foreground = parse(f.value);
+          var background = parse(b.value);
+          er.textContent = "";
+          clearReadout();
+
+          if (!foreground || !background) {
+            if (f.value.trim() || b.value.trim()) er.textContent = "use hex, rgb(255 0 0), or hsl(0 100% 50%)";
+            return;
+          }
+
+          var ratio = (Math.max(luminance(foreground), luminance(background)) + 0.05) /
+            (Math.min(luminance(foreground), luminance(background)) + 0.05);
+          E.qs("#hex").textContent = cssHex(foreground);
+          E.qs("#rgb").textContent = "rgb(" + foreground.join(" ") + ")";
+          E.qs("#hsl").textContent = hsl(foreground);
+          E.qs("#ratio").textContent = ratio.toFixed(2) + ":1";
+          E.qs("#wcag").textContent = ratio >= 7
+            ? "AAA text"
+            : ratio >= 4.5
+              ? "AA text"
+              : ratio >= 3
+                ? "AA large text only"
+                : "fail";
+          swatch.setAttribute(
+            "style",
+            "--swatch:" + cssHex(background) + ";color:" + cssHex(foreground)
+          );
+          swatch.textContent = "Aa";
+          copyRgb.disabled = false;
+          copyHsl.disabled = false;
+          copyHex.disabled = false; copyReport.disabled = false;
+        }
+
+        E.on(f, "input", run);
+        E.on(b, "input", run);
+        E.on(copyRgb, "click", function () { E.copy(E.qs("#rgb").textContent, this); });
+        E.on(copyHsl, "click", function () { E.copy(E.qs("#hsl").textContent, this); });
+        E.on(copyHex, "click", function () { E.copy(E.qs("#hex").textContent, this); });
+        E.on(copyReport, "click", function () { E.copy(cssHex(parse(f.value)) + " on " + cssHex(parse(b.value)) + " · " + E.qs("#ratio").textContent + " · " + E.qs("#wcag").textContent, this); });
+        E.on(E.qs("#swap"), "click", function () {
+          var value = f.value;
+          f.value = b.value;
+          b.value = value;
+          run();
+        });
+        var query = E.param("t"); if (query !== null) f.value = query;
+        var backgroundQuery = E.param("bg"); if (backgroundQuery !== null) b.value = backgroundQuery;
+        run();
+      }());
+    </script>
+  </body>
+</html>

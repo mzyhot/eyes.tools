@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>spectrogram · 𓁹𓁹</title>
+<meta name="description" content="draw a spectrogram from browser-supported audio files.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<style>#canvas{display:block;width:100%;height:auto;background:var(--color-paper-2)}</style>
+</head>
+<body data-tool="spectrogram">
+<div class="wrap">
+  <header class="top"><a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" type="button" data-theme-toggle>theme</button></header>
+  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
+  <main class="stack-6">
+    <section><label class="lbl" for="file">audio file</label><input class="field" id="file" type="file" accept="audio/*,.wav,.wave,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.webm"><p class="hint">typically wav, mp3, m4a/aac, flac, ogg/opus/vorbis and webm · codec support depends on your browser</p><p class="err" id="err" role="alert"></p></section>
+    <section><figure class="figure"><canvas id="canvas" width="960" height="480" role="img" aria-label="audio spectrogram"></canvas></figure><div class="row mt-2"><button class="btn" id="dl" type="button" disabled>download png</button><span class="hint" id="meta" aria-live="polite"></span></div></section>
+  </main>
+  <footer class="foot"><a href="../index.html">← all tools</a></footer>
+</div>
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+/* Spectrogram: decode an audio file locally, run a short-time Fourier
+   transform over it, and draw magnitude as brightness — time left to right,
+   frequency bottom to top.
+
+   Nothing leaves the browser. The file is read with the File API and decoded by
+   the browser's own codecs through Web Audio.
+
+   The work is heavy enough that how it is written decides whether the tool is
+   usable, so three things are deliberate:
+
+     · The transform is iterative and in place, and both the bit-reversal
+       permutation and the twiddle factors depend only on N — they are built
+       once at load and reused by every one of the ~960 × channels transforms a
+       render performs, instead of calling Math.cos and Math.sin inside the
+       innermost loop.
+     · A column's frequency bands map to canvas rows the same way for every
+       column, so that mapping is computed once per render rather than per pixel.
+     · The picture is assembled in one ImageData buffer and handed to the canvas
+       in a single putImageData, rather than as ~460,000 one-pixel fillRect
+       calls each preceded by a globalAlpha and fillStyle change. */
+(function () {
+  "use strict";
+  var c = E.qs("#canvas"), ctx = c.getContext("2d"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl"), activeContext = null, filename = "spectrogram", loadSeq = 0, N = 1024, MAX_FILE = 150 * 1024 * 1024;
+  var HALF = N / 2;
+
+  /* ── precomputed transform tables ─────────────────────────────────────
+     REV[i] is i with its log2(N) bits reversed, the permutation the in-place
+     transform starts from. COS/SIN hold one turn of the unit circle sampled N
+     ways; a stage of length `len` reads them with a stride of N / len, which is
+     the same angle the per-stage formula would have computed.               */
+
+  var REV = new Uint16Array(N), COS = new Float64Array(HALF), SIN = new Float64Array(HALF);
+  (function tables() {
+    var bits = Math.round(Math.log(N) / Math.LN2), i, j, b;
+    for (i = 0; i < N; i++) {
+      j = 0;
+      for (b = 0; b < bits; b++) if (i & (1 << b)) j |= 1 << (bits - 1 - b);
+      REV[i] = j;
+    }
+    for (i = 0; i < HALF; i++) {
+      COS[i] = Math.cos(-2 * Math.PI * i / N);
+      SIN[i] = Math.sin(-2 * Math.PI * i / N);
+    }
+  })();
+
+  /* Hann window, also fixed for a given N. */
+  var WINDOW = new Float64Array(N);
+  (function () {
+    for (var i = 0; i < N; i++) WINDOW[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1));
+  })();
+
+  /**
+   * In-place radix-2 FFT of a complex signal of exactly N samples.
+   * @param {Float64Array} re Real parts; replaced by the real spectrum.
+   * @param {Float64Array} im Imaginary parts; replaced by the imaginary spectrum.
+   */
+  function fft(re, im) {
+    var i, j, t, len, half, stride, p, k, q, u, angle, cs, sn, tr, ti;
+    for (i = 0; i < N; i++) {
+      j = REV[i];
+      if (i < j) {
+        t = re[i]; re[i] = re[j]; re[j] = t;
+        t = im[i]; im[i] = im[j]; im[j] = t;
+      }
+    }
+    for (len = 2; len <= N; len <<= 1) {
+      half = len >> 1;
+      stride = N / len;
+      for (p = 0; p < N; p += len) {
+        for (k = 0, angle = 0; k < half; k++, angle += stride) {
+          cs = COS[angle]; sn = SIN[angle];
+          u = p + k; q = u + half;
+          tr = re[q] * cs - im[q] * sn;
+          ti = re[q] * sn + im[q] * cs;
+          re[q] = re[u] - tr; im[q] = im[u] - ti;
+          re[u] += tr; im[u] += ti;
+        }
+      }
+    }
+  }
+
+  /**
+   * Resolve a CSS colour token to its opaque RGB channels, by painting it and
+   * reading the pixel back. The design tokens are oklch, which no amount of
+   * string parsing would turn into channel values.
+   * @param {string} color Any colour the browser accepts.
+   * @returns {number[]} [r, g, b], 0–255.
+   */
+  function rgb(color) {
+    var probe = document.createElement("canvas");
+    probe.width = 1; probe.height = 1;
+    var pctx = probe.getContext("2d", { willReadFrequently: true });
+    pctx.fillStyle = color;
+    pctx.fillRect(0, 0, 1, 1);
+    var data = pctx.getImageData(0, 0, 1, 1).data;
+    return [data[0], data[1], data[2]];
+  }
+
+  function closeContext(ac) { if (!ac) return; try { var closing = ac.close(); if (closing && typeof closing.catch === "function") closing.catch(function () {}); } catch (e) {} }
+
+  /* decodeAudioData has both a callback form and a promise form depending on
+     the browser, and some implementations call back *and* resolve. Settle once. */
+  function decode(ac, buffer) { return new Promise(function (resolve, reject) { var settled = false; function ok(value) { if (!settled) { settled = true; resolve(value); } } function bad(value) { if (!settled) { settled = true; reject(value); } } try { var pending = ac.decodeAudioData(buffer, ok, bad); if (pending && typeof pending.then === "function") pending.then(ok, bad); } catch (e) { bad(e); } }); }
+
+  function clear() {
+    error.textContent = "";
+    meta.textContent = "";
+    download.disabled = true;
+    if (!ctx) return;
+    var paper = getComputedStyle(document.documentElement).getPropertyValue("--color-paper").trim();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = paper;
+    ctx.fillRect(0, 0, c.width, c.height);
+  }
+
+  /**
+   * Draw the whole spectrogram for a decoded buffer.
+   * @param {AudioBuffer} audio Decoded audio.
+   */
+  function draw(audio) {
+    if (!ctx || !audio || !audio.numberOfChannels || !audio.length || !audio.sampleRate) return;
+    var channelCount = audio.numberOfChannels, tracks = [], length = audio.length, rate = audio.sampleRate;
+    for (var ch = 0; ch < channelCount; ch++) tracks.push(audio.getChannelData(ch));
+
+    var width = c.width, height = c.height;
+    var style = getComputedStyle(document.documentElement);
+    var paper = rgb(style.getPropertyValue("--color-paper").trim());
+    var ink = rgb(style.getPropertyValue("--color-ink").trim());
+    var re = new Float64Array(N), im = new Float64Array(N), power = new Float64Array(HALF);
+
+    /* Which frequency bins each canvas row covers. Identical for every column,
+       so it is resolved once instead of 960 times. */
+    var bandLow = new Uint16Array(height), bandHigh = new Uint16Array(height);
+    for (var y = 0; y < height; y++) {
+      bandLow[y] = Math.floor(y * HALF / height);
+      bandHigh[y] = Math.min(HALF, Math.ceil((y + 1) * HALF / height));
+    }
+
+    /* Start at paper, then write only the pixels that carry signal. */
+    var image = ctx.createImageData(width, height), px = image.data;
+    for (var at = 0; at < px.length; at += 4) {
+      px[at] = paper[0]; px[at + 1] = paper[1]; px[at + 2] = paper[2]; px[at + 3] = 255;
+    }
+
+    var perChannel = 1 / channelCount;
+    var scale = 1 / (N / 4);
+    var lastFrame = Math.max(0, length - N), span = Math.max(1, width - 1);
+
+    for (var x = 0; x < width; x++) {
+      var frame = Math.round(x / span * lastFrame);
+      power.fill(0);
+      for (var channel = 0; channel < channelCount; channel++) {
+        var samples = tracks[channel], i;
+        for (i = 0; i < N; i++) re[i] = (samples[frame + i] || 0) * WINDOW[i];
+        im.fill(0);
+        fft(re, im);
+        for (var bin = 0; bin < HALF; bin++) power[bin] += (re[bin] * re[bin] + im[bin] * im[bin]) * perChannel;
+      }
+      for (y = 0; y < height; y++) {
+        var high = bandHigh[y], peak = 0;
+        for (bin = bandLow[y]; bin < high; bin++) if (power[bin] > peak) peak = power[bin];
+        var magnitude = Math.sqrt(peak) * scale;
+        var alpha = (20 * Math.log10(magnitude + 1e-8) + 80) / 80;
+        if (alpha <= 0.02) continue;
+        if (alpha > 1) alpha = 1;
+        /* Source-over of ink at this alpha onto paper, done arithmetically. */
+        var offset = ((height - 1 - y) * width + x) * 4;
+        px[offset] = paper[0] + (ink[0] - paper[0]) * alpha;
+        px[offset + 1] = paper[1] + (ink[1] - paper[1]) * alpha;
+        px[offset + 2] = paper[2] + (ink[2] - paper[2]) * alpha;
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.putImageData(image, 0, 0);
+
+    meta.textContent = "time → 0–" + (length / rate).toFixed(2) + " s · frequency ↑ 0–" + Math.round(rate / 2).toLocaleString() + " hz · " + channelCount + " channel" + (channelCount === 1 ? "" : "s");
+    c.setAttribute("aria-label", "Spectrogram: time from 0 to " + (length / rate).toFixed(2) + " seconds, left to right. Frequency from 0 to " + Math.round(rate / 2) + " hertz, bottom to top. Brighter pixels indicate stronger frequencies.");
+    download.disabled = false;
+  }
+
+  /* Each load gets a sequence number so a slow decode cannot draw over a file
+     chosen after it, and the audio context is closed either way. */
+  E.on(E.qs("#file"), "change", function () {
+    var file = this.files && this.files[0], seq = ++loadSeq;
+    closeContext(activeContext); activeContext = null; clear();
+    if (!file) return;
+    filename = file.name.replace(/\.[^.]*$/, "") || "audio";
+    if (!file.size) { error.textContent = "that audio file is empty"; return; }
+    if (file.size > MAX_FILE) { error.textContent = "files over 150 mb are not decoded to protect this tab's memory"; return; }
+    var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) { error.textContent = "the web audio api is unavailable in this browser"; return; }
+    var ac;
+    try { ac = new AudioContextClass(); activeContext = ac; } catch (e) { error.textContent = "an audio decoder could not be opened in this browser"; return; }
+    meta.textContent = "reading audio…";
+    file.arrayBuffer().then(function (buffer) { return decode(ac, buffer); }).then(function (audio) { if (seq === loadSeq) draw(audio); }).catch(function () { if (seq === loadSeq) { meta.textContent = ""; error.textContent = "this browser could not decode that audio codec or container"; } }).then(function () { closeContext(ac); if (activeContext === ac) activeContext = null; });
+  });
+  E.on(download, "click", function () {
+    var button = this, name = filename, seq = loadSeq;
+    if (button.disabled) return;
+    button.disabled = true;
+    c.toBlob(function (blob) { if (seq !== loadSeq) return; button.disabled = false; if (!blob) { error.textContent = "the browser could not create a png"; return; } E.download(blob, name + "-spectrogram.png", "image/png"); E.flash(button, "downloaded"); }, "image/png");
+  });
+  E.on(window, "pagehide", function () { loadSeq++; closeContext(activeContext); activeContext = null; });
+  clear();
+})();
+</script>
+</body>
+</html>

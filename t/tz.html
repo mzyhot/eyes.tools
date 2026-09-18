@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>time zones · 𓁹𓁹</title>
+    <meta name="description" content="convert time between zones.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&display=swap">
+    <link rel="stylesheet" href="../tokens.css">
+    <link rel="stylesheet" href="../s.css">
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("eyes.theme");
+          if (theme) document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {}
+      }());
+    </script>
+    <style>
+      #result {
+        font-size: clamp(var(--text-xl), 4vw, var(--text-2xl));
+        line-height: var(--lh-snug);
+        text-wrap: balance;
+        margin-bottom: var(--space-6);
+      }
+    </style>
+  </head>
+  <body data-tool="tz">
+    <div class="wrap">
+      <header class="top">
+        <a class="eyes" href="../index.html" data-eyes>𓁹𓁹</a>
+        <p class="crumb" data-crumb></p>
+        <span class="top__spacer"></span>
+        <button class="tbtn" type="button" data-theme-toggle>theme</button>
+      </header>
+
+      <div class="head">
+        <h1 class="h1" data-title></h1>
+        <p class="lede" data-lede></p>
+      </div>
+
+      <main class="stack-6">
+        <section>
+          <label class="lbl" for="when">date and time</label>
+          <input class="field" id="when" type="datetime-local">
+        </section>
+
+        <section class="grid2">
+          <div>
+            <label class="lbl" for="from">from</label>
+            <input class="field" id="from" list="zones" value="UTC" autocomplete="off">
+          </div>
+          <div>
+            <label class="lbl" for="to">to</label>
+            <input class="field" id="to" list="zones" autocomplete="off">
+          </div>
+        </section>
+
+        <datalist id="zones"></datalist>
+
+        <section id="overlap" hidden>
+          <label class="lbl" for="occurrence">this local time occurs twice</label>
+          <select class="field" id="occurrence"><option value="earlier">first occurrence</option><option value="later">second occurrence</option></select>
+          <p class="hint mt-2">the clock moves back in this zone. choose which instant you mean.</p>
+        </section>
+
+        <div class="row">
+          <button class="btn" id="convert" type="button">convert</button>
+          <button class="btn -ghost" id="swap" type="button">swap</button>
+        </div>
+
+        <p class="err" id="err" role="alert" aria-live="polite"></p>
+
+        <section>
+          <div class="display" id="result" aria-live="polite"></div>
+          <dl class="kv">
+            <dt>source</dt>
+            <dd id="source"></dd>
+            <dt>destination</dt>
+            <dd id="dest"></dd>
+            <dt>instant</dt>
+            <dd id="iso"></dd>
+          </dl>
+          <button class="btn -ghost" id="copy" type="button" disabled>copy</button>
+        </section>
+      </main>
+
+      <footer class="foot"><a href="../index.html">← all tools</a></footer>
+    </div>
+
+    <script src="../tools.js"></script>
+    <script src="../s.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        var when = E.qs("#when");
+        var from = E.qs("#from");
+        var to = E.qs("#to");
+        var result = E.qs("#result");
+        var source = E.qs("#source");
+        var dest = E.qs("#dest");
+        var iso = E.qs("#iso");
+        var copy = E.qs("#copy");
+        var er = E.qs("#err");
+        var report = "";
+        var lastInstant = null, lastSource = "";
+        var occurrence = E.qs("#occurrence"), overlap = E.qs("#overlap");
+
+        function pad(n) {
+          return String(n).padStart(2, "0");
+        }
+
+        function clearOutput() {
+          result.textContent = "";
+          source.textContent = "";
+          dest.textContent = "";
+          iso.textContent = "";
+          report = "";
+          copy.disabled = true;
+        }
+
+        function partsAt(ms, zone) {
+          var parts = new Intl.DateTimeFormat("en-CA", {
+            timeZone: zone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hourCycle: "h23"
+          }).formatToParts(new Date(ms));
+          var out = {};
+          parts.forEach(function (part) {
+            if (part.type !== "literal") out[part.type] = +part.value;
+          });
+          return out;
+        }
+
+        function wallEpoch(year, month, day, hour, minute, second) {
+          var date = new Date(0);
+          date.setUTCFullYear(year, month - 1, day);
+          date.setUTCHours(hour, minute, second || 0, 0);
+          return date.getTime();
+        }
+
+        function epochFor(value, zone, preferred) {
+          var match = value.match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)$/);
+          if (!match) throw new Error("enter a date and time");
+
+          var want = wallEpoch(+match[1], +match[2], +match[3], +match[4], +match[5]);
+          var candidates = [];
+          // Sample offsets on either side of a clock change, then verify the
+          // complete wall time. This handles gaps and half-hour changes too.
+          [-48, -24, 0, 24, 48].forEach(function (hours) {
+            var probe = want + hours * 3600000, parts = partsAt(probe, zone);
+            var offset = wallEpoch(parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second) - probe;
+            var ms = want - offset, check = partsAt(ms, zone);
+            if (check.year === +match[1] && check.month === +match[2] && check.day === +match[3] && check.hour === +match[4] && check.minute === +match[5] && candidates.indexOf(ms) < 0) candidates.push(ms);
+          });
+          candidates.sort(function (a, b) { return a - b; });
+          overlap.hidden = candidates.length < 2;
+          if (!candidates.length) {
+            throw new Error("that local time does not exist in the source zone");
+          }
+          if (candidates.indexOf(preferred) >= 0) occurrence.value = preferred === candidates[0] ? "earlier" : "later";
+          return occurrence.value === "later" ? candidates[candidates.length - 1] : candidates[0];
+        }
+
+        function format(ms, zone) {
+          return new Intl.DateTimeFormat(undefined, {
+            timeZone: zone,
+            dateStyle: "full",
+            timeStyle: "long"
+          }).format(new Date(ms));
+        }
+
+        function valid(zone) {
+          try {
+            new Intl.DateTimeFormat("en", { timeZone: zone });
+            return true;
+          } catch (e) {
+            return false;
+          }
+        }
+
+        function run() {
+          er.textContent = "";
+          clearOutput();
+          overlap.hidden = true;
+
+          if (!valid(from.value) || !valid(to.value)) {
+            er.textContent = "use an IANA time zone such as America/Chicago";
+            return;
+          }
+
+          try {
+            var sourceKey = when.value + "\n" + from.value;
+            var ms = epochFor(when.value, from.value, sourceKey === lastSource ? lastInstant : null);
+            var a = format(ms, from.value);
+            var b = format(ms, to.value);
+            var instant = new Date(ms).toISOString();
+
+            result.textContent = b;
+            source.textContent = a;
+            dest.textContent = b;
+            iso.textContent = instant;
+            report = b + "\n" + instant;
+            lastInstant = ms;
+            lastSource = sourceKey;
+            copy.disabled = false;
+          } catch (error) {
+            er.textContent = error.message || "could not convert that time";
+          }
+        }
+
+        var zones = typeof Intl.supportedValuesOf === "function"
+          ? Intl.supportedValuesOf("timeZone")
+          : [
+              "UTC",
+              "America/Chicago",
+              "America/New_York",
+              "America/Los_Angeles",
+              "Europe/London",
+              "Europe/Paris",
+              "Asia/Tokyo",
+              "Australia/Sydney"
+            ];
+        if (zones.indexOf("UTC") < 0) zones.unshift("UTC");
+        var zoneList = E.qs("#zones");
+        zones.forEach(function (zone) {
+          zoneList.appendChild(E.el("option", { value: zone }));
+        });
+
+        var now = new Date();
+        when.value = now.toISOString().slice(0, 16);
+        to.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+        [when, from, to].forEach(function (input) { E.on(input, "input", E.debounce(run, 160)); });
+        E.on(occurrence, "change", function () { lastSource = ""; run(); });
+        E.on(E.qs("#convert"), "click", run);
+        E.on(E.qs("#swap"), "click", function () {
+          if (!valid(from.value) || !valid(to.value)) { run(); return; }
+          var next, instant;
+          try {
+            instant = when.value + "\n" + from.value === lastSource && lastInstant !== null ? lastInstant : epochFor(when.value, from.value);
+            next = partsAt(instant, to.value);
+          } catch (error) { run(); return; }
+          var value = from.value;
+          from.value = to.value;
+          to.value = value;
+          when.value = String(next.year).padStart(4, "0") + "-" + pad(next.month) + "-" + pad(next.day) + "T" + pad(next.hour) + ":" + pad(next.minute);
+          lastInstant = instant;
+          lastSource = when.value + "\n" + from.value;
+          run();
+        });
+        E.on(copy, "click", function () {
+          E.copy(report, this);
+        });
+        run();
+      }());
+    </script>
+  </body>
+</html>

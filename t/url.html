@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>url · 𓁹𓁹</title>
+    <meta name="description" content="encode, decode, and inspect urls.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+    <link rel="stylesheet" href="../tokens.css">
+    <link rel="stylesheet" href="../s.css">
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("eyes.theme");
+          if (theme) document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {}
+      }());
+    </script>
+  </head>
+  <body data-tool="url">
+    <div class="wrap">
+      <header class="top">
+        <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
+        <p class="crumb" data-crumb></p>
+        <span class="top__spacer"></span>
+        <button class="tbtn" type="button" data-theme-toggle>theme</button>
+      </header>
+
+      <div class="head">
+        <h1 class="h1" data-title></h1>
+        <p class="lede" data-lede></p>
+      </div>
+
+      <main class="stack-6">
+        <section>
+          <label class="lbl" for="in">text or url</label>
+          <textarea class="field" id="in" spellcheck="false"></textarea>
+          <div class="row mt-2">
+            <button class="btn" id="parse" type="button">parse</button>
+            <button class="btn -ghost" id="enc" type="button">encode</button>
+            <button class="btn -ghost" id="dec" type="button">decode</button>
+          </div>
+          <label class="check mt-2"><input type="checkbox" id="form"><span>form encoding (+ for spaces)</span></label>
+          <p class="err" id="err" role="alert" aria-live="polite"></p>
+        </section>
+
+        <section>
+          <div class="out" id="out" aria-live="polite"></div>
+          <button class="btn -ghost mt-2" id="copy" type="button" disabled>copy</button>
+        </section>
+      </main>
+
+      <footer class="foot"><a href="../index.html">← all tools</a></footer>
+    </div>
+
+    <script src="../tools.js"></script>
+    <script src="../s.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        var input = E.qs("#in");
+        var output = E.qs("#out");
+        var error = E.qs("#err");
+        var copy = E.qs("#copy"), form = E.qs("#form"), mode = "parse";
+
+        function clearOutput() {
+          output.textContent = "";
+          copy.disabled = true;
+        }
+
+        function put(value) {
+          output.textContent = value;
+          error.textContent = "";
+          copy.disabled = !value;
+        }
+
+        function run() {
+          clearOutput();
+          error.textContent = "";
+          if (!input.value) return;
+          try {
+            if (mode === "enc") {
+              var encoded = encodeURIComponent(input.value);
+              if (form.checked) encoded = new URLSearchParams([["value", input.value]]).toString().slice(6);
+              put(encoded);
+              return;
+            }
+            if (mode === "dec") {
+              put(decodeURIComponent(form.checked ? input.value.replace(/\+/g, " ") : input.value));
+              return;
+            }
+            var url = new URL(input.value);
+            var params = [];
+            url.searchParams.forEach(function (value, key) {
+              params.push(key + " = " + value);
+            });
+            put([
+              "scheme  " + url.protocol.slice(0, -1),
+              "host    " + url.host,
+              "path    " + url.pathname,
+              "query   " + (url.search || "—"),
+              "hash    " + (url.hash || "—"),
+              "",
+              "parameters",
+              params.join("\n") || "—"
+            ].join("\n"));
+          } catch (e) {
+            error.textContent = mode === "dec" ? "invalid percent encoding" : mode === "enc" ? "text contains an invalid Unicode character" : "enter an absolute url, including https://";
+          }
+        }
+
+        ["parse", "enc", "dec"].forEach(function (id) {
+          var button = E.qs("#" + id);
+          button.setAttribute("aria-pressed", id === mode ? "true" : "false");
+          E.on(button, "click", function () {
+            mode = id;
+            ["parse", "enc", "dec"].forEach(function (other) {
+              var action = E.qs("#" + other);
+              action.classList.toggle("-ghost", other !== mode);
+              action.setAttribute("aria-pressed", other === mode ? "true" : "false");
+            });
+            form.disabled = mode === "parse";
+            run();
+          });
+        });
+
+        form.disabled = true;
+        E.on(input, "input", E.debounce(run, 120));
+        E.on(form, "change", run);
+
+        E.on(E.qs("#copy"), "click", function () {
+          E.copy(output.textContent, this);
+        });
+
+        var query = E.param("t");
+        if (query) {
+          input.value = query;
+          E.qs("#parse").click();
+        }
+      }());
+    </script>
+  </body>
+</html>
