@@ -121,6 +121,12 @@ SITE_TEST_URL=http://127.0.0.1:8880 SHARE_TEST_URL=http://127.0.0.1:8880 npm run
 See [Testing and troubleshooting](https://github.com/mzyhot/eyes.tools/wiki/Testing-and-troubleshooting)
 for what each suite covers and how to diagnose failures.
 
+## Supporting the project
+
+eyes.tools is free, has no ads or analytics, and stays that way. If it saves
+you time, you can support its development with the **Sponsor** button at the
+top of this repository.
+
 ## License
 
 AGPL-3.0 ([LICENSE](LICENSE)) with additional terms in [ADDENDUM](ADDENDUM),
