@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="268" height="58" viewBox="0 0 268 58" role="img" aria-labelledby="title desc">
+  <title id="title">Support monthly with Square</title>
+  <desc id="desc">A rounded dark gray payment badge with the Square logo and the words Support monthly!</desc>
+
+  <defs>
+    <linearGradient id="background" x1="134" y1="2" x2="134" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#222222"/>
+      <stop offset="1" stop-color="#666666"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-30%" width="120%" height="170%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="3" y="3" width="262" height="52" rx="15" fill="url(#background)"/>
+    <rect x="3.75" y="3.75" width="260.5" height="50.5" rx="14.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.20" stroke-width="1.5"/>
+  </g>
+
+  <!-- Exact Square vector mark from the published Simple Icons asset. -->
+  <g transform="translate(15 12) scale(1.4166667)">
+    <path fill="#FFFFFF" d="M4.01 0A4.01 4.01 0 000 4.01v15.98c0 2.21 1.8 4 4.01 4.01h15.98C22.2 24 24 22.2 24 19.99V4A4.01 4.01 0 0019.99 0H4zm1.62 4.36h12.74c.7 0 1.26.57 1.26 1.27v12.74c0 .7-.56 1.27-1.26 1.27H5.63c-.7 0-1.26-.57-1.26-1.27V5.63a1.27 1.27 0 011.26-1.27zm3.83 4.35a.73.73 0 00-.73.73v5.09c0 .4.32.72.72.72h5.1a.73.73 0 00.73-.72V9.44a.73.73 0 00-.73-.73h-5.1Z"/>
+  </g>
+
+  <text x="65" y="35.8" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="19" font-weight="700" letter-spacing="-0.25">Support monthly!</text>
+</svg>
