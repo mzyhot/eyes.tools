@@ -124,8 +124,9 @@ for what each suite covers and how to diagnose failures.
 ## Supporting the project
 
 eyes.tools is free, has no ads or analytics, and stays that way. If it saves
-you time, you can support its development with the **Sponsor** button at the
-top of this repository.
+you time, you can support its development with the button below.
+
+[![Support us!](https://img.shields.io/badge/Support%20us!-3E4348?style=for-the-badge&logo=square&logoColor=white)](https://square.link/u/7ypUtQZJ)
 
 ## License
 
