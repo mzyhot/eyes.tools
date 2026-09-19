@@ -47,7 +47,7 @@
  *   headers only.
  */
 
-import { createReadStream } from "node:fs";
+import { createReadStream, realpathSync } from "node:fs";
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
@@ -290,15 +290,21 @@ function contentType(filePath) {
  * Which encoding to send, given what the client offered.
  *
  * Brotli is preferred where it is offered: it is materially smaller than gzip
- * on this site's text, and every browser that speaks it also caches it.
+ * on this site's text, and every browser that speaks it also caches it. A
+ * coding listed with `q=0` is refused, not offered, so it is never chosen.
  * @param {string|undefined} header The Accept-Encoding request header.
  * @returns {"br"|"gzip"|null}
  */
 function negotiateEncoding(header) {
   if (!header) return null;
-  const offered = header.toLowerCase();
-  if (offered.includes("br")) return "br";
-  if (offered.includes("gzip")) return "gzip";
+  const accepted = new Set();
+  for (const part of header.toLowerCase().split(",")) {
+    const [coding, ...params] = part.split(";").map(value => value.trim());
+    const quality = params.find(param => param.startsWith("q="));
+    if (coding && !(quality && Number(quality.slice(2)) === 0)) accepted.add(coding);
+  }
+  if (accepted.has("br")) return "br";
+  if (accepted.has("gzip")) return "gzip";
   return null;
 }
 
@@ -401,9 +407,9 @@ function sentNotModified(request, response, entry, headers) {
 /**
  * Serve one published file.
  *
- * Small and text-like files are served from the in-memory cache, compressed and
- * revalidated. Large or already-compressed files are streamed straight from
- * disk, still with a validator so repeat requests cost nothing but headers.
+ * Files up to COMPRESS_MAX_BYTES are served from the in-memory cache, and the
+ * text-like ones among them are compressed. Larger files are streamed straight
+ * from disk, still with a validator so repeat requests cost nothing but headers.
  */
 async function serveStatic(request, response, url) {
   const page = PAGES.get(url.pathname);
@@ -428,8 +434,8 @@ async function serveStatic(request, response, url) {
 
   if (!fileStat.isFile()) return notFound(response, request.method);
 
-  /* Streamed path: big files, and anything already compressed. No body is held
-     in memory, and the validator comes from the file's metadata. */
+  /* Streamed path: files too big to hold in memory. No body is kept, and the
+     validator comes from the file's metadata. */
   if (fileStat.size > COMPRESS_MAX_BYTES) {
     const type = contentType(filePath);
     const weak = { etag: 'W/"' + fileStat.size.toString(16) + "-" + Math.floor(fileStat.mtimeMs).toString(16) + '"', modified: fileStat.mtimeMs };
@@ -569,9 +575,24 @@ export function createEyesServer({ shareOptions, lookup = createSubdomainLookup(
   } };
 }
 
+/**
+ * Whether this module is the script Node was asked to run.
+ *
+ * Node resolves symlinks when it loads the entry module, so `import.meta.url`
+ * names the real file while `process.argv[1]` keeps the path as typed. The
+ * self-hosting layout runs the server through a `current` release symlink, so
+ * the two must be compared after resolving both, or the process exits without
+ * ever listening.
+ */
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  try { return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url); }
+  catch { return false; }
+}
+
 /* Run directly — `node dev-server.mjs [port]` — rather than imported by a test
    or by the service wrapper. */
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isEntryPoint()) {
   const port = parsePort(process.argv[2] ?? process.env.PORT);
   const app = createEyesServer();
   app.server.on("error", (error) => {

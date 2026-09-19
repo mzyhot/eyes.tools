@@ -19,6 +19,7 @@
  * `npm run check` fails if the committed files are out of date.
  */
 
+import { realpathSync } from 'node:fs';
 import { readdir, writeFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,7 +51,8 @@ export function vercelConfig(slugs) {
   }, null, 2) + '\n';
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+/* Compared after resolving symlinks, because Node resolves them for the entry module. */
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const slugs = await pageSlugs();
   await writeFile(resolve(root, '_redirects'), pagesRedirects(slugs));
   await writeFile(resolve(root, 'vercel.json'), vercelConfig(slugs));
