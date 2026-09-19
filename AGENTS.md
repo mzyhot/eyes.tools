@@ -5,7 +5,7 @@
 - The site has no build step or frontend framework. Each tool is a standalone
   HTML file in `t/` and uses the shared files at the repository root.
 - `tools.js` is the tool registry. When adding or removing a tool, regenerate
-  `_redirects` and `vercel.json` with `node scripts/static-routes.mjs`.
+  the static-host files with `node scripts/static-routes.mjs`.
 - `dev-server.mjs` is both the local and self-hosted production server.
   `share-server.mjs` provides only discovery and WebRTC signaling; shared file
   contents must never pass through it.
@@ -51,6 +51,8 @@ npm run test:browser
 ### Published surface
 
 - New source, test, deployment, or dotfiles must remain private unless they are
-  deliberately added to the server's publication allow list.
+  deliberately added to the publication allow list in `public-files.mjs`. After
+  adding any top-level file, regenerate `.vercelignore` and `_routes.json` with
+  `node scripts/static-routes.mjs` so static hosts hide it too.
 - Clean tool URLs, legacy redirects, Cloudflare routes, and Vercel rewrites must
   stay consistent. A change that works only on the Node server is incomplete.

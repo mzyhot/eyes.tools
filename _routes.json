@@ -1,5 +1,24 @@
 {
   "version": 1,
-  "include": ["/api/*"],
+  "include": [
+    "/api/*",
+    "/.github/*",
+    "/.gitignore",
+    "/.vercelignore",
+    "/AGENTS.md",
+    "/README.md",
+    "/_dev/*",
+    "/deploy/*",
+    "/dev-server.mjs",
+    "/functions/*",
+    "/package-lock.json",
+    "/package.json",
+    "/public-files.mjs",
+    "/scripts/*",
+    "/share-server.mjs",
+    "/subdomains-core.mjs",
+    "/tests/*",
+    "/vercel.json"
+  ],
   "exclude": []
 }

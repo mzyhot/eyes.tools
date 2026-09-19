@@ -23,14 +23,17 @@ drand-client.min.js  vendored official drand client; verifies beacon signatures
 drand-tools.js   shared PRNG, drand TRNG and Web Crypto randomness helpers
 exif-reader.js   vendored ExifReader browser build for image metadata
 dev-server.mjs   the Node server, for development and self-hosting
+public-files.mjs the root files the site publishes; everything else stays private
 share-server.mjs  ephemeral discovery, private rooms, and WebRTC signaling
 subdomains-core.mjs  validation, streaming limits, and crt.name normalization
 api/subdomains.js  Node/Vercel adapter for the crt.name proxy
 functions/api/subdomains.js  Cloudflare Pages adapter for the same endpoint
-_routes.json     limits Cloudflare Pages Functions to /api/*
+functions/[[path]].js  Cloudflare Pages: answers private paths with the 404 page
 _redirects       Cloudflare Pages: serves each tool at /<slug> (generated)
+_routes.json     Cloudflare Pages: sends private paths to a 404 Function (generated)
 vercel.json      Vercel: serves each tool at /<slug> (generated)
-scripts/        check.mjs (static checks), static-routes.mjs (writes the two files above)
+.vercelignore    Vercel: leaves private files out of the deployment (generated)
+scripts/        check.mjs (static checks), static-routes.mjs (writes the four files above)
 tests/           Node tests and Playwright browser suites
 deploy/          systemd unit, environment example, and self-hosting notes
 _dev/           the contract and the page skeleton — reference material, not shipped code
@@ -58,7 +61,8 @@ during development) plus a reachable peer.
 2. Add one row to `tools.js`. The header, title, lede and `<title>` fill
    themselves from it.
 3. Run `node scripts/static-routes.mjs` so Vercel and Cloudflare Pages serve the
-   page at `/<slug>`. The Node server needs nothing; `npm run check` fails until
+   page at `/<slug>`. Run it too after adding any file at the top level, so the
+   static hosts keep it private. The Node server needs nothing; `npm run check` fails until
    this is done.
 4. Follow `_dev/CONTRACT.md`. It is short and it is the whole design system.
 
@@ -85,9 +89,15 @@ service, proxy requirements, and release checks.
 Static hosts can serve the tools and the subdomain lookup, but not share:
 
 - **Vercel** reads `vercel.json` and `api/subdomains.js`: `npx vercel deploy --prod`.
-- **Cloudflare Pages** reads `_redirects` and `functions/`. Connect the repo with
-  no build command and the project root as the output directory, through Git
-  integration or Wrangler; dashboard Direct Upload does not deploy Functions.
+- **Cloudflare Pages** reads `_redirects`, `_routes.json` and `functions/`. Connect
+  the repo with no build command and the project root as the output directory,
+  through Git integration or Wrangler; dashboard Direct Upload does not deploy
+  Functions.
+
+Both hosts publish only what the Node server does: `.vercelignore` and
+`_routes.json` hide every file `public-files.mjs` does not list. On Vercel the
+subdomain function needs `subdomains-core.mjs`, so that one module is public
+there.
 
 The wiki's [Deployment](https://github.com/mzyhot/eyes.tools/wiki/Deployment) and
 [Sharing](https://github.com/mzyhot/eyes.tools/wiki/Sharing) pages cover visitor
