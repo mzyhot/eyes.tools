@@ -72,6 +72,12 @@ through a trusted local proxy that sets or preserves the real header. If the hea
 is absent or invalid, automatic network discovery stays isolated and room links
 still work. Never expose a trusted proxy or origin port directly to the internet.
 
+Without the flag, a request carrying `CF-Connecting-IP`, `X-Forwarded-For`,
+`X-Real-IP` or `Forwarded` is also isolated, because its socket address is the
+proxy's and would put every visitor in one discovery group. Behind any proxy,
+automatic discovery therefore needs the flag and a proxy that sets
+`CF-Connecting-IP`; room links work either way.
+
 ### Required proxy behavior
 
 - `/api/share/*` stays on the website's origin. Preserve Authorization, cookies,

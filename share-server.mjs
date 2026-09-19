@@ -29,9 +29,10 @@
  *
  *   The address is only trusted as a room when the operator has said this
  *   process sits behind Cloudflare *and* the request arrived from loopback with
- *   a valid `CF-Connecting-IP`. A stripped or forged proxy header must never put
- *   every unrelated visitor into one shared room, so anything ambiguous falls
- *   back to a room of one.
+ *   a valid `CF-Connecting-IP`, or when no proxy header is present at all. A
+ *   stripped, forged or untrusted proxy header must never put every unrelated
+ *   visitor into one shared room, so anything ambiguous falls back to a room
+ *   of one.
  *
  *   Requests must be same-origin. There is no CORS here and no cross-site
  *   discovery: a page on another domain cannot enumerate anyone.
@@ -80,6 +81,10 @@ const MAX_SDP_LENGTH = 60000;
 const MAX_CANDIDATE_LENGTH = 4096;
 
 const LOOPBACK = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+/* Headers a reverse proxy adds to say who the visitor really is. Without trust,
+   any of them means the socket address belongs to the proxy, shared by every
+   visitor, so it must not be used as a network. */
+const PROXY_HEADERS = ['cf-connecting-ip', 'x-forwarded-for', 'x-real-ip', 'forwarded'];
 
 /**
  * Expand a valid IPv6 address to its eight 16-bit groups.
@@ -333,7 +338,9 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
    * The second value is the important one. When the answer is "not known" the
    * caller must put the visitor in a room of one: a missing or stripped proxy
    * header would otherwise collapse every public visitor into a single room
-   * where they could all see each other.
+   * where they could all see each other. Without trust, a request that shows
+   * any sign of having passed through a proxy is treated the same way, since
+   * its socket address is the proxy's.
    */
   function locate(req) {
     const address = req.socket.remoteAddress || '';
@@ -342,7 +349,7 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     const trustedVisitor = trustCloudflare && loopback && typeof forwarded === 'string' && isIP(forwarded);
     return {
       ip: trustedVisitor ? forwarded : address,
-      networkKnown: trustCloudflare ? !!trustedVisitor : !forwarded
+      networkKnown: trustCloudflare ? !!trustedVisitor : !PROXY_HEADERS.some(name => req.headers[name] !== undefined)
     };
   }
 
