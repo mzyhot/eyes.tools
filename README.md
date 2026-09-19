@@ -30,7 +30,7 @@ functions/api/subdomains.js  Cloudflare Pages adapter for the same endpoint
 _routes.json     limits Cloudflare Pages Functions to /api/*
 _redirects       Cloudflare Pages: serves each tool at /<slug> (generated)
 vercel.json      Vercel: serves each tool at /<slug> (generated)
-scripts/         check.mjs (static checks), static-routes.mjs (writes the two files above)
+scripts/        check.mjs (static checks), static-routes.mjs (writes the two files above)
 tests/           Node tests and Playwright browser suites
 deploy/          systemd unit, environment example, and self-hosting notes
 _dev/           the contract and the page skeleton — reference material, not shipped code
@@ -74,11 +74,11 @@ be copied uses Geist Mono. There is a light and a dark theme, and the choice is
 saved in the browser.
 
 Keyboard: `/` focuses the filter on the index, `↑↓` move, `↵` opens, `Esc`
-returns to the index from any tool.
+clears the filter there and returns to the index from any tool.
 
 ## Deploying
 
-Every feature needs the Node server. Run it behind a reverse proxy that
+To get every feature, run the Node server behind a reverse proxy that
 terminates HTTPS; [deploy/README.md](deploy/README.md) covers the systemd
 service, proxy requirements, and release checks.
 

@@ -339,8 +339,9 @@
     });
   }
 
-  /* Apply a stored preference. A null value means "follow the system", which is
-     expressed by removing the attribute so the media queries in tokens.css win. */
+  /* Apply a stored preference. With none stored the attribute is removed, which
+     leaves the dark palette tokens.css defines on :root — the site is dark by
+     default and does not follow the system setting. */
   function applyTheme(value) {
     if (value === "dark" || value === "light") document.documentElement.setAttribute("data-theme", value);
     else document.documentElement.removeAttribute("data-theme");
@@ -349,8 +350,8 @@
       meta.push(E.el("meta", { name: "theme-color" }));
       document.head.appendChild(meta[0]);
     }
-    /* Pages ship two media-scoped theme-color tags. Once the visitor has chosen
-       explicitly, drop the media conditions so the browser stops overriding. */
+    /* Keep the address-bar colour on the page's paper. Any `media` condition is
+       dropped so a browser never picks a colour for a theme that is not shown. */
     meta.forEach(function (m) {
       m.removeAttribute("media");
       m.content = currentTheme() === "dark" ? "#070707" : "#fbfbfb";
@@ -360,7 +361,7 @@
 
   /** Theme preference, persisted in localStorage under `eyes.theme`. */
   E.theme = {
-    /** @returns {"dark"|"light"|null} The stored choice, or null for "follow the system". */
+    /** @returns {"dark"|"light"|null} The stored choice, or null for the default (dark). */
     get: function () { try { return localStorage.getItem(KEY); } catch (e) { return null; } },
     /** @param {"dark"|"light"|null} v Choice to store; falsy clears it. */
     set: function (v) {
