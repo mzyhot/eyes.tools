@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>dir · 𓁹𓁹</title>
 <meta name="description" content="a filterable directory of real, long-lived websites worth knowing.">
-<meta name="theme-color" content="#fbfbfb" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#070707">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -338,7 +337,7 @@
       var ul = E.el("ul", { class: "list" });
       g.sites.forEach(function (s) {
         if (!s.row) {
-          s.row = E.el("a", { class: "item", href: s.url, target: "_blank", rel: "noopener" }, [
+          s.row = E.el("a", { class: "item", href: s.url, target: "_blank", rel: "noopener noreferrer" }, [
             E.el("span", { class: "item__name", text: s.name }),
             E.el("span", { class: "item__desc", text: s.desc }),
             E.el("span", { class: "item__host", text: host(s.url) })
@@ -375,7 +374,7 @@
   function open() {
     var s = flat[cursor];
     if (!s) return;
-    window.open(s.url, "_blank", "noopener");
+    window.open(s.url, "_blank", "noopener,noreferrer");
   }
 
   E.on(q, "input", render);
@@ -423,7 +422,7 @@
     var md = markdown(groups);
     if (!md) { E.flash(this, "nothing to save"); return; }
     E.download(md, "dir.md", "text/markdown;charset=utf-8");
-    E.flash(this, "saved");
+    E.flash(this, "downloaded");
   });
 
   q.value = E.param("q") || "";

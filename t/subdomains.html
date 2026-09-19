@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>subdomains · 𓁹𓁹</title>
 <meta name="description" content="search certificate-transparency subdomains through crt.name.">
+<meta name="theme-color" content="#070707">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,10 +38,10 @@
       <input class="field" id="domain" inputmode="url" autocomplete="url" autocapitalize="none" spellcheck="false" placeholder="example.com">
       <button class="btn mt-2" type="button" id="search">search</button>
       <p class="hint">queries crt.name through this site's api · public certificate-transparency history</p>
-      <p class="err" id="err"></p>
+      <p class="err" id="err" role="alert"></p>
     </section>
 
-    <p class="hint">all sites and subdomains shown in searches are not confirmed, trusted, or affiliated with this site. view them at your own warning, we are not responsible.</p>
+    <p class="hint">names come from public certificate logs. they are not checked, trusted, or affiliated with this site; visit them at your own risk.</p>
 
     <section id="results" hidden>
       <label class="lbl" for="filter">filter results</label>
@@ -185,7 +186,9 @@
   E.on(sort, "change", render);
   E.on(copyButton, "click", function () { E.copy(shown.map(function (r) { return r.sub; }).join("\n"), this); });
   E.on(downloadButton, "click", function () {
-    if (shown.length) E.download(shown.map(function (r) { return r.sub; }).join("\n") + "\n", "subdomains.txt");
+    if (!shown.length) return;
+    E.download(shown.map(function (r) { return r.sub; }).join("\n") + "\n", "subdomains.txt");
+    E.flash(this, "downloaded");
   });
   E.on(csvButton, "click", function () {
     if (!shown.length) return;

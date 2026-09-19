@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>uuid · 𓁹𓁹</title>
 <meta name="description" content="uuid v4, uuid v7, ulid and short ids, generated in bulk in your browser.">
-<meta name="theme-color" content="#fbfbfb" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#070707">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -352,7 +351,7 @@
     if (!lines.length) { E.flash(this, "nothing to save"); return; }
     var k = kind();
     E.download(lines.join("\n") + "\n", (k === "short" ? "short-id" : k) + ".txt");
-    E.flash(this, "saved");
+    E.flash(this, "downloaded");
   });
 
   /* deep link: ?kind=v7&n=100 */

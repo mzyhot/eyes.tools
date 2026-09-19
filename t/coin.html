@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>coin · 𓁹𓁹</title>
 <meta name="description" content="flip a verifiable coin with the league of entropy.">
+<meta name="theme-color" content="#070707">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
@@ -25,16 +27,16 @@
       <div class="out mt-2" id="all" aria-live="polite"></div>
       <p class="hint mt-2" id="counts" aria-live="polite"></p>
       <button class="btn -ghost mt-2" id="copy" type="button" disabled>copy results</button>
-      <p class="hint mt-2">Fetches a public beacon from Cloudflare drand. Your flip count stays in this browser.</p>
+      <p class="hint mt-2">fetches a public beacon from cloudflare drand. your flip count stays in this browser.</p>
       <dl class="kv mt-4" id="proof" hidden><dt>verification</dt><dd>signature verified</dd><dt>round</dt><dd id="round"></dd><dt>chain</dt><dd id="chain"></dd></dl>
     </section>
   </main>
   <footer class="foot"><a href="../index.html">← all tools</a></footer>
 </div>
-<script src="../tools.js?v=20260821"></script>
+<script src="../tools.js"></script>
 <script src="../s.js"></script>
 <script src="../drand-client.min.js"></script>
-<script src="../drand-tools.js?v=20260821"></script>
+<script src="../drand-tools.js"></script>
 <script>
 (function () {
   "use strict";
