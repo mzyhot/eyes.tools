@@ -20,9 +20,10 @@
  *   addresses — `/share`, not `/t/share.html` — and the old spellings redirect.
  *
  *   Publication by allow list. `PUBLIC_FILES` is built at startup from the
- *   known site assets plus the tool pages found in `t/`. Source modules, tests,
- *   dotfiles, backups and deployment configuration are not public, and stay
- *   that way when new ones are added — there is no deny list to maintain.
+ *   root assets in `public-files.mjs` plus the tool pages found in `t/`.
+ *   Source modules, tests, dotfiles, backups and deployment configuration are
+ *   not public, and stay that way when new ones are added — there is no deny
+ *   list to maintain.
  *
  *   Path containment. The request path is decoded, rejected if it contains a
  *   traversal segment, a NUL or a backslash, resolved, and then checked again
@@ -56,6 +57,7 @@ import { fileURLToPath } from "node:url";
 import { brotliCompress, constants as zlibConstants, gzip } from "node:zlib";
 import { promisify } from "node:util";
 
+import { PUBLIC_ROOT_FILES } from "./public-files.mjs";
 import { createShareService } from "./share-server.mjs";
 
 import { createSubdomainLookup, responseHeaders } from "./subdomains-core.mjs";
@@ -105,9 +107,7 @@ const EXTENSIONLESS_TYPES = new Map([
 // Only deployable assets are public. New source files, backups, and service
 // configuration stay private without maintaining a growing deny list.
 const PUBLIC_FILES = new Set([
-  "index.html", "404.html", "favicon.svg", "tokens.css", "s.css", "s.js",
-  "tools.js", "qrcode.min.js", "drand-tools.js", "drand-client.min.js",
-  "exif-reader.js", "THIRDPARTYLICENSES", "LICENSE", "ADDENDUM",
+  ...PUBLIC_ROOT_FILES,
   ...(await readdir(resolve(PROJECT_ROOT, "t"))).filter(name => /^[a-z0-9-]+\.html$/.test(name)).map(name => "t/" + name)
 ]);
 

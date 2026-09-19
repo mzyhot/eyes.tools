@@ -26,9 +26,11 @@
  * parse it, via `node --check`. The adapters run only on their hosting platform,
  * so nothing else here would load them.
  *
- * Finally, that the static-host route files (`_redirects`, `vercel.json`) list
- * exactly the pages in `t/`. A page missing from them would 404 at its clean
- * address on those hosts while working fine locally.
+ * Finally, that the generated static-host files are current: `_redirects` and
+ * `vercel.json` list exactly the pages in `t/`, and `.vercelignore` and
+ * `_routes.json` hide exactly the files `public-files.mjs` does not publish. A
+ * stale one would 404 a page, or publish a private file, on those hosts while
+ * everything works locally.
  */
 
 import { readFile, readdir } from 'node:fs/promises';
@@ -37,7 +39,7 @@ import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pageSlugs, pagesRedirects, vercelConfig } from './static-routes.mjs';
+import { pageSlugs, pagesRedirects, pagesRoutes, privateEntries, vercelConfig, vercelIgnore } from './static-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const rootFiles = await readdir(root);
@@ -63,7 +65,7 @@ for (const file of pages) {
 }
 const sources = [
   ...rootFiles.filter(f => /\.m?js$/.test(f)),
-  ...(await Promise.all(['api', 'functions/api', 'scripts', 'tests'].map(async dir =>
+  ...(await Promise.all(['api', 'functions', 'functions/api', 'scripts', 'tests'].map(async dir =>
     (await readdir(resolve(root, dir))).filter(f => /\.m?js$/.test(f)).map(f => dir + '/' + f)))).flat()
 ];
 for (const file of sources) {
@@ -73,6 +75,9 @@ for (const file of sources) {
 const slugs = await pageSlugs();
 assert.equal(await readFile(resolve(root, '_redirects'), 'utf8'), pagesRedirects(slugs), '_redirects is out of date; run node scripts/static-routes.mjs');
 assert.equal(await readFile(resolve(root, 'vercel.json'), 'utf8'), vercelConfig(slugs), 'vercel.json is out of date; run node scripts/static-routes.mjs');
-console.log(`PASS static-host routes cover all ${slugs.length} pages`);
+const entries = privateEntries();
+assert.equal(await readFile(resolve(root, '.vercelignore'), 'utf8'), vercelIgnore(entries), '.vercelignore is out of date; run node scripts/static-routes.mjs');
+assert.equal(await readFile(resolve(root, '_routes.json'), 'utf8'), pagesRoutes(entries), '_routes.json is out of date; run node scripts/static-routes.mjs');
+console.log(`PASS static-host routes cover all ${slugs.length} pages and hide ${entries.length} private entries`);
 console.log(`PASS ${pages.length} HTML pages: inline script syntax, unique IDs and local assets (${scripts} inline scripts)`);
 console.log(`PASS ${sources.length} JavaScript files parse`);
