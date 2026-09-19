@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>hash · 𓁹𓁹</title>
 <meta name="description" content="md5, sha-1, sha-256, sha-384 and sha-512 of text or a file, computed in your browser.">
-<meta name="theme-color" content="#fbfbfb" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#070707">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -435,7 +434,7 @@
     var body = report(textD);
     if (!body) { E.flash(this, "nothing yet"); return; }
     E.download(body + "\n", "digests.txt");
-    E.flash(this, "saved");
+    E.flash(this, "downloaded");
   });
 
   /* ── file ─────────────────────────────────────────────── */
@@ -574,7 +573,7 @@
     var body = report(fileD);
     if (!body) { E.flash(this, "nothing yet"); return; }
     E.download(body + "\n", (current ? current.name : "file") + ".digests.txt");
-    E.flash(this, "saved");
+    E.flash(this, "downloaded");
   });
 
   /* ── compare ──────────────────────────────────────────── */

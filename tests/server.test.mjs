@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { createServer } from 'node:net';
+import { mkdtemp, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createEyesServer } from '../dev-server.mjs';
 
 test('production HTTP boundaries, security headers, and graceful shutdown', async t => {
@@ -55,4 +62,31 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
   const api = await get('/api/subdomains?apex=example.com');
   assert.deepEqual(await api.json(), { results: [] });
   assert.equal((await fetch(base + '/api/subdomains', { method: 'POST' })).status, 405);
+  // A coding refused with q=0 is never chosen.
+  for (const [offer, expected] of [['br, gzip', 'br'], ['br;q=0, gzip', 'gzip'], ['gzip;q=0', null], ['identity', null]]) {
+    const res = await fetch(base + '/s.js', { headers: { 'Accept-Encoding': offer } });
+    assert.equal(res.headers.get('content-encoding'), expected, offer);
+    await res.arrayBuffer();
+  }
+});
+
+test('starts when run through a symlinked release directory', { timeout: 10000 }, async t => {
+  // deploy/README.md runs the server as /opt/eyes/current/dev-server.mjs, where
+  // `current` is a symlink to the release.
+  const scratch = await mkdtemp(join(tmpdir(), 'eyes-link-'));
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  const current = join(scratch, 'current');
+  await symlink(dirname(fileURLToPath(new URL('../dev-server.mjs', import.meta.url))), current, 'dir');
+  const probe = createServer().listen(0, '127.0.0.1');
+  await once(probe, 'listening');
+  const port = String(probe.address().port);
+  await new Promise(resolve => probe.close(resolve));
+  const child = spawn(process.execPath, [join(current, 'dev-server.mjs'), port], { stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => child.kill());
+  const started = await new Promise(resolve => {
+    let output = '';
+    child.stdout.on('data', chunk => { output += chunk; if (output.includes('running at')) resolve(true); });
+    child.on('exit', () => resolve(false));
+  });
+  assert.equal(started, true);
 });

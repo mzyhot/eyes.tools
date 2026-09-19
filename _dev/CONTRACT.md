@@ -1,8 +1,9 @@
 # 𓁹𓁹 — tool contract
 
 Read this in full before writing a tool page. Every tool on the site is one
-self-contained HTML file in `t/`. There is no build step, no framework, no
-package manager, and no network access at runtime.
+self-contained HTML file in `t/`. There is no build step, no framework, and no
+runtime package. Beyond the shared Geist fonts, a page makes no network
+requests unless it is a network tool (rule 4).
 
 **Reference implementation: [`t/case.html`](../t/case.html). Skeleton: [`_dev/TEMPLATE.html`](TEMPLATE.html).**
 When in doubt, do what `case.html` does.
@@ -11,13 +12,17 @@ When in doubt, do what `case.html` does.
 
 ## 1. Hard rules
 
-1. **One file.** `t/<slug>.html`. Do not create, edit, or delete any other file
-   — not `s.css`, not `s.js`, not `tools.js`, not another tool. If you need
-   something the shared layer doesn't offer, implement it locally inside your file.
+1. **One file.** `t/<slug>.html`. The only other edits a new tool makes are its
+   registration: one row in `tools.js` and the regenerated `_redirects` and
+   `vercel.json` (see the README). Do not change `s.css`, `s.js`, another tool,
+   or anything else. If you need something the shared layer doesn't offer,
+   implement it locally inside your file.
 2. **No CDN runtime dependencies.** No remote scripts, npm runtime, or `import`.
-   QR and metadata parsing use vendored browser builds. Network tools are explicit
-   exceptions: verified randomness contacts Cloudflare's drand relay, subdomains
-   calls the same-origin `/api/subdomains` proxy, and share uses WebRTC.
+   QR and metadata parsing use vendored browser builds. The Geist stylesheet from
+   Google Fonts, already in the skeleton, is the one remote file every page
+   loads. Network tools are explicit exceptions: verified randomness contacts
+   Cloudflare's drand relay, subdomains calls the same-origin `/api/subdomains`
+   proxy, and share uses WebRTC.
 3. **Classic scripts only.** No `<script type="module">`. The site must work when
    opened straight off disk via `file://`. All paths are relative (`../s.css`).
 4. **Local unless the tool says otherwise.** No telemetry or analytics. File
@@ -82,7 +87,7 @@ markup genuinely has no equivalent — and if you do, scope the style in a
 
 **Layout** — `.stack` (column, 1rem gap) · `.stack-2` · `.stack-6` ·
 `.row` (wrapping flex row, centre-aligned) · `.row--between` · `.row--end` ·
-`.row__spacer` · `.grid2` · `.grid3` (both collapse to one column ≤640px) ·
+`.row__spacer` · `.grid2` · `.grid3` (both are one column below 640px) ·
 `.section` · `.section--ruled` · `.sep` · `.mt-2` `.mt-3` `.mt-4` `.mt-6` · `.w-full`
 
 **Type** — `.h1` · `.display` · `.lede` · `.lbl` (field label, mono, dim) ·
@@ -124,6 +129,7 @@ E.debounce(fn, ms)           trailing debounce, default 120ms
 E.copy(text[, btn])          clipboard write; swaps btn label to "copied"
 E.flash(btn, label[, ms])    temporarily swap a button's label
 E.download(data, name[,mime])data may be a string or a Blob
+E.fail(el, msg)              write msg into an .err element; "" clears it
 E.bytes(n)                   1536 → "1.5 KB"
 E.rand(n)                    n crypto-random bytes as Uint8Array
 E.param(k)                   ?k=… from the query string, or null
@@ -153,7 +159,8 @@ Must render with no horizontal scroll at **320 / 375 / 414 / 768 px**.
   `aria-label`. Every icon-only control has an `aria-label`.
 - Live-updating results that matter announce themselves: put `aria-live="polite"`
   on the container that changes.
-- Font size for text inputs is ≥ 13px so iOS does not zoom on focus.
+- Font size for text inputs is at least 16px so iOS does not zoom on focus.
+  `.field` already uses `--text-input`; do not shrink it.
 - Respect `prefers-reduced-motion` — `s.css` already neutralises transitions;
   don't add JS-driven motion that ignores it.
 

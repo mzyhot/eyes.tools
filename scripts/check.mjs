@@ -21,8 +21,10 @@
  *   fragment must exist on disk at the path the page asks for. A tool page that
  *   references `../s.js` incorrectly still renders — it just stops working.
  *
- * And for the JavaScript modules at the project root: that Node itself can parse
- * them, via `node --check`.
+ * And for every JavaScript file outside the vendored builds — the root modules,
+ * the two subdomain adapters, these scripts and the tests: that Node itself can
+ * parse it, via `node --check`. The adapters run only on their hosting platform,
+ * so nothing else here would load them.
  *
  * Finally, that the static-host route files (`_redirects`, `vercel.json`) list
  * exactly the pages in `t/`. A page missing from them would 404 at its clean
@@ -59,7 +61,12 @@ for (const file of pages) {
     await readFile(asset);   /* throws, with the path, if it is not there */
   }
 }
-for (const file of rootFiles.filter(f => /\.(?:m?js)$/.test(f))) {
+const sources = [
+  ...rootFiles.filter(f => /\.m?js$/.test(f)),
+  ...(await Promise.all(['api', 'functions/api', 'scripts', 'tests'].map(async dir =>
+    (await readdir(resolve(root, dir))).filter(f => /\.m?js$/.test(f)).map(f => dir + '/' + f)))).flat()
+];
+for (const file of sources) {
   const result = spawnSync(process.execPath, ['--check', resolve(root, file)], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
 }
@@ -67,4 +74,5 @@ const slugs = await pageSlugs();
 assert.equal(await readFile(resolve(root, '_redirects'), 'utf8'), pagesRedirects(slugs), '_redirects is out of date; run node scripts/static-routes.mjs');
 assert.equal(await readFile(resolve(root, 'vercel.json'), 'utf8'), vercelConfig(slugs), 'vercel.json is out of date; run node scripts/static-routes.mjs');
 console.log(`PASS static-host routes cover all ${slugs.length} pages`);
-console.log(`PASS ${pages.length} HTML pages: inline script syntax, unique IDs and local assets; root JavaScript syntax (${scripts} inline scripts)`);
+console.log(`PASS ${pages.length} HTML pages: inline script syntax, unique IDs and local assets (${scripts} inline scripts)`);
+console.log(`PASS ${sources.length} JavaScript files parse`);

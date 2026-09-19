@@ -85,6 +85,16 @@ test('Cloudflare discovery trusts only explicit proxy configuration', { timeout:
   assert.equal(malformed.networkKnown, false);
 });
 
+test('an untrusted proxy isolates visitors instead of grouping them by its address', { timeout: 10000 }, async t => {
+  const f = await fixture(t);
+  for (const headers of [{ 'X-Forwarded-For': '192.0.2.1' }, { 'X-Real-IP': '192.0.2.1' }, { Forwarded: 'for=192.0.2.1' }]) {
+    const a = await f.join({}, headers), ae = await f.events(a); await ae.next();
+    const b = await f.join({}, headers), be = await f.events(b);
+    assert.equal(b.networkKnown, false, Object.keys(headers)[0]);
+    assert.deepEqual((await be.next()).data, [], Object.keys(headers)[0]);
+  }
+});
+
 test('rejects cross-origin requests, invalid credentials and malformed payloads', async t => {
   const f = await fixture(t);
   assert.equal((await f.post('join', {}, null, { Origin: 'https://unrelated.example' })).status, 403);

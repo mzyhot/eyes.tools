@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>share · 𓁹𓁹</title>
 <meta name="description" content="send files or text over an encrypted WebRTC connection.">
+<meta name="theme-color" content="#070707">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -82,7 +83,7 @@ body[data-tool="share"] [hidden] { display: none !important; }
       <div class="share-space">
         <div id="empty" class="share-empty">
           <p>ready when you are.</p>
-          <p class="hint" id="empty-note">Open share on another device using the same Wi-Fi.</p>
+          <p class="hint" id="empty-note">open share on another device using the same wi-fi.</p>
         </div>
         <ul class="device-list" id="devices" aria-label="available devices"></ul>
       </div>
@@ -97,7 +98,7 @@ body[data-tool="share"] [hidden] { display: none !important; }
     <section class="room-panel" id="room-panel" aria-label="room invitation" hidden>
       <div class="stack-2">
         <label class="lbl" for="room-link">one link. both devices.</label>
-        <p class="hint">Open this link or scan the code on the other device. Anyone with the link can join.</p>
+        <p class="hint">open this link or scan the code on the other device. anyone with the link can join.</p>
         <input class="field" id="room-link" readonly>
         <div class="row"><button class="btn -sm" id="copy-room" type="button">copy link</button><button class="tbtn" id="leave-room" type="button">leave room</button></div>
       </div>
@@ -249,8 +250,8 @@ body[data-tool="share"] [hidden] { display: none !important; }
           if (version !== epoch || stopped) { api('leave', {}, joined).catch(() => {}); return; }
           session = joined;
           $('#your-name').textContent = joined.name;
-          $('#empty-note').textContent = room ? 'Open the room link on another device. It will appear here.' : 'Open share on another device using the same Wi-Fi.';
-          if (!room && !joined.networkKnown) $('#empty-note').textContent = 'Use a room link to connect your devices.';
+          $('#empty-note').textContent = room ? 'open the room link on another device. it will appear here.' : 'open share on another device using the same wi-fi.';
+          if (!room && !joined.networkKnown) $('#empty-note').textContent = 'use a room link to connect your devices.';
         }
         const current = session;
         const connection = stream = new AbortController();

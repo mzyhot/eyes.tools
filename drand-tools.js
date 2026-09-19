@@ -1,8 +1,8 @@
 /* 𓁹𓁹 — shared randomness sources.
  *
- * Three tools (rng, dice, coin) offer the visitor a choice of where their
- * randomness comes from, and this module is the one place that choice is
- * implemented. It exposes a single global, `R`.
+ * Three tools (rng, dice, coin) draw their randomness through this module, and
+ * rng lets the visitor choose where it comes from; dice and coin always use the
+ * drand beacon. It exposes a single global, `R`.
  *
  * The three sources, weakest first:
  *
