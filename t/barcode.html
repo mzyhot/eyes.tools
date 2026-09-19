@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>barcode · 𓁹𓁹</title>
     <meta name="description" content="generate ean-13 barcodes as svg.">
+    <meta name="theme-color" content="#070707">
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
@@ -97,6 +99,15 @@
         var png = E.qs("#png");
         var number = "";
 
+        /* Resolve a colour token to #rrggbb by painting one pixel. The tokens are
+           oklch, which many programs that open a downloaded svg cannot read. */
+        function hexColor(color) {
+          var probe = document.createElement("canvas").getContext("2d");
+          probe.fillStyle = color; probe.fillRect(0, 0, 1, 1);
+          var d = probe.getImageData(0, 0, 1, 1).data;
+          return "#" + [d[0], d[1], d[2]].map(function (v) { return (v < 16 ? "0" : "") + v.toString(16); }).join("");
+        }
+
         function check(value) {
           var sum = 0;
           for (var index = 0; index < 12; index += 1) {
@@ -142,10 +153,15 @@
 
           var namespace = "http://www.w3.org/2000/svg";
           var scale = 2;
+          /* Scannable codes use the theme-independent QR tokens, read here so the
+             exported svg carries literal values. */
+          var style = getComputedStyle(document.documentElement);
+          var paper = hexColor(style.getPropertyValue("--color-qr-paper").trim());
+          var ink = hexColor(style.getPropertyValue("--color-qr-ink").trim());
           var background = document.createElementNS(namespace, "rect");
           background.setAttribute("width", "226");
           background.setAttribute("height", "112");
-          background.setAttribute("fill", "white");
+          background.setAttribute("fill", paper);
           svg.appendChild(background);
 
           for (index = 0; index < bits.length; index += 1) {
@@ -158,7 +174,7 @@
               index < 3 || (index >= 45 && index < 50) || index >= 92 ? "82" : "74"
             );
             bar.setAttribute("width", String(scale));
-            bar.setAttribute("fill", "black");
+            bar.setAttribute("fill", ink);
             svg.appendChild(bar);
           }
 
@@ -166,9 +182,9 @@
           label.setAttribute("x", "113");
           label.setAttribute("y", "106");
           label.setAttribute("text-anchor", "middle");
-          label.setAttribute("font-family", "monospace");
+          label.setAttribute("font-family", style.getPropertyValue("--font-mono").trim());
           label.setAttribute("font-size", "14");
-          label.setAttribute("fill", getComputedStyle(document.documentElement).getPropertyValue("--color-qr-ink").trim());
+          label.setAttribute("fill", ink);
           label.textContent = value;
           svg.appendChild(label);
         }
