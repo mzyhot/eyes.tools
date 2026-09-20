@@ -534,6 +534,10 @@
       try { queued.shift()(); }
       catch (error) { reportToolError(error); }
     }
+    /* The page is fully assembled: chrome built, dependencies loaded, the tool
+       run. Tests wait for this rather than guessing how long a dependency
+       takes, and a tool can watch for it from another page of its own. */
+    document.body.dataset.ready = "1";
   }
 
   function reportToolError(error) {
