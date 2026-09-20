@@ -16,7 +16,7 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
   t.after(() => app.close());
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const get = path => fetch(base + path);
-  for (const path of ['/', '/share', '/json', '/s.js', '/THIRDPARTYLICENSES', '/LICENSE', '/ADDENDUM']) {
+  for (const path of ['/', '/share', '/json', '/s.js', '/site.js', '/theme.js', '/fonts.css', '/index.js', '/THIRDPARTYLICENSES', '/LICENSE', '/ADDENDUM']) {
     const res = await get(path);
     assert.equal(res.status, 200, path);
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
@@ -34,7 +34,8 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
   for (const path of ['/dev-server.mjs', '/share-server.mjs', '/public-files.mjs', '/README.md', '/tests/server.test.mjs', '/.git/config', '/.env', '/package.json', '/s.js.bak', '/%2e%2e%2fetc/passwd', '/%ZZ', '/t/%2e%2e%2fshare-server.mjs']) {
     const res = await get(path);
     assert.equal(res.status, 404, path);
-    assert.match(res.headers.get('content-security-policy'), /sha256-/);
+    // The not-found page has no inline script, so the base policy covers it.
+    assert.match(res.headers.get('content-security-policy'), /script-src 'self'$/);
     await res.arrayBuffer();
   }
   assert.deepEqual(await (await get('/healthz')).json(), { status: 'ok' });

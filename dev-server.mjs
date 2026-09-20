@@ -57,8 +57,8 @@ import { fileURLToPath } from "node:url";
 import { brotliCompress, constants as zlibConstants, gzip } from "node:zlib";
 import { promisify } from "node:util";
 
+import { API_MODULES } from "./api-modules.mjs";
 import { PUBLIC_ROOT_FILES } from "./public-files.mjs";
-import { createShareService } from "./share-server.mjs";
 
 const compressBrotli = promisify(brotliCompress);
 const compressGzip = promisify(gzip);
@@ -221,7 +221,8 @@ function sendText(response, status, message, method = "GET", extraHeaders = {}) 
  *
  * Every inline `<script>` without a `src` is hashed and added to the policy, so
  * the pages get the protection of a strict CSP while staying single files that
- * also open from `file://`.
+ * also open from `file://`. A page with no inline script — the index, the 404,
+ * a redirect stub — keeps the base policy unchanged.
  * @param {Buffer} body The HTML.
  * @returns {string} The full policy for that page.
  */
@@ -229,7 +230,7 @@ function pagePolicy(body) {
   const hashes = [...body.toString("utf8").matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)]
     .filter(match => !/\bsrc\s*=/i.test(match[1]))
     .map(match => "'sha256-" + createHash("sha256").update(match[2]).digest("base64") + "'");
-  return CSP + " " + hashes.join(" ");
+  return hashes.length ? CSP + " " + hashes.join(" ") : CSP;
 }
 
 /* The 404 body never changes, so hash its inline scripts once at startup rather
@@ -493,11 +494,11 @@ async function serveStatic(request, response, url) {
 }
 
 /**
- * Route one request. Order matters: liveness, then the APIs, then the method
- * gate, then static files — the gate sits after the APIs because share uses
- * POST and the static tree does not.
+ * Route one request. Order matters: liveness, then the API modules, then the
+ * method gate, then static files — the gate sits after the APIs because share
+ * uses POST and the static tree does not.
  */
-async function route(request, response, share) {
+async function route(request, response, apis) {
   let url;
   try { url = new URL(request.url || "/", "http://127.0.0.1"); }
   catch (error) { return sendText(response, 400, "bad request\n", request.method); }
@@ -505,7 +506,9 @@ async function route(request, response, share) {
   if (url.pathname === "/healthz" && (request.method === "GET" || request.method === "HEAD")) {
     return sendBuffer(response, 200, "application/json", Buffer.from('{"status":"ok"}\n'), request.method);
   }
-  if (url.pathname.startsWith("/api/share/")) return share.handle(request, response, url);
+  for (const api of apis) {
+    if (url.pathname.startsWith(api.prefix)) return api.service.handle(request, response, url);
+  }
   if (request.method !== "GET" && request.method !== "HEAD") {
     return sendText(response, 405, "method not allowed\n", request.method, { Allow: "GET, HEAD" });
   }
@@ -524,15 +527,17 @@ async function route(request, response, share) {
  * nothing must not hold a slot, and the header count and size caps bound what a
  * single request can make the process allocate.
  *
- * @param {object} [options]
+ * @param {object} [options] Passed to every API module's factory.
  * @param {object} [options.shareOptions] Passed to createShareService.
  * @returns {{server: import("node:http").Server, close: () => Promise<void>}}
  */
-export function createEyesServer({ shareOptions } = {}) {
-  const share = createShareService(shareOptions);
+export function createEyesServer(options = {}) {
+  /* One instance of each API module in `api-modules.mjs`, built once per
+     server and closed with it. */
+  const apis = API_MODULES.map((module) => ({ prefix: module.prefix, service: module.create(options) }));
   const server = createServer({ headersTimeout: 15000, requestTimeout: 30000, maxHeaderSize: 16384 }, (request, response) => {
     securityHeaders(response);
-    route(request, response, share).catch((error) => {
+    route(request, response, apis).catch((error) => {
       /* Log the class of failure, never the message: it can contain a path or
          a header the visitor supplied. */
       console.error("request failed:", error.code || error.name);
@@ -541,12 +546,13 @@ export function createEyesServer({ shareOptions } = {}) {
     });
   });
   server.maxHeadersCount = 100;
-  server.on("close", () => share.close());
+  const closeApis = () => apis.forEach((api) => api.service.close());
+  server.on("close", closeApis);
   return { server, close() {
     /* Shut down in order: end the event streams so peers learn immediately,
        stop accepting, let in-flight requests drain, and only then force the
        remaining sockets closed. */
-    share.close();
+    closeApis();
     return new Promise(resolve => {
       const deadline = setTimeout(() => server.closeAllConnections(), 10000);
       deadline.unref();

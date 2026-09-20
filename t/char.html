@@ -1,74 +1,47 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>character search · 𓁹𓁹</title>
-    <meta name="description" content="find unicode and ascii characters by value.">
-    <meta name="theme-color" content="#070707">
-    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
-    <link rel="stylesheet" href="../tokens.css">
-    <link rel="stylesheet" href="../s.css">
-    <script>
-      (function () {
-        try {
-          var theme = localStorage.getItem("eyes.theme");
-          if (theme) document.documentElement.setAttribute("data-theme", theme);
-        } catch (e) {}
-      }());
-    </script>
-  </head>
-  <body data-tool="char">
-    <div class="wrap">
-      <header class="top">
-        <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
-        <p class="crumb" data-crumb></p>
-        <span class="top__spacer"></span>
-        <button class="tbtn" type="button" data-theme-toggle>theme</button>
-      </header>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="../fonts.css">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
+</head>
+<body data-tool="char">
 
-      <div class="head">
-        <h1 class="h1" data-title></h1>
-        <p class="lede" data-lede></p>
-      </div>
+<main class="stack-6">
+      <section>
+        <div class="seg" role="radiogroup" aria-label="character set">
+          <label><input type="radio" name="mode" value="unicode" checked><span>unicode</span></label>
+          <label><input type="radio" name="mode" value="ascii"><span>ascii</span></label>
+        </div>
+      </section>
 
-      <main class="stack-6">
-        <section>
-          <div class="seg" role="radiogroup" aria-label="character set">
-            <label><input type="radio" name="mode" value="unicode" checked><span>unicode</span></label>
-            <label><input type="radio" name="mode" value="ascii"><span>ascii</span></label>
-          </div>
-        </section>
+      <section>
+        <label class="lbl" for="q">glyph, decimal, u+ code, html entity, or ascii name</label>
+        <input class="field" id="q" placeholder="𓁹 or U+13079 or 0x41 or LF"
+               autocomplete="off" spellcheck="false">
+        <p class="err" id="err" role="alert" aria-live="polite"></p>
+      </section>
 
-        <section>
-          <label class="lbl" for="q">glyph, decimal, u+ code, html entity, or ascii name</label>
-          <input class="field" id="q" placeholder="𓁹 or U+13079 or 0x41 or LF"
-                 autocomplete="off" spellcheck="false">
-          <p class="err" id="err" role="alert" aria-live="polite"></p>
-        </section>
+      <section>
+        <div class="display" id="glyph" aria-live="polite"></div>
+        <dl class="kv" aria-live="polite">
+          <dt>decimal</dt><dd id="dec"></dd>
+          <dt>hex</dt><dd id="hex"></dd>
+          <dt>utf-8</dt><dd id="utf"></dd>
+          <dt>html</dt><dd id="html"></dd>
+        </dl>
+        <div class="row mt-3"><button class="btn -ghost" id="copy" type="button" disabled>copy character</button><button class="btn -ghost" id="copy-code" type="button" disabled>copy code</button><button class="btn -ghost" id="copy-html" type="button" disabled>copy html</button></div>
+      </section>
+    </main>
 
-        <section>
-          <div class="display" id="glyph" aria-live="polite"></div>
-          <dl class="kv" aria-live="polite">
-            <dt>decimal</dt><dd id="dec"></dd>
-            <dt>hex</dt><dd id="hex"></dd>
-            <dt>utf-8</dt><dd id="utf"></dd>
-            <dt>html</dt><dd id="html"></dd>
-          </dl>
-          <div class="row mt-3"><button class="btn -ghost" id="copy" type="button" disabled>copy character</button><button class="btn -ghost" id="copy-code" type="button" disabled>copy code</button><button class="btn -ghost" id="copy-html" type="button" disabled>copy html</button></div>
-        </section>
-      </main>
-
-      <footer class="foot"><a href="../index.html">← all tools</a></footer>
-    </div>
-
-    <script src="../tools.js"></script>
-    <script src="../s.js"></script>
-    <script>
-      (function () {
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+      E.tool(function () {
         "use strict";
 
         var input = E.qs("#q");
@@ -164,7 +137,7 @@
         E.on(copyHtml, "click", function () { E.copy("&#" + character.codePointAt(0) + ";", this); });
         input.value = E.param("t") || "";
         run();
-      }());
-    </script>
-  </body>
+      });
+</script>
+</body>
 </html>

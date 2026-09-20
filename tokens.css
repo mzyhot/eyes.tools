@@ -1,11 +1,14 @@
-/* 𓁹𓁹 — shared design tokens. Dark by default. */
+/* 𓁹𓁹 — shared design tokens. Dark by default.
+ *
+ * Every value the site draws with, and the only place any of them is written.
+ * Typography families are the exception: they live in `fonts.css`. */
 
 :root {
   color-scheme: dark;
 
-  /* ── type ───────────────────────────────────────────── */
-  --font-ui: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* ── type ───────────────────────────────────────────────
+     The two font families live in `fonts.css`, the one file to change to
+     change the site's typography. Sizes and rhythm stay here. */
 
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;

@@ -12,7 +12,14 @@
  *                                 Vercel and Cloudflare Pages hide the rest
  */
 export const PUBLIC_ROOT_FILES = [
-  "index.html", "404.html", "favicon.svg", "tokens.css", "s.css", "s.js",
-  "tools.js", "qrcode.min.js", "drand-tools.js", "drand-client.min.js",
-  "exif-reader.js", "THIRDPARTYLICENSES", "LICENSE", "ADDENDUM"
+  /* pages */
+  "index.html", "404.html", "favicon.svg",
+  /* the shared layer, in load order */
+  "fonts.css", "tokens.css", "s.css", "site.js", "theme.js", "tools.js", "s.js",
+  /* page scripts */
+  "index.js", "redirect.js",
+  /* scripts tools name in their `deps` */
+  "qrcode.min.js", "drand-tools.js", "drand-client.min.js", "exif-reader.js",
+  /* notices */
+  "THIRDPARTYLICENSES", "LICENSE", "ADDENDUM"
 ];

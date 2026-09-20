@@ -1,8 +1,17 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>time · 𓁹𓁹</title><meta name="description" content="convert dates and unix timestamps."><meta name="theme-color" content="#070707"><link rel="icon" href="../favicon.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
-<link rel="stylesheet" href="../tokens.css"><link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script></head><body data-tool="time"><div class="wrap"><header class="top"><a class="eyes" href="../index.html" data-eyes>𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" data-theme-toggle>theme</button></header><div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div><main class="stack-6">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="../fonts.css">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
+</head>
+<body data-tool="time">
+
+<main class="stack-6">
   <section>
     <label class="lbl" for="in">date or unix timestamp</label>
     <input class="field" id="in" spellcheck="false" autocomplete="off" placeholder="2026-08-21T12:00:00Z or 1787313600">
@@ -16,8 +25,12 @@
   </section>
   <dl class="kv" id="out" aria-live="polite"><dt>local</dt><dd></dd><dt>utc</dt><dd></dd><dt>iso 8601</dt><dd></dd><dt>unix seconds</dt><dd></dd><dt>unix milliseconds</dt><dd></dd></dl>
   <button class="btn -ghost" id="copy" type="button" disabled>copy</button>
-</main><footer class="foot"><a href="../index.html">← all tools</a></footer></div><script src="../tools.js"></script><script src="../s.js"></script><script>
-(function () {
+</main>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+E.tool(function () {
   "use strict";
   var input = E.qs("#in"), values = E.qsa("#out dd"), error = E.qs("#err");
   var unit = E.qs("#unit"), interpreted = E.qs("#interpreted"), copy = E.qs("#copy"), report = "";
@@ -61,5 +74,7 @@
   input.value = query === null ? new Date().toISOString() : query;
   if (queryUnit === "seconds" || queryUnit === "milliseconds") unit.value = queryUnit;
   run();
-})();
-</script></body></html>
+});
+</script>
+</body>
+</html>

@@ -1,26 +1,12 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>time zones · 𓁹𓁹</title>
-    <meta name="description" content="convert time between zones.">
-    <meta name="theme-color" content="#070707">
-    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
-    <link rel="stylesheet" href="../tokens.css">
-    <link rel="stylesheet" href="../s.css">
-    <script>
-      (function () {
-        try {
-          var theme = localStorage.getItem("eyes.theme");
-          if (theme) document.documentElement.setAttribute("data-theme", theme);
-        } catch (e) {}
-      }());
-    </script>
-    <style>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="../fonts.css">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<style>
       #result {
         font-size: clamp(var(--text-xl), 4vw, var(--text-2xl));
         line-height: var(--lh-snug);
@@ -28,74 +14,61 @@
         margin-bottom: var(--space-6);
       }
     </style>
-  </head>
-  <body data-tool="tz">
-    <div class="wrap">
-      <header class="top">
-        <a class="eyes" href="../index.html" data-eyes>𓁹𓁹</a>
-        <p class="crumb" data-crumb></p>
-        <span class="top__spacer"></span>
-        <button class="tbtn" type="button" data-theme-toggle>theme</button>
-      </header>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
+</head>
+<body data-tool="tz">
 
-      <div class="head">
-        <h1 class="h1" data-title></h1>
-        <p class="lede" data-lede></p>
+<main class="stack-6">
+      <section>
+        <label class="lbl" for="when">date and time</label>
+        <input class="field" id="when" type="datetime-local">
+      </section>
+
+      <section class="grid2">
+        <div>
+          <label class="lbl" for="from">from</label>
+          <input class="field" id="from" list="zones" value="UTC" autocomplete="off">
+        </div>
+        <div>
+          <label class="lbl" for="to">to</label>
+          <input class="field" id="to" list="zones" autocomplete="off">
+        </div>
+      </section>
+
+      <datalist id="zones"></datalist>
+
+      <section id="overlap" hidden>
+        <label class="lbl" for="occurrence">this local time occurs twice</label>
+        <select class="field" id="occurrence"><option value="earlier">first occurrence</option><option value="later">second occurrence</option></select>
+        <p class="hint mt-2">the clock moves back in this zone. choose which instant you mean.</p>
+      </section>
+
+      <div class="row">
+        <button class="btn" id="convert" type="button">convert</button>
+        <button class="btn -ghost" id="swap" type="button">swap</button>
       </div>
 
-      <main class="stack-6">
-        <section>
-          <label class="lbl" for="when">date and time</label>
-          <input class="field" id="when" type="datetime-local">
-        </section>
+      <p class="err" id="err" role="alert" aria-live="polite"></p>
 
-        <section class="grid2">
-          <div>
-            <label class="lbl" for="from">from</label>
-            <input class="field" id="from" list="zones" value="UTC" autocomplete="off">
-          </div>
-          <div>
-            <label class="lbl" for="to">to</label>
-            <input class="field" id="to" list="zones" autocomplete="off">
-          </div>
-        </section>
+      <section>
+        <div class="display" id="result" aria-live="polite"></div>
+        <dl class="kv">
+          <dt>source</dt>
+          <dd id="source"></dd>
+          <dt>destination</dt>
+          <dd id="dest"></dd>
+          <dt>instant</dt>
+          <dd id="iso"></dd>
+        </dl>
+        <button class="btn -ghost" id="copy" type="button" disabled>copy</button>
+      </section>
+    </main>
 
-        <datalist id="zones"></datalist>
-
-        <section id="overlap" hidden>
-          <label class="lbl" for="occurrence">this local time occurs twice</label>
-          <select class="field" id="occurrence"><option value="earlier">first occurrence</option><option value="later">second occurrence</option></select>
-          <p class="hint mt-2">the clock moves back in this zone. choose which instant you mean.</p>
-        </section>
-
-        <div class="row">
-          <button class="btn" id="convert" type="button">convert</button>
-          <button class="btn -ghost" id="swap" type="button">swap</button>
-        </div>
-
-        <p class="err" id="err" role="alert" aria-live="polite"></p>
-
-        <section>
-          <div class="display" id="result" aria-live="polite"></div>
-          <dl class="kv">
-            <dt>source</dt>
-            <dd id="source"></dd>
-            <dt>destination</dt>
-            <dd id="dest"></dd>
-            <dt>instant</dt>
-            <dd id="iso"></dd>
-          </dl>
-          <button class="btn -ghost" id="copy" type="button" disabled>copy</button>
-        </section>
-      </main>
-
-      <footer class="foot"><a href="../index.html">← all tools</a></footer>
-    </div>
-
-    <script src="../tools.js"></script>
-    <script src="../s.js"></script>
-    <script>
-      (function () {
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+      E.tool(function () {
         "use strict";
 
         var when = E.qs("#when");
@@ -263,7 +236,7 @@
           E.copy(report, this);
         });
         run();
-      }());
-    </script>
-  </body>
+      });
+</script>
+</body>
 </html>

@@ -144,6 +144,8 @@ try {
   await check('coin and dice rendering with a deterministic verified-beacon fixture', async () => {
     for (const name of ['coin', 'dice']) {
       await go(name);
+      // The registry's deps load after the page, so wait for the module itself.
+      await page.waitForFunction(() => !!window.R);
       await page.evaluate(() => { R.source = async (_, n) => ({ bytes: new Uint8Array(n), verified: true, round: 123, chainHash: R.chainHash }); });
       await click(name === 'coin' ? '#flip' : '#roll'); await enabled('#copy'); await has('#round', '123');
       if (name === 'coin') assert.match(await text('#first'), /heads|tails/i); else assert.equal((await text('#total')).trim(), '2');

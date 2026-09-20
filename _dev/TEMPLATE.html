@@ -3,54 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SLUG · 𓁹𓁹</title>
-<meta name="description" content="ONE SENTENCE, LOWERCASE, NO MARKETING.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="SLUG">
-<div class="wrap">
 
-  <header class="top">
-    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
-    <p class="crumb" data-crumb></p>
-    <span class="top__spacer"></span>
-    <button class="tbtn" type="button" data-theme-toggle>theme</button>
-  </header>
+<main class="stack-6">
+  <!-- ─── tool goes here ─────────────────────────────────────────────
+       Use only the classes documented in _dev/CONTRACT.md.
+       Never write a raw colour, font-family, or px radius.
 
-  <div class="head">
-    <h1 class="h1" data-title></h1>
-    <p class="lede" data-lede></p>
-  </div>
-
-  <main class="stack-6">
-    <!-- ─── tool goes here ─────────────────────────────────────────────
-         Use only the classes documented in _dev/CONTRACT.md.
-         Never write a raw colour, font-family, or px radius.
-    ────────────────────────────────────────────────────────────────── -->
-  </main>
-
-  <footer class="foot">
-    <a href="../index.html">← all tools</a>
-    <span class="row__spacer"></span>
-    <span>runs in your browser · nothing is uploaded</span>
-  </footer>
-
-</div>
+       The header, title, lede and footer are not here on purpose: s.js
+       builds them from site.js and this tool's row in tools.js.
+  ────────────────────────────────────────────────────────────────── -->
+</main>
 
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
 <script>
-(function () {
+E.tool(function () {
   "use strict";
-  // tool logic. Wrap everything. Use E.* helpers. No globals, no dependencies.
-})();
+  // tool logic. Use E.* helpers. No globals; extra scripts go in `deps` in tools.js.
+});
 </script>
 </body>
 </html>
