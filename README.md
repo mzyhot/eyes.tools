@@ -4,10 +4,9 @@
 architecture, contributor guides, APIs, deployment, and troubleshooting.
 
 A directory of small, mostly local tools. No build step, framework, runtime npm
-dependencies, or analytics. Every interface is one HTML file. The subdomain viewer uses a small same-origin
-proxy; share uses a small in-memory service for device discovery and WebRTC
-connection setup. File contents travel between browsers, never through the
-signaling service.
+dependencies, or analytics. Every interface is one HTML file. Share uses a small
+in-memory service for device discovery and WebRTC connection setup. File
+contents travel between browsers, never through the signaling service.
 
 ```
 index.html      the index — filter field + registry-driven list
@@ -25,9 +24,6 @@ exif-reader.js   vendored ExifReader browser build for image metadata
 dev-server.mjs   the Node server, for development and self-hosting
 public-files.mjs the root files the site publishes; everything else stays private
 share-server.mjs  ephemeral discovery, private rooms, and WebRTC signaling
-subdomains-core.mjs  validation, streaming limits, and crt.name normalization
-api/subdomains.js  Node/Vercel adapter for the crt.name proxy
-functions/api/subdomains.js  Cloudflare Pages adapter for the same endpoint
 functions/[[path]].js  Cloudflare Pages: answers private paths with the 404 page
 _redirects       Cloudflare Pages: serves each tool at /<slug> (generated)
 _routes.json     Cloudflare Pages: sends private paths to a 404 Function (generated)
@@ -51,9 +47,9 @@ node dev-server.mjs
 Then open <http://127.0.0.1:8777>. Each tool lives at a clean address such as
 `/share` or `/json`; old `/t/<slug>.html` links redirect there. Pass a different port as the first argument,
 for example `node dev-server.mjs 9000`. Most local tools also work when
-`index.html` is opened straight off disk. The included server runs
-the subdomain viewer's API and the share discovery service. WebRTC sharing needs HTTPS (or localhost
-during development) plus a reachable peer.
+`index.html` is opened straight off disk. The included server runs the share
+discovery service. WebRTC sharing needs HTTPS (or localhost during development)
+plus a reachable peer.
 
 ## Adding a tool
 
@@ -86,18 +82,16 @@ To get every feature, run the Node server behind a reverse proxy that
 terminates HTTPS; [deploy/README.md](deploy/README.md) covers the systemd
 service, proxy requirements, and release checks.
 
-Static hosts can serve the tools and the subdomain lookup, but not share:
+Static hosts can serve the tools, but not share:
 
-- **Vercel** reads `vercel.json` and `api/subdomains.js`: `npx vercel deploy --prod`.
+- **Vercel** reads `vercel.json`: `npx vercel deploy --prod`.
 - **Cloudflare Pages** reads `_redirects`, `_routes.json` and `functions/`. Connect
   the repo with no build command and the project root as the output directory,
   through Git integration or Wrangler; dashboard Direct Upload does not deploy
   Functions.
 
 Both hosts publish only what the Node server does: `.vercelignore` and
-`_routes.json` hide every file `public-files.mjs` does not list. On Vercel the
-subdomain function needs `subdomains-core.mjs`, so that one module is public
-there.
+`_routes.json` hide every file `public-files.mjs` does not list.
 
 The wiki's [Deployment](https://github.com/mzyhot/eyes.tools/wiki/Deployment) and
 [Sharing](https://github.com/mzyhot/eyes.tools/wiki/Sharing) pages cover visitor

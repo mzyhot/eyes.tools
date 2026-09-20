@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { createEyesServer } from '../dev-server.mjs';
 
 test('production HTTP boundaries, security headers, and graceful shutdown', async t => {
-  const app = createEyesServer({ lookup: async () => ({ status: 200, body: { results: [] }, headers: {} }) });
+  const app = createEyesServer();
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   t.after(() => app.close());
   const base = `http://127.0.0.1:${app.server.address().port}`;
@@ -59,9 +59,10 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
   assert.equal(post.status, 405);
   assert.equal(post.headers.get('allow'), 'GET, HEAD');
   await post.text();
+  // Only the share API exists; anything else under /api is a static miss.
   const api = await get('/api/subdomains?apex=example.com');
-  assert.deepEqual(await api.json(), { results: [] });
-  assert.equal((await fetch(base + '/api/subdomains', { method: 'POST' })).status, 405);
+  assert.equal(api.status, 404);
+  await api.arrayBuffer();
   // A coding refused with q=0 is never chosen.
   for (const [offer, expected] of [['br, gzip', 'br'], ['br;q=0, gzip', 'gzip'], ['gzip;q=0', null], ['identity', null]]) {
     const res = await fetch(base + '/s.js', { headers: { 'Accept-Encoding': offer } });

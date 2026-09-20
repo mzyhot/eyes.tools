@@ -50,6 +50,5 @@ window.TOOLS = [
   { slug: "exif",        name: "metadata",          desc: "see the details tucked inside an image",             alias: "exif iptc xmp icc photo camera gps jpeg png webp heic avif view metadata" },
   { slug: "spectrogram", name: "spectrogram",       desc: "see what your audio looks like",                     alias: "audio sound fft frequency waveform make spectrograms" },
   { slug: "tz",          name: "time zones",        desc: "see what time that is somewhere else",               alias: "timezone date world clock utc dst convert zones" },
-  { slug: "subdomains",  name: "subdomains",        desc: "see what else lives under a domain",                 alias: "domain dns crt certificate transparency recon find subdomains" },
   { slug: "calc",        name: "calculator",        desc: "calculate expressions and convert units",            alias: "calculate math arithmetic percentage percent parentheses power square root units measurements convert length weight mass temperature celsius fahrenheit area volume speed duration data bytes metric imperial" }
 ];

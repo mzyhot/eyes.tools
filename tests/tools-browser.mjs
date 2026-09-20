@@ -154,15 +154,6 @@ try {
     await fill('#in', 'hello 🌍'); await click('#enc'); assert.ok((await text('#out')).includes('%F0%9F%8C%8D'));
     await fill('#in', '%ZZ'); await click('#dec'); assert.ok(await text('#err'));
   });
-  await check('subdomains normalize IDNs, filter unsafe rows and recover after invalid searches', async () => {
-    await context.route('**/api/subdomains?**', async route => {
-      const apex = new URL(route.request().url()).searchParams.get('apex');
-      if (apex === 'slow.example') { await new Promise(r => setTimeout(r, 300)); }
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ apex, results: [{ sub: 'a.' + apex, first_seen: '2024-02-29' }, { sub: 'b.' + apex, first_seen: '2024-02-31' }, { sub: 'evil.com', first_seen: '' }] }) }).catch(() => {});
-    });
-    await go('subdomains'); await fill('#domain', 'bücher.de'); await click('#search'); await has('#list', 'a.xn--bcher-kva.de'); assert.equal(await page.locator('#list li').count(), 2); await has('#list', 'date unknown');
-    await fill('#domain', 'slow.example'); await click('#search'); await fill('#domain', 'invalid/path'); await page.locator('#domain').press('Enter'); assert.equal(await page.locator('#search').isDisabled(), false); assert.equal(await page.locator('#results').isHidden(), true);
-  });
   let png;
   await check('image resize exports exact dimensions and EXIF reads PNG metadata', async () => {
     await go('img');

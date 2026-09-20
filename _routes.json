@@ -1,7 +1,6 @@
 {
   "version": 1,
   "include": [
-    "/api/*",
     "/.github/*",
     "/.gitignore",
     "/.vercelignore",
@@ -16,7 +15,6 @@
     "/public-files.mjs",
     "/scripts/*",
     "/share-server.mjs",
-    "/subdomains-core.mjs",
     "/tests/*",
     "/vercel.json"
   ],

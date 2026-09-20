@@ -22,9 +22,9 @@
  *   references `../s.js` incorrectly still renders — it just stops working.
  *
  * And for every JavaScript file outside the vendored builds — the root modules,
- * the two subdomain adapters, these scripts and the tests: that Node itself can
- * parse it, via `node --check`. The adapters run only on their hosting platform,
- * so nothing else here would load them.
+ * the Pages function, these scripts and the tests: that Node itself can parse
+ * it, via `node --check`. The Pages function runs only on its hosting platform,
+ * so nothing else here would load it.
  *
  * Finally, that the generated static-host files are current: `_redirects` and
  * `vercel.json` list exactly the pages in `t/`, and `.vercelignore` and
@@ -65,7 +65,7 @@ for (const file of pages) {
 }
 const sources = [
   ...rootFiles.filter(f => /\.m?js$/.test(f)),
-  ...(await Promise.all(['api', 'functions', 'functions/api', 'scripts', 'tests'].map(async dir =>
+  ...(await Promise.all(['functions', 'scripts', 'tests'].map(async dir =>
     (await readdir(resolve(root, dir))).filter(f => /\.m?js$/.test(f)).map(f => dir + '/' + f)))).flat()
 ];
 for (const file of sources) {
