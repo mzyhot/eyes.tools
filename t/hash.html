@@ -3,16 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>hash · 𓁹𓁹</title>
-<meta name="description" content="md5, sha-1, sha-256, sha-384 and sha-512 of text or a file, computed in your browser.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
 <style>
   /* scoped to this page; tokens only */
   .drop {
@@ -44,104 +37,85 @@
   .check input:disabled { opacity: 0.38; cursor: not-allowed; }
   .check:has(input:disabled) { color: var(--color-dim); opacity: 0.5; cursor: default; }
 </style>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="hash">
-<div class="wrap">
 
-  <header class="top">
-    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
-    <p class="crumb" data-crumb></p>
-    <span class="top__spacer"></span>
-    <button class="tbtn" type="button" data-theme-toggle>theme</button>
-  </header>
+<main class="stack-6">
 
-  <div class="head">
-    <h1 class="h1" data-title></h1>
-    <p class="lede" data-lede></p>
-  </div>
+  <section>
+    <label class="lbl" for="in">text</label>
+    <textarea class="field" id="in" rows="4" spellcheck="false" autocapitalize="off"
+              placeholder="the quick brown fox"></textarea>
 
-  <main class="stack-6">
-
-    <section>
-      <label class="lbl" for="in">text</label>
-      <textarea class="field" id="in" rows="4" spellcheck="false" autocapitalize="off"
-                placeholder="the quick brown fox"></textarea>
-
-      <div class="row mt-3">
-        <div class="seg" role="radiogroup" aria-label="digest encoding">
-          <label><input type="radio" name="enc" value="hex" checked><span>hex</span></label>
-          <label><input type="radio" name="enc" value="b64"><span>base64</span></label>
-        </div>
-        <label class="check"><input type="checkbox" id="uc"><span>uppercase</span></label>
-        <span class="row__spacer"></span>
-        <button class="btn -ghost -sm" type="button" id="paste">paste</button>
-        <button class="btn -ghost -sm" type="button" id="clear">clear</button>
+    <div class="row mt-3">
+      <div class="seg" role="radiogroup" aria-label="digest encoding">
+        <label><input type="radio" name="enc" value="hex" checked><span>hex</span></label>
+        <label><input type="radio" name="enc" value="b64"><span>base64</span></label>
       </div>
+      <label class="check"><input type="checkbox" id="uc"><span>uppercase</span></label>
+      <span class="row__spacer"></span>
+      <button class="btn -ghost -sm" type="button" id="paste">paste</button>
+      <button class="btn -ghost -sm" type="button" id="clear">clear</button>
+    </div>
 
-      <div class="out-head mt-6">
-        <span class="lbl">digests of text</span>
-        <span class="row__spacer"></span>
-        <span class="meta" id="tmeta"></span>
-        <button class="tbtn" type="button" id="tcopy">copy all</button>
-        <button class="tbtn" type="button" id="tdl">download</button>
-      </div>
-      <div id="tout"></div>
-      <p class="err" id="terr"></p>
-      <p class="hint">md5 is fine for checksums against accidental corruption and broken for security — collisions are cheap to manufacture. encoding and case apply to every digest on this page.</p>
-    </section>
+    <div class="out-head mt-6">
+      <span class="lbl">digests of text</span>
+      <span class="row__spacer"></span>
+      <span class="meta" id="tmeta"></span>
+      <button class="tbtn" type="button" id="tcopy">copy all</button>
+      <button class="tbtn" type="button" id="tdl">download</button>
+    </div>
+    <div id="tout"></div>
+    <p class="err" id="terr"></p>
+    <p class="hint">md5 is fine for checksums against accidental corruption and broken for security — collisions are cheap to manufacture. encoding and case apply to every digest on this page.</p>
+  </section>
 
-    <section class="section--ruled">
-      <p class="lbl">file</p>
-      <div class="drop" id="drop">
-        <input class="field" type="file" id="file" aria-label="file to hash">
-        <p class="hint">or drop a file anywhere on this page — it is read locally and never uploaded.</p>
-      </div>
+  <section class="section--ruled">
+    <p class="lbl">file</p>
+    <div class="drop" id="drop">
+      <input class="field" type="file" id="file" aria-label="file to hash">
+      <p class="hint">or drop a file anywhere on this page — it is read locally and never uploaded.</p>
+    </div>
 
-      <div class="row mt-3">
-        <button class="btn -sm" type="button" id="run" disabled>hash file</button>
-        <button class="btn -ghost -sm" type="button" id="fclear" disabled>clear</button>
-        <span class="row__spacer"></span>
-        <span class="meta" id="fmeta" aria-live="polite"></span>
-      </div>
+    <div class="row mt-3">
+      <button class="btn -sm" type="button" id="run" disabled>hash file</button>
+      <button class="btn -ghost -sm" type="button" id="fclear" disabled>clear</button>
+      <span class="row__spacer"></span>
+      <span class="meta" id="fmeta" aria-live="polite"></span>
+    </div>
 
-      <div class="out-head mt-6">
-        <span class="lbl">digests of file</span>
-        <span class="row__spacer"></span>
-        <button class="tbtn" type="button" id="fcopy">copy all</button>
-        <button class="tbtn" type="button" id="fdl">download</button>
-      </div>
-      <div id="fout"></div>
-      <p class="err" id="ferr"></p>
-      <p class="hint">md5 streams in 4 MB chunks. sha digests need a whole-file copy and are limited to 64 MB to protect this tab's memory; larger files still get an md5 checksum.</p>
-    </section>
+    <div class="out-head mt-6">
+      <span class="lbl">digests of file</span>
+      <span class="row__spacer"></span>
+      <button class="tbtn" type="button" id="fcopy">copy all</button>
+      <button class="tbtn" type="button" id="fdl">download</button>
+    </div>
+    <div id="fout"></div>
+    <p class="err" id="ferr"></p>
+    <p class="hint">md5 streams in 4 MB chunks. sha digests need a whole-file copy and are limited to 64 MB to protect this tab's memory; larger files still get an md5 checksum.</p>
+  </section>
 
-    <section class="section--ruled">
-      <label class="lbl" for="cmp">compare</label>
-      <input class="field" type="text" id="cmp" spellcheck="false" autocomplete="off"
-             autocapitalize="off" placeholder="paste an expected digest">
-      <dl class="kv mt-4" aria-live="polite">
-        <dt>reads as</dt><dd id="ckind"></dd>
-        <dt>vs text</dt><dd id="ctext"></dd>
-        <dt>vs file</dt><dd id="cfile"></dd>
-      </dl>
-      <p class="err" id="cerr"></p>
-      <p class="hint">hex is case-insensitive; base64 is case-sensitive. accepts a digest, a checksum-file line, or a labeled line from the results above.</p>
-    </section>
+  <section class="section--ruled">
+    <label class="lbl" for="cmp">compare</label>
+    <input class="field" type="text" id="cmp" spellcheck="false" autocomplete="off"
+           autocapitalize="off" placeholder="paste an expected digest">
+    <dl class="kv mt-4" aria-live="polite">
+      <dt>reads as</dt><dd id="ckind"></dd>
+      <dt>vs text</dt><dd id="ctext"></dd>
+      <dt>vs file</dt><dd id="cfile"></dd>
+    </dl>
+    <p class="err" id="cerr"></p>
+    <p class="hint">hex is case-insensitive; base64 is case-sensitive. accepts a digest, a checksum-file line, or a labeled line from the results above.</p>
+  </section>
 
-  </main>
-
-  <footer class="foot">
-    <a href="../index.html">← all tools</a>
-    <span class="row__spacer"></span>
-    <span>runs in your browser · nothing is uploaded</span>
-  </footer>
-
-</div>
+</main>
 
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
 <script>
-(function () {
+E.tool(function () {
   "use strict";
 
   /* ══ md5 ═══════════════════════════════════════════════════════════════
@@ -649,7 +623,7 @@
   input.value = E.param("t") || "";
   doText();
   compare();
-})();
+});
 </script>
 </body>
 </html>

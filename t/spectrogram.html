@@ -3,28 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>spectrogram · 𓁹𓁹</title>
-<meta name="description" content="draw a spectrogram from browser-supported audio files.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
 <style>#canvas{display:block;width:100%;height:auto;background:var(--color-paper-2)}</style>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="spectrogram">
-<div class="wrap">
-  <header class="top"><a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" type="button" data-theme-toggle>theme</button></header>
-  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
-  <main class="stack-6">
-    <section><label class="lbl" for="file">audio file</label><input class="field" id="file" type="file" accept="audio/*,.wav,.wave,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.webm"><p class="hint">typically wav, mp3, m4a/aac, flac, ogg/opus/vorbis and webm · codec support depends on your browser</p><p class="err" id="err" role="alert"></p></section>
-    <section><figure class="figure"><canvas id="canvas" width="960" height="480" role="img" aria-label="audio spectrogram"></canvas></figure><div class="row mt-2"><button class="btn" id="dl" type="button" disabled>download png</button><span class="hint" id="meta" aria-live="polite"></span></div></section>
-  </main>
-  <footer class="foot"><a href="../index.html">← all tools</a></footer>
-</div>
+
+<main class="stack-6">
+  <section><label class="lbl" for="file">audio file</label><input class="field" id="file" type="file" accept="audio/*,.wav,.wave,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.webm"><p class="hint">typically wav, mp3, m4a/aac, flac, ogg/opus/vorbis and webm · codec support depends on your browser</p><p class="err" id="err" role="alert"></p></section>
+  <section><figure class="figure"><canvas id="canvas" width="960" height="480" role="img" aria-label="audio spectrogram"></canvas></figure><div class="row mt-2"><button class="btn" id="dl" type="button" disabled>download png</button><span class="hint" id="meta" aria-live="polite"></span></div></section>
+</main>
+
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
 <script>
@@ -48,7 +40,7 @@
      · The picture is assembled in one ImageData buffer and handed to the canvas
        in a single putImageData, rather than as ~460,000 one-pixel fillRect
        calls each preceded by a globalAlpha and fillStyle change. */
-(function () {
+E.tool(function () {
   "use strict";
   var c = E.qs("#canvas"), ctx = c.getContext("2d"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl"), activeContext = null, filename = "spectrogram", loadSeq = 0, N = 1024, MAX_FILE = 150 * 1024 * 1024;
   var HALF = N / 2;
@@ -232,7 +224,7 @@
   });
   E.on(window, "pagehide", function () { loadSeq++; closeContext(activeContext); activeContext = null; });
   clear();
-})();
+});
 </script>
 </body>
 </html>

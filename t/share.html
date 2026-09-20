@@ -3,16 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>share · 𓁹𓁹</title>
-<meta name="description" content="send files or text over an encrypted WebRTC connection.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
 <style>
 html, body { overflow-x: clip; }
 body[data-tool="share"] [hidden] { display: none !important; }
@@ -65,59 +58,54 @@ body[data-tool="share"] [hidden] { display: none !important; }
   .share-toolbar { align-items:flex-start; }
 }
 </style>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="share">
-<div class="wrap">
-  <header class="top">
-    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
-    <p class="crumb" data-crumb></p><span class="top__spacer"></span>
-    <button class="tbtn" type="button" data-theme-toggle>theme</button>
-  </header>
-  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
-  <main class="stack-6">
-    <section aria-label="devices">
-      <div class="share-toolbar">
-        <p class="lbl"><span id="device-count">devices</span> · <span id="network-label">on your network</span></p>
-        <button class="btn -ghost -sm" type="button" id="room-button" disabled>connect another network</button>
+
+<main class="stack-6">
+  <section aria-label="devices">
+    <div class="share-toolbar">
+      <p class="lbl"><span id="device-count">devices</span> · <span id="network-label">on your network</span></p>
+      <button class="btn -ghost -sm" type="button" id="room-button" disabled>connect another network</button>
+    </div>
+    <div class="share-space">
+      <div id="empty" class="share-empty">
+        <p>ready when you are.</p>
+        <p class="hint" id="empty-note">open share on another device using the same wi-fi.</p>
       </div>
-      <div class="share-space">
-        <div id="empty" class="share-empty">
-          <p>ready when you are.</p>
-          <p class="hint" id="empty-note">open share on another device using the same wi-fi.</p>
-        </div>
-        <ul class="device-list" id="devices" aria-label="available devices"></ul>
-      </div>
-      <div class="self">
-        <p class="hint">you are <span class="mono" id="your-name">…</span></p>
-        <p class="hint" id="status" role="status">finding devices…</p>
-      </div>
-      <p class="hint">press send files on a device · or drop files onto it</p>
-      <p class="err" id="err" role="alert"></p>
-      <input type="file" id="files" aria-label="files to send" multiple hidden>
-    </section>
-    <section class="room-panel" id="room-panel" aria-label="room invitation" hidden>
-      <div class="stack-2">
-        <label class="lbl" for="room-link">one link. both devices.</label>
-        <p class="hint">open this link or scan the code on the other device. anyone with the link can join.</p>
-        <input class="field" id="room-link" readonly>
-        <div class="row"><button class="btn -sm" id="copy-room" type="button">copy link</button><button class="tbtn" id="leave-room" type="button">leave room</button></div>
-      </div>
-      <div id="room-qr" role="img" aria-label="scan to join this room"></div>
-    </section>
-    <section id="transfers-section" aria-label="transfers" hidden>
-      <p class="lbl">transfers</p>
-      <ul class="transfer-list" id="transfers"></ul>
-    </section>
-    <details class="share-help">
-      <summary>can’t see your device?</summary>
-      <p class="hint">Keep share open on both devices. On the same Wi-Fi, they appear automatically. On another network, open the same room link on both devices. VPNs and some networks may need a room link too.</p>
-      <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Up to 256 MB per transfer; remove received files to free space.</p>
-      <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site’s server storage. The server handles device discovery and connection details. A relay may carry encrypted data when configured.</p>
-      <button class="tbtn" id="retry" type="button">refresh devices</button>
-    </details>
-  </main>
-  <footer class="foot"><a href="../index.html">← all tools</a><span class="row__spacer"></span><span>device to device · keep both tabs open</span></footer>
-</div>
+      <ul class="device-list" id="devices" aria-label="available devices"></ul>
+    </div>
+    <div class="self">
+      <p class="hint">you are <span class="mono" id="your-name">…</span></p>
+      <p class="hint" id="status" role="status">finding devices…</p>
+    </div>
+    <p class="hint">press send files on a device · or drop files onto it</p>
+    <p class="err" id="err" role="alert"></p>
+    <input type="file" id="files" aria-label="files to send" multiple hidden>
+  </section>
+  <section class="room-panel" id="room-panel" aria-label="room invitation" hidden>
+    <div class="stack-2">
+      <label class="lbl" for="room-link">one link. both devices.</label>
+      <p class="hint">open this link or scan the code on the other device. anyone with the link can join.</p>
+      <input class="field" id="room-link" readonly>
+      <div class="row"><button class="btn -sm" id="copy-room" type="button">copy link</button><button class="tbtn" id="leave-room" type="button">leave room</button></div>
+    </div>
+    <div id="room-qr" role="img" aria-label="scan to join this room"></div>
+  </section>
+  <section id="transfers-section" aria-label="transfers" hidden>
+    <p class="lbl">transfers</p>
+    <ul class="transfer-list" id="transfers"></ul>
+  </section>
+  <details class="share-help">
+    <summary>can’t see your device?</summary>
+    <p class="hint">Keep share open on both devices. On the same Wi-Fi, they appear automatically. On another network, open the same room link on both devices. VPNs and some networks may need a room link too.</p>
+    <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Up to 256 MB per transfer; remove received files to free space.</p>
+    <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site’s server storage. The server handles device discovery and connection details. A relay may carry encrypted data when configured.</p>
+    <button class="tbtn" id="retry" type="button">refresh devices</button>
+  </details>
+</main>
+
 <dialog id="text-dialog" aria-labelledby="text-title">
   <div class="stack">
     <div><p class="lbl" id="text-title">send text to</p><p id="text-to"></p></div>
@@ -126,11 +114,11 @@ body[data-tool="share"] [hidden] { display: none !important; }
     <div class="row"><button class="btn" id="send-text" type="button">send text</button><button class="tbtn" id="text-cancel" type="button">cancel</button></div>
   </div>
 </dialog>
+
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
-<script src="../qrcode.min.js"></script>
 <script>
-(function () {
+E.tool(function () {
   'use strict';
   const $ = s => document.querySelector(s);
   const LIMIT = 256 * 1024 * 1024, RETAIN = 512 * 1024 * 1024, CHUNK = 16384;
@@ -675,8 +663,7 @@ body[data-tool="share"] [hidden] { display: none !important; }
   if (!window.isSecureContext || !window.RTCPeerConnection || !window.crypto?.subtle) { error('open share over https in a browser that supports WebRTC.'); $('#status').textContent = 'unavailable'; }
   else if (location.protocol === 'file:') { error('open share on the website to find other devices.'); $('#status').textContent = 'offline'; }
   else if (readRoom()) { showRoom(); discover(); }
-})();
-
+});
 </script>
 </body>
 </html>

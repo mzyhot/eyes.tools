@@ -3,46 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>qr · 𓁹𓁹</title>
-<meta name="description" content="turn text or a link into a qr code.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
 <style>
   #qr { display:grid; grid-template-columns:minmax(0,1fr); place-items:center; width:fit-content; max-width:100%; min-width:0; padding:4px; background:var(--color-qr-paper); }
   #qr:empty { display:none; }
   #qr img, #qr canvas { max-width:100%; height:auto; }
   .figure { overflow:auto; padding:0; background:transparent; }
 </style>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="qr">
-<div class="wrap">
-  <header class="top"><a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" type="button" data-theme-toggle>theme</button></header>
-  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
-  <main class="stack-6">
-    <section>
-      <label class="lbl" for="in">text or link</label>
-      <textarea class="field" id="in">https://example.com</textarea>
-      <div class="grid2 mt-2"><div><label class="lbl" for="size">size</label><select class="field" id="size"><option>192</option><option selected>256</option><option>384</option><option>512</option></select></div><div><label class="lbl" for="level">error correction</label><select class="field" id="level"><option value="L">low</option><option value="M" selected>medium</option><option value="Q">quartile</option><option value="H">high</option></select></div></div>
-      <p class="err" id="err" role="alert"></p>
-    </section>
-    <section>
-      <figure class="figure"><div id="qr" role="img" aria-label="generated qr code"></div></figure>
-      <div class="row mt-2"><button class="btn" id="dl" type="button" disabled>download png</button><button class="btn -ghost" id="dl-svg" type="button" disabled>download svg</button></div>
-    </section>
-  </main>
-  <footer class="foot"><a href="../index.html">← all tools</a></footer>
-</div>
+
+<main class="stack-6">
+  <section>
+    <label class="lbl" for="in">text or link</label>
+    <textarea class="field" id="in">https://example.com</textarea>
+    <div class="grid2 mt-2"><div><label class="lbl" for="size">size</label><select class="field" id="size"><option>192</option><option selected>256</option><option>384</option><option>512</option></select></div><div><label class="lbl" for="level">error correction</label><select class="field" id="level"><option value="L">low</option><option value="M" selected>medium</option><option value="Q">quartile</option><option value="H">high</option></select></div></div>
+    <p class="err" id="err" role="alert"></p>
+  </section>
+  <section>
+    <figure class="figure"><div id="qr" role="img" aria-label="generated qr code"></div></figure>
+    <div class="row mt-2"><button class="btn" id="dl" type="button" disabled>download png</button><button class="btn -ghost" id="dl-svg" type="button" disabled>download svg</button></div>
+  </section>
+</main>
+
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
-<script src="../qrcode.min.js"></script>
 <script>
-(function () {
+E.tool(function () {
   "use strict";
   var input = E.qs("#in"), host = E.qs("#qr"), error = E.qs("#err"), download = E.qs("#dl"), svgButton = E.qs("#dl-svg"), svgText = "", result = null;
   /* Resolve a colour token to #rrggbb by painting one pixel. The tokens are
@@ -109,7 +100,7 @@
   var query = E.param("t");
   if (query) input.value = query;
   run();
-})();
+});
 </script>
 </body>
 </html>

@@ -6,6 +6,12 @@
  * ship. Everything here is fast and has no dependencies; `npm test` covers
  * behaviour, and `npm run test:browser` covers the pages in a real browser.
  *
+ * It also verifies the shape every page shares, because the shared layer only
+ * works if pages stay out of its way: a page owns its `<main>` and one script,
+ * the registry owns its title, header, lede, footer note and dependencies, and
+ * `site.js` owns everything else. A page that writes its own header, or names a
+ * script the registry should name, fails here.
+ *
  * What it verifies, for `index.html`, `404.html` and every page in `t/`:
  *
  *   Inline scripts parse. Each one is compiled with `new Script`, which raises
@@ -39,6 +45,7 @@ import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PUBLIC_ROOT_FILES } from '../public-files.mjs';
 import { pageSlugs, pagesRedirects, pagesRoutes, privateEntries, vercelConfig, vercelIgnore } from './static-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -72,6 +79,40 @@ for (const file of sources) {
   const result = spawnSync(process.execPath, ['--check', resolve(root, file)], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
 }
+/* The registry and `t/` must agree, and a page must keep to the shared shape. */
+const registry = new Map();
+{
+  const source = await readFile(resolve(root, 'tools.js'), 'utf8');
+  const scope = { window: {} };
+  new Script(source, { filename: 'tools.js' }).runInNewContext(scope);
+  for (const tool of scope.window.TOOLS) registry.set(tool.slug, tool);
+}
+const publicFiles = new Set(PUBLIC_ROOT_FILES);
+const pagesInTools = (await readdir(resolve(root, 't'))).filter(f => f.endsWith('.html')).map(f => f.slice(0, -'.html'.length));
+for (const slug of registry.keys()) {
+  assert.ok(pagesInTools.includes(slug), `tools.js lists ${slug}, but t/${slug}.html does not exist`);
+}
+for (const slug of pagesInTools) {
+  const html = await readFile(resolve(root, 't', slug + '.html'), 'utf8');
+  const tool = registry.get(slug);
+  if (!tool) {
+    assert.match(html, /redirect\.js/, `t/${slug}.html has no row in tools.js and is not a redirect`);
+    continue;
+  }
+  assert.match(html, new RegExp(`<body data-tool="${slug}"`), `t/${slug}.html: data-tool must be "${slug}"`);
+  assert.match(html, /E\.tool\(function/, `t/${slug}.html: wrap the tool's script in E.tool(function () { … })`);
+  /* The shell is everything outside the tool's own markup and script. */
+  const shell = html.replace(/<main\b[\s\S]*?<\/main>/g, '').replace(/<script[\s\S]*?<\/script>/g, '');
+  for (const chrome of ['<header', '<footer', 'class="wrap"', 'data-crumb', 'data-title', 'data-lede', '<title>', 'name="description"']) {
+    assert.ok(!shell.includes(chrome), `t/${slug}.html: ${chrome} comes from site.js and tools.js, not the page`);
+  }
+  for (const dep of tool.deps || []) {
+    assert.ok(publicFiles.has(dep), `tools.js: ${slug} depends on ${dep}, which public-files.mjs does not publish`);
+    assert.ok(!html.includes('"../' + dep + '"'), `t/${slug}.html: ${dep} is loaded from the registry's deps, not the page`);
+  }
+}
+console.log(`PASS ${registry.size} registry rows match their pages and the shared page shape`);
+
 const slugs = await pageSlugs();
 assert.equal(await readFile(resolve(root, '_redirects'), 'utf8'), pagesRedirects(slugs), '_redirects is out of date; run node scripts/static-routes.mjs');
 assert.equal(await readFile(resolve(root, 'vercel.json'), 'utf8'), vercelConfig(slugs), 'vercel.json is out of date; run node scripts/static-routes.mjs');

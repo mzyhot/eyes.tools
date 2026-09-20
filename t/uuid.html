@@ -3,121 +3,95 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>uuid · 𓁹𓁹</title>
-<meta name="description" content="uuid v4, uuid v7, ulid and short ids, generated in bulk in your browser.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
 <style>
   /* scoped: the shared .out-head is a single line; three affordances need to wrap at 320px */
   .out-head { flex-wrap: wrap; }
   .check input:disabled { cursor: not-allowed; }
   .check:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
 </style>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="uuid">
-<div class="wrap">
 
-  <header class="top">
-    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
-    <p class="crumb" data-crumb></p>
-    <span class="top__spacer"></span>
-    <button class="tbtn" type="button" data-theme-toggle>theme</button>
-  </header>
+<main class="stack-6">
 
-  <div class="head">
-    <h1 class="h1" data-title></h1>
-    <p class="lede" data-lede></p>
-  </div>
-
-  <main class="stack-6">
-
-    <div class="stack">
-
-      <div>
-        <span class="lbl" id="kind-lbl">kind</span>
-        <div class="seg" role="radiogroup" aria-labelledby="kind-lbl">
-          <label><input type="radio" name="kind" value="v4" checked><span>uuid v4</span></label>
-          <label><input type="radio" name="kind" value="v7"><span>uuid v7</span></label>
-          <label><input type="radio" name="kind" value="ulid"><span>ulid</span></label>
-          <label><input type="radio" name="kind" value="short"><span>short</span></label>
-        </div>
-      </div>
-
-      <div class="grid2">
-        <div>
-          <label class="lbl" for="n">how many</label>
-          <input class="field" id="n" type="number" min="1" max="1000" step="1" value="10"
-                 inputmode="numeric" autocomplete="off">
-        </div>
-        <div id="lenwrap" hidden>
-          <label class="lbl" for="len">length</label>
-          <input class="field" id="len" type="number" min="1" max="64" step="1" value="21"
-                 inputmode="numeric" autocomplete="off">
-        </div>
-      </div>
-
-      <div id="alphawrap" hidden>
-        <label class="lbl" for="alpha">alphabet</label>
-        <input class="field" id="alpha" type="text" spellcheck="false" autocomplete="off"
-               autocapitalize="off" autocorrect="off">
-        <p class="hint" id="alphahint"></p>
-      </div>
-
-      <div class="row">
-        <label class="check"><input type="checkbox" id="upper"><span>uppercase</span></label>
-        <label class="check"><input type="checkbox" id="braces"><span>braces</span></label>
-        <label class="check"><input type="checkbox" id="hyphens" checked><span>hyphens</span></label>
-      </div>
-
-      <p class="err" id="err" role="alert"></p>
-
-    </div>
+  <div class="stack">
 
     <div>
-      <div class="out-head">
-        <span class="lbl" id="stat" aria-live="polite"></span>
-        <span class="row__spacer"></span>
-        <button class="tbtn" type="button" id="regen">regenerate</button>
-        <button class="tbtn" type="button" id="copy" disabled>copy all</button>
-        <button class="tbtn" type="button" id="dl" disabled>download .txt</button>
+      <span class="lbl" id="kind-lbl">kind</span>
+      <div class="seg" role="radiogroup" aria-labelledby="kind-lbl">
+        <label><input type="radio" name="kind" value="v4" checked><span>uuid v4</span></label>
+        <label><input type="radio" name="kind" value="v7"><span>uuid v7</span></label>
+        <label><input type="radio" name="kind" value="ulid"><span>ulid</span></label>
+        <label><input type="radio" name="kind" value="short"><span>short</span></label>
       </div>
-      <div class="out out--scroll" id="out"></div>
     </div>
 
-    <div class="section--ruled">
-      <span class="lbl">notes</span>
-      <dl class="kv">
-        <dt>v4</dt>
-        <dd>122 random bits from crypto.getRandomValues; version nibble 4 and variant bits 10 fixed per RFC 9562.</dd>
-        <dt>v7</dt>
-        <dd>48-bit unix millisecond, then a 12-bit counter seeded low at each new millisecond, then 62 random bits. Ids from one run are strictly increasing, so sorting them as text restores generation order.</dd>
-        <dt>ulid</dt>
-        <dd>48-bit millisecond in 10 crockford base32 characters, 80 random bits in 16 more. Within one millisecond the random field is incremented, keeping the run ordered.</dd>
-        <dt>short</dt>
-        <dd>Characters drawn uniformly from the alphabet by rejection sampling over random bytes — no modulo bias.</dd>
-      </dl>
+    <div class="grid2">
+      <div>
+        <label class="lbl" for="n">how many</label>
+        <input class="field" id="n" type="number" min="1" max="1000" step="1" value="10"
+               inputmode="numeric" autocomplete="off">
+      </div>
+      <div id="lenwrap" hidden>
+        <label class="lbl" for="len">length</label>
+        <input class="field" id="len" type="number" min="1" max="64" step="1" value="21"
+               inputmode="numeric" autocomplete="off">
+      </div>
     </div>
 
-  </main>
+    <div id="alphawrap" hidden>
+      <label class="lbl" for="alpha">alphabet</label>
+      <input class="field" id="alpha" type="text" spellcheck="false" autocomplete="off"
+             autocapitalize="off" autocorrect="off">
+      <p class="hint" id="alphahint"></p>
+    </div>
 
-  <footer class="foot">
-    <a href="../index.html">← all tools</a>
-    <span class="row__spacer"></span>
-    <span>runs in your browser · nothing is uploaded</span>
-  </footer>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="upper"><span>uppercase</span></label>
+      <label class="check"><input type="checkbox" id="braces"><span>braces</span></label>
+      <label class="check"><input type="checkbox" id="hyphens" checked><span>hyphens</span></label>
+    </div>
 
-</div>
+    <p class="err" id="err" role="alert"></p>
+
+  </div>
+
+  <div>
+    <div class="out-head">
+      <span class="lbl" id="stat" aria-live="polite"></span>
+      <span class="row__spacer"></span>
+      <button class="tbtn" type="button" id="regen">regenerate</button>
+      <button class="tbtn" type="button" id="copy" disabled>copy all</button>
+      <button class="tbtn" type="button" id="dl" disabled>download .txt</button>
+    </div>
+    <div class="out out--scroll" id="out"></div>
+  </div>
+
+  <div class="section--ruled">
+    <span class="lbl">notes</span>
+    <dl class="kv">
+      <dt>v4</dt>
+      <dd>122 random bits from crypto.getRandomValues; version nibble 4 and variant bits 10 fixed per RFC 9562.</dd>
+      <dt>v7</dt>
+      <dd>48-bit unix millisecond, then a 12-bit counter seeded low at each new millisecond, then 62 random bits. Ids from one run are strictly increasing, so sorting them as text restores generation order.</dd>
+      <dt>ulid</dt>
+      <dd>48-bit millisecond in 10 crockford base32 characters, 80 random bits in 16 more. Within one millisecond the random field is incremented, keeping the run ordered.</dd>
+      <dt>short</dt>
+      <dd>Characters drawn uniformly from the alphabet by rejection sampling over random bytes — no modulo bias.</dd>
+    </dl>
+  </div>
+
+</main>
 
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
 <script>
-(function () {
+E.tool(function () {
   "use strict";
 
   var HEX = "0123456789abcdef";
@@ -365,7 +339,7 @@
   })();
 
   run();
-})();
+});
 </script>
 </body>
 </html>

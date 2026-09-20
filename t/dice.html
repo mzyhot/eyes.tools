@@ -3,44 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>dice · 𓁹𓁹</title>
-<meta name="description" content="roll verified dice with the league of entropy.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="dice">
-<div class="wrap">
-  <header class="top"><a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" type="button" data-theme-toggle>theme</button></header>
-  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
-  <main class="stack-6">
-    <section class="grid2">
-      <div><label class="lbl" for="dice">dice</label><input class="field" id="dice" type="number" min="1" max="100" value="2" inputmode="numeric"></div>
-      <div><label class="lbl" for="sides">sides</label><input class="field" id="sides" type="number" min="2" max="1000000" value="6" inputmode="numeric"></div>
-    </section>
-    <section>
-      <button class="btn" id="roll" type="button">roll</button>
-      <p class="err" id="err" role="alert"></p>
-      <div class="display mt-4" id="total" aria-live="polite"></div>
-      <div class="out mt-2" id="rolls" aria-live="polite"></div>
-      <button class="btn -ghost mt-2" id="copy" type="button" disabled>copy result</button>
-      <p class="hint mt-2">fetches a public beacon from cloudflare drand. your dice settings stay in this browser.</p>
-      <dl class="kv mt-4" id="proof" hidden><dt>verification</dt><dd>signature verified</dd><dt>round</dt><dd id="round"></dd><dt>chain</dt><dd id="chain"></dd></dl>
-    </section>
-  </main>
-  <footer class="foot"><a href="../index.html">← all tools</a></footer>
-</div>
+
+<main class="stack-6">
+  <section class="grid2">
+    <div><label class="lbl" for="dice">dice</label><input class="field" id="dice" type="number" min="1" max="100" value="2" inputmode="numeric"></div>
+    <div><label class="lbl" for="sides">sides</label><input class="field" id="sides" type="number" min="2" max="1000000" value="6" inputmode="numeric"></div>
+  </section>
+  <section>
+    <button class="btn" id="roll" type="button">roll</button>
+    <p class="err" id="err" role="alert"></p>
+    <div class="display mt-4" id="total" aria-live="polite"></div>
+    <div class="out mt-2" id="rolls" aria-live="polite"></div>
+    <button class="btn -ghost mt-2" id="copy" type="button" disabled>copy result</button>
+    <p class="hint mt-2">fetches a public beacon from cloudflare drand. your dice settings stay in this browser.</p>
+    <dl class="kv mt-4" id="proof" hidden><dt>verification</dt><dd>signature verified</dd><dt>round</dt><dd id="round"></dd><dt>chain</dt><dd id="chain"></dd></dl>
+  </section>
+</main>
+
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
-<script src="../drand-client.min.js"></script>
-<script src="../drand-tools.js"></script>
 <script>
-(function () {
+E.tool(function () {
   "use strict";
   var b = E.qs("#roll"), er = E.qs("#err"), totalEl = E.qs("#total"), rollsEl = E.qs("#rolls"), proof = E.qs("#proof");
   var copy = E.qs("#copy"), report = "";
@@ -92,7 +82,7 @@
       delete b.dataset.state;
     });
   });
-})();
+});
 </script>
 </body>
 </html>

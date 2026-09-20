@@ -1,9 +1,9 @@
 /* 𓁹𓁹 — shared runtime.
  *
- * A classic script: no bundler, no modules, no dependencies. Every tool page
- * loads this file directly and the site must keep working from `file://`, so
- * nothing here may assume a server, a build step, or modern syntax that older
- * mobile browsers reject.
+ * A classic script: no bundler, no modules, no dependencies. Every page loads
+ * this file directly and the site must keep working from `file://`, so nothing
+ * here may assume a server, a build step, or modern syntax that older mobile
+ * browsers reject.
  *
  * The file exposes exactly one global, `E`, documented in `_dev/CONTRACT.md`
  * section 6. Tool pages are forbidden from editing this file, which makes `E`
@@ -13,15 +13,23 @@
  *   1. DOM helpers (`qs`, `qsa`, `on`, `el`, `esc`, `debounce`).
  *   2. Feedback and export helpers (`flash`, `copy`, `download`, `fail`, `bytes`).
  *   3. Randomness and URL-state helpers (`rand`, `param`, `b64url`).
- *   4. Theme persistence, applied before paint by the inline script in each page
- *      and kept in sync across tabs here.
- *   5. `boot()`, which wires the header, the registry-driven titles, the
- *      `data-copy` buttons, and the Escape-to-index shortcut.
+ *   4. Theme persistence, applied before paint by `theme.js` and kept in sync
+ *      across tabs here.
+ *   5. `boot()`, which builds every page's chrome — the head tags, the header,
+ *      the title block and the footer — from `site.js` and `tools.js`, then
+ *      loads the scripts the registry lists for this tool and runs the page's
+ *      own code through `E.tool`.
+ *
+ * A page therefore contains its `<main>` and one script, and nothing else. To
+ * change the chrome everywhere, change `site.js`; to change one tool's header,
+ * lede, dependencies or footer note, change its row in `tools.js`.
  */
 (function () {
   "use strict";
 
   var E = {};
+  var SITE = window.SITE || {};
+  var LABELS = SITE.labels || {};
 
   /* ── dom ─────────────────────────────────────────────── */
 
@@ -100,6 +108,19 @@
    */
   E.esc = function (s) {
     return String(s).replace(ESCAPE_RE, escapeChar);
+  };
+
+  /**
+   * Fill `{name}` placeholders in a string from `site.js`, so copy that varies
+   * by state is still written in one place.
+   * @param {string} template Text containing `{name}` markers.
+   * @param {Object<string, *>} values Replacements.
+   * @returns {string}
+   */
+  E.fill = function (template, values) {
+    return String(template == null ? "" : template).replace(/\{(\w+)\}/g, function (match, key) {
+      return Object.prototype.hasOwnProperty.call(values || {}, key) ? String(values[key]) : match;
+    });
   };
 
   /**
@@ -313,17 +334,34 @@
     }
   };
 
+  /* ── where the site's own files are ──────────────────── */
+
+  /* One page may sit at `/case`, at `t/case.html` on disk, or — for the 404 —
+     at any address at all. Everything the chrome links to is resolved through
+     these two values rather than written into thirty files. */
+  var FROM_DISK = location.protocol === "file:";
+  var IN_TOOLS_DIR = !!(document.body && document.body.dataset.tool);
+
+  /** The prefix that reaches a published root file, such as `qrcode.min.js`. */
+  E.base = FROM_DISK ? (IN_TOOLS_DIR ? "../" : "") : "/";
+  /** The index's address from wherever this page is. */
+  E.home = FROM_DISK ? E.base + "index.html" : "/";
+  /** A tool's address from wherever this page is. */
+  E.toolHref = function (slug) { return FROM_DISK ? E.base + "t/" + slug + ".html" : E.base + slug; };
+
   /* ── theme ───────────────────────────────────────────── */
 
-  /* Every page repeats a tiny inline script in <head> that reads this key and
-     sets data-theme before first paint, so the choice never flashes. The code
-     below owns everything after that: toggling, the address-bar colour, and
-     mirroring a change made in another tab. */
-  var KEY = "eyes.theme";
+  /* `theme.js` has already applied the stored choice in the head, before the
+     first paint. The code below owns everything after that: toggling, the
+     address-bar colour, and mirroring a change made in another tab. */
+  var KEY = (SITE.storage && SITE.storage.theme) || "eyes.theme";
+  var DEFAULT_THEME = (SITE.storage && SITE.storage.themeDefault) || "dark";
+  var THEME_COLOR = SITE.themeColor || {};
 
   /** @returns {"dark"|"light"} The theme in force right now. */
   function currentTheme() {
-    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    var set = document.documentElement.getAttribute("data-theme");
+    return set === "light" || set === "dark" ? set : DEFAULT_THEME;
   }
 
   /* Keep every theme button describing what it will do, not what is selected —
@@ -331,17 +369,17 @@
      the state. */
   function syncThemeControls() {
     var current = currentTheme(), next = current === "dark" ? "light" : "dark";
-    var label = "Switch to " + next + " mode";
+    var label = E.fill(LABELS.themeSwitch || "Switch to {next} mode", { next: next });
     E.qsa("[data-theme-toggle]").forEach(function (b) {
-      b.textContent = "theme";
-      b.setAttribute("aria-label", label + ". Current theme: " + current + ".");
+      b.textContent = LABELS.theme || "theme";
+      b.setAttribute("aria-label", label + E.fill(LABELS.themeCurrent || "", { current: current }));
       b.title = label;
     });
   }
 
   /* Apply a stored preference. With none stored the attribute is removed, which
-     leaves the dark palette tokens.css defines on :root — the site is dark by
-     default and does not follow the system setting. */
+     leaves the default palette tokens.css defines on :root — the site does not
+     follow the system setting. */
   function applyTheme(value) {
     if (value === "dark" || value === "light") document.documentElement.setAttribute("data-theme", value);
     else document.documentElement.removeAttribute("data-theme");
@@ -350,18 +388,18 @@
       meta.push(E.el("meta", { name: "theme-color" }));
       document.head.appendChild(meta[0]);
     }
-    /* Keep the address-bar colour on the page's paper. Any `media` condition is
-       dropped so a browser never picks a colour for a theme that is not shown. */
+    /* Any `media` condition is dropped so a browser never picks a colour for a
+       theme that is not shown. */
     meta.forEach(function (m) {
       m.removeAttribute("media");
-      m.content = currentTheme() === "dark" ? "#070707" : "#fbfbfb";
+      m.content = THEME_COLOR[currentTheme()] || "";
     });
     syncThemeControls();
   }
 
-  /** Theme preference, persisted in localStorage under `eyes.theme`. */
+  /** Theme preference, persisted in localStorage under `SITE.storage.theme`. */
   E.theme = {
-    /** @returns {"dark"|"light"|null} The stored choice, or null for the default (dark). */
+    /** @returns {"dark"|"light"|null} The stored choice, or null for the default. */
     get: function () { try { return localStorage.getItem(KEY); } catch (e) { return null; } },
     /** @param {"dark"|"light"|null} v Choice to store; falsy clears it. */
     set: function (v) {
@@ -373,76 +411,186 @@
       E.theme.set(currentTheme() === "dark" ? "light" : "dark");
     }
   };
-  applyTheme(E.theme.get());
-  /* A storage event fires only in the *other* tabs, so this mirrors a toggle
-     across every open tool without a broadcast channel. */
-  E.on(window, "storage", function (e) {
-    if (e.key === KEY || e.key === null) applyTheme(E.theme.get());
-  });
 
-  /* The wordmark stays as the literal Unicode text already present in the HTML.
-     Redrawing or animating it would make it differ from U+13079. This hook only
-     marks the element as processed and names it for assistive technology. */
+  /* The wordmark stays as the literal Unicode text from `site.js`. Redrawing or
+     animating it would make it differ from U+13079. This hook only marks the
+     element as processed and names it for assistive technology. */
   E.eyes = function (host) {
     if (!host) return;
     host.dataset.built = "1";
-    if (host.tagName === "A" && !host.hasAttribute("aria-label")) host.setAttribute("aria-label", "𓁹𓁹 — all tools");
+    if (host.tagName === "A" && !host.hasAttribute("aria-label")) {
+      host.setAttribute("aria-label", LABELS.homeAria || SITE.wordmark || "");
+    }
+  };
+
+  /* ── the chrome every page shares ────────────────────── */
+
+  /* The registry entry for this page, or null on the index and the 404. */
+  function registryEntry() {
+    var slug = document.body.dataset.tool;
+    if (!slug || !window.TOOLS) return null;
+    return window.TOOLS.filter(function (t) { return t.slug === slug; })[0] || null;
+  }
+
+  /** Title, description and icon, from the registry or `site.js`. */
+  function buildHead(entry, kind) {
+    var copy = kind === "not-found" ? SITE.notFound || {} : null;
+    document.title = entry ? entry.name + (SITE.titleSuffix || "")
+      : copy ? copy.title + (SITE.titleSuffix || "") : SITE.title || "";
+    var description = entry ? entry.meta || entry.desc : copy ? null : SITE.description;
+    if (description && !E.qs('meta[name="description"]')) {
+      document.head.appendChild(E.el("meta", { name: "description", content: description }));
+    }
+    if (SITE.icon && !E.qs('link[rel="icon"]')) {
+      document.head.appendChild(E.el("link", { rel: "icon", type: "image/svg+xml", href: E.base + SITE.icon }));
+    }
+  }
+
+  /** The wordmark, breadcrumb and theme toggle. */
+  function buildHeader(entry, kind) {
+    var wordmark = E.el("a", { class: kind === "tool" ? "eyes" : "eyes eyes--lg", href: E.home, "data-eyes": "", text: SITE.wordmark || "" });
+    var parts = [wordmark];
+    if (entry) {
+      var crumb = E.el("p", { class: "crumb" }, ["/ "]);
+      crumb.appendChild(E.el("b", { text: entry.name }));
+      parts.push(crumb);
+    }
+    parts.push(E.el("span", { class: "top__spacer" }));
+    parts.push(E.el("button", { class: "tbtn", type: "button", "data-theme-toggle": "", text: LABELS.theme || "theme" }));
+    return E.el("header", { class: kind === "index" ? "top directory-top" : "top" }, parts);
+  }
+
+  /** The `<h1>` and lede above a tool, from the registry. */
+  function buildTitleBlock(entry) {
+    return E.el("div", { class: "head" }, [
+      E.el("h1", { class: "h1", text: entry.name }),
+      E.el("p", { class: "lede", text: entry.desc })
+    ]);
+  }
+
+  /** The footer: the way back, and what the page does with your data. */
+  function buildFooter(entry, kind) {
+    var parts = [];
+    if (kind === "tool") parts.push(E.el("a", { href: E.home, text: LABELS.home || "" }));
+    parts.push(E.el("span", { class: "row__spacer" }));
+    var note = kind === "index" ? (SITE.footer || {}).index : (entry && entry.note) || (SITE.footer || {}).local;
+    if (note) parts.push(E.el("span", { text: note }));
+    return E.el("footer", { class: kind === "index" ? "foot directory-foot" : "foot" }, parts);
+  }
+
+  /** The skip link, which is the first thing a keyboard reaches. */
+  function buildSkipLink(main, kind) {
+    if (!main.id) main.id = "main-content";
+    if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+    var skip = E.el("a", { class: "skip-link", href: "#" + main.id, text: (kind === "index" ? LABELS.skipToTools : LABELS.skipToTool) || "skip" });
+    E.on(skip, "click", function (e) {
+      e.preventDefault();
+      main.focus({ preventScroll: true });
+      main.scrollIntoView({ block: "start", behavior: "instant" });
+    });
+    return skip;
+  }
+
+  /** The not-found page's whole content, from `site.js`. */
+  function buildNotFound(main) {
+    var copy = SITE.notFound || {};
+    main.className = "section";
+    main.appendChild(E.el("h1", { class: "h1", text: copy.title || "" }));
+    main.appendChild(E.el("p", { class: "lede", text: copy.lede || "" }));
+    main.appendChild(E.el("p", { class: "mt-6" }, [E.el("a", { class: "btn", href: E.home, text: copy.action || "" })]));
+  }
+
+  /**
+   * Wrap the page's `<main>` in the shared shell.
+   *
+   * A page ships its `<main>` and nothing else: no header, no footer, no title
+   * block. They are built here so one change in `site.js` reaches every page.
+   */
+  function buildChrome(entry, kind) {
+    var main = E.qs("main");
+    if (!main) return null;
+    if (kind === "not-found") buildNotFound(main);
+    var wrap = E.el("div", { class: kind === "index" ? "wrap directory-wrap" : "wrap" });
+    main.parentNode.insertBefore(wrap, main);
+    wrap.appendChild(buildHeader(entry, kind));
+    if (entry) wrap.appendChild(buildTitleBlock(entry));
+    wrap.appendChild(main);
+    /* The not-found page is one short message and a way out: it needs neither a
+       footer note about data it never sees nor a link that skips past nothing. */
+    if (kind !== "not-found") {
+      wrap.appendChild(buildFooter(entry, kind));
+      document.body.insertBefore(buildSkipLink(main, kind), document.body.firstChild);
+    }
+    return main;
+  }
+
+  /* ── the tool's own script ───────────────────────────── */
+
+  var queued = [], ready = false;
+
+  function runQueued() {
+    ready = true;
+    while (queued.length) {
+      try { queued.shift()(); }
+      catch (error) { reportToolError(error); }
+    }
+  }
+
+  function reportToolError(error) {
+    if (window.console && console.error) console.error("tool failed:", error);
+    var slot = E.qs(".err");
+    if (slot && !slot.textContent) slot.textContent = "this tool could not start in this browser.";
+  }
+
+  /** Load one script from the site root and resolve when it has run. */
+  function loadScript(name) {
+    return new Promise(function (resolve, reject) {
+      var tag = E.el("script", { src: E.base + name });
+      tag.onload = function () { resolve(); };
+      tag.onerror = function () { reject(new Error("could not load " + name)); };
+      document.head.appendChild(tag);
+    });
+  }
+
+  /**
+   * Run a tool's code once everything the registry lists for it has loaded.
+   *
+   * Every tool page's script is wrapped in this call, so a page never writes a
+   * `<script src>` of its own: `deps` in `tools.js` decides what it gets.
+   * @param {Function} fn The tool, wrapped in its own scope.
+   */
+  E.tool = function (fn) {
+    if (typeof fn !== "function") return;
+    if (ready) {
+      try { fn(); } catch (error) { reportToolError(error); }
+      return;
+    }
+    queued.push(fn);
   };
 
   /* ── page boot ───────────────────────────────────────── */
 
-  /* Everything a tool page gets for free. Runs once, after parsing, and touches
-     only elements the page skeleton guarantees exist. */
+  /* Everything a page gets for free. Runs as soon as this script does, which is
+     after the body has been parsed and before the page's own script, so the
+     chrome is in place by the time a tool looks at the document. */
   function boot() {
-    E.qsa("[data-eyes]").forEach(E.eyes);
+    var entry = registryEntry();
+    var kind = entry ? "tool" : document.body.dataset.page === "not-found" ? "not-found" : "index";
 
+    buildHead(entry, kind);
+    buildChrome(entry, kind);
+    applyTheme(E.theme.get());
+
+    E.qsa("[data-eyes]").forEach(E.eyes);
     E.qsa("[data-theme-toggle]").forEach(function (b) {
-      if (b.tagName === "BUTTON") b.type = "button";
       E.on(b, "click", function () { E.theme.toggle(); });
     });
-    syncThemeControls();
 
-    var slug = document.body.dataset.tool;
-
-    /* Pages link home as `../index.html` so they work from disk. On the web the
-       index lives at `/`; point there directly instead of through a redirect. */
-    if (location.protocol !== "file:") {
-      E.qsa('a[href="../index.html"]').forEach(function (a) { a.setAttribute("href", "/"); });
-    }
-
-    /* Skip link. The index writes its own; tool pages get one injected here so
-       thirty files do not each have to remember it. */
-    var main = slug && E.qs("main");
-    if (main && !E.qs(".skip-link")) {
-      if (!main.id) main.id = "main-content";
-      if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
-      var skip = E.el("a", { "class": "skip-link", href: "#" + main.id, text: "skip to tool" });
-      E.on(skip, "click", function (e) {
-        e.preventDefault();
-        main.focus({ preventScroll: true });
-        main.scrollIntoView({ block: "start", behavior: "instant" });
-      });
-      document.body.insertBefore(skip, document.body.firstChild);
-    }
-
-    /* Fill the header from the registry so every tool page reads identically and
-       a rename in tools.js reaches the page, the breadcrumb and the tab title at
-       once. Existing text is never overwritten — a page may opt out by filling
-       the slot itself. */
-    var t = slug && window.TOOLS && window.TOOLS.find(function (x) { return x.slug === slug; });
-    if (t) {
-      document.title = t.name + " · 𓁹𓁹";
-      var crumb = E.qs("[data-crumb]");
-      if (crumb && !crumb.textContent.trim()) {
-        crumb.textContent = "";
-        crumb.appendChild(document.createTextNode("/ "));
-        crumb.appendChild(E.el("b", { text: t.name }));
-      }
-      var h = E.qs("[data-title]");
-      if (h && !h.textContent.trim()) h.textContent = t.name;
-      var l = E.qs("[data-lede]");
-      if (l && !l.textContent.trim()) l.textContent = t.desc;
-    }
+    /* A storage event fires only in the *other* tabs, so this mirrors a toggle
+       across every open page without a broadcast channel. */
+    E.on(window, "storage", function (e) {
+      if (e.key === KEY || e.key === null) applyTheme(E.theme.get());
+    });
 
     /* Declarative copy buttons: <button data-copy="#selector">. The selector is
        resolved at click time so it still works for output rendered later. */
@@ -457,19 +605,27 @@
     /* Escape returns to the index from any tool page. Typing takes precedence:
        the first Escape leaves a field, a second one leaves the tool. Dialogs and
        fullscreen own the key outright — they have their own dismissal. */
-    if (slug) {
+    if (kind === "tool" && (SITE.shortcuts || {}).escapeToIndex) {
       E.on(document, "keydown", function (e) {
         if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
         var a = document.activeElement;
         if (document.fullscreenElement || E.qs("dialog[open]")) return;
         if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable)) { a.blur(); return; }
-        location.href = location.protocol === "file:" ? "../index.html" : "/";
+        location.href = E.home;
       });
     }
+
+    /* Finally the tool itself, after the scripts its registry row asks for. */
+    var deps = (entry && entry.deps) || [];
+    if (!deps.length) { runQueued(); return; }
+    deps.reduce(function (chain, name) {
+      return chain.then(function () { return loadScript(name); });
+    }, Promise.resolve()).then(runQueued, function (error) {
+      reportToolError(error);
+      runQueued();
+    });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-
   window.E = E;
+  boot();
 })();

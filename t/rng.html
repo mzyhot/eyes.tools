@@ -3,52 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>rng · 𓁹𓁹</title>
-<meta name="description" content="generate random numbers with prng, trng, or csrng.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="rng">
-<div class="wrap">
-  <header class="top"><a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" type="button" data-theme-toggle>theme</button></header>
-  <div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div>
-  <main class="stack-6">
-    <section>
-      <div class="seg" role="radiogroup" aria-label="randomness source">
-        <label><input type="radio" name="src" value="prng"><span>prng</span></label>
-        <label><input type="radio" name="src" value="trng"><span>trng</span></label>
-        <label><input type="radio" name="src" value="csrng" checked><span>csrng</span></label>
-      </div>
-      <p class="hint" id="source-note" aria-live="polite"></p>
-    </section>
-    <section class="grid3">
-      <div><label class="lbl" for="min">minimum</label><input class="field" id="min" type="number" value="1" step="1" inputmode="numeric"></div>
-      <div><label class="lbl" for="max">maximum</label><input class="field" id="max" type="number" value="100" step="1" inputmode="numeric"></div>
-      <div><label class="lbl" for="count">how many</label><input class="field" id="count" type="number" min="1" max="100" value="1" step="1" inputmode="numeric"></div>
-    </section>
-    <label class="check"><input type="checkbox" id="unique"><span>without repeats</span></label>
-    <section>
-      <button class="btn" id="draw" type="button">generate</button>
-      <p class="err" id="err" role="alert"></p>
-      <div class="out mt-4" id="out" aria-live="polite"></div>
-      <button class="btn -ghost mt-2" id="copy" type="button" disabled>copy</button>
-      <dl class="kv mt-4" id="proof" hidden><dt>verification</dt><dd>signature verified</dd><dt>round</dt><dd id="round"></dd><dt>chain</dt><dd id="chain"></dd></dl>
-    </section>
-  </main>
-  <footer class="foot"><a href="../index.html">← all tools</a></footer>
-</div>
+
+<main class="stack-6">
+  <section>
+    <div class="seg" role="radiogroup" aria-label="randomness source">
+      <label><input type="radio" name="src" value="prng"><span>prng</span></label>
+      <label><input type="radio" name="src" value="trng"><span>trng</span></label>
+      <label><input type="radio" name="src" value="csrng" checked><span>csrng</span></label>
+    </div>
+    <p class="hint" id="source-note" aria-live="polite"></p>
+  </section>
+  <section class="grid3">
+    <div><label class="lbl" for="min">minimum</label><input class="field" id="min" type="number" value="1" step="1" inputmode="numeric"></div>
+    <div><label class="lbl" for="max">maximum</label><input class="field" id="max" type="number" value="100" step="1" inputmode="numeric"></div>
+    <div><label class="lbl" for="count">how many</label><input class="field" id="count" type="number" min="1" max="100" value="1" step="1" inputmode="numeric"></div>
+  </section>
+  <label class="check"><input type="checkbox" id="unique"><span>without repeats</span></label>
+  <section>
+    <button class="btn" id="draw" type="button">generate</button>
+    <p class="err" id="err" role="alert"></p>
+    <div class="out mt-4" id="out" aria-live="polite"></div>
+    <button class="btn -ghost mt-2" id="copy" type="button" disabled>copy</button>
+    <dl class="kv mt-4" id="proof" hidden><dt>verification</dt><dd>signature verified</dd><dt>round</dt><dd id="round"></dd><dt>chain</dt><dd id="chain"></dd></dl>
+  </section>
+</main>
+
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
-<script src="../drand-client.min.js"></script>
-<script src="../drand-tools.js"></script>
 <script>
-(function () {
+E.tool(function () {
   "use strict";
   var o = E.qs("#out"), er = E.qs("#err"), btn = E.qs("#draw"), proof = E.qs("#proof"), round = E.qs("#round"), chain = E.qs("#chain");
   var copy = E.qs("#copy"), requestSeq = 0;
@@ -121,7 +111,7 @@
   E.on(btn, "click", function () { try { draw(); } catch (e) { er.textContent = e.message || "invalid range"; } });
   E.on(E.qs("#copy"), "click", function () { E.copy(o.textContent, this); });
   note();
-})();
+});
 </script>
 </body>
 </html>

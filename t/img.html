@@ -1,13 +1,27 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>img · 𓁹𓁹</title><meta name="description" content="resize and convert browser-supported image formats."><meta name="theme-color" content="#070707"><link rel="icon" href="../favicon.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
-<link rel="stylesheet" href="../tokens.css"><link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script><style>#preview{display:block;max-width:100%;height:auto}</style></head><body data-tool="img"><div class="wrap"><header class="top"><a class="eyes" href="../index.html" data-eyes>𓁹𓁹</a><p class="crumb" data-crumb></p><span class="top__spacer"></span><button class="tbtn" data-theme-toggle>theme</button></header><div class="head"><h1 class="h1" data-title></h1><p class="lede" data-lede></p></div><main class="stack-6">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="../fonts.css">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<style>#preview{display:block;max-width:100%;height:auto}</style>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
+</head>
+<body data-tool="img">
+
+<main class="stack-6">
 <section><label class="lbl" for="file">image</label><input class="field" id="file" type="file" accept="image/*,.jpg,.jpeg,.jfif,.png,.apng,.gif,.webp,.avif,.svg,.bmp,.ico"><p class="hint">typically jpeg, png, apng, gif, webp, avif, svg, bmp and ico · support depends on your browser · animation becomes one frame</p></section>
 <section class="stack"><div class="grid2"><div><label class="lbl" for="w">width</label><input class="field" id="w" type="number" min="1" max="12000" step="1"></div><div><label class="lbl" for="h">height</label><input class="field" id="h" type="number" min="1" max="12000" step="1"></div></div><div class="row"><label class="check"><input id="lock" type="checkbox" checked><span>keep proportions</span></label><span class="row__spacer"></span><button class="tbtn" id="original" type="button" disabled>original size</button></div></section><section class="grid2"><div><label class="lbl" for="fmt">format</label><select class="field" id="fmt"><option value="image/png">png</option><option value="image/jpeg">jpeg</option><option value="image/webp" selected>webp</option></select></div><div><label class="lbl" for="q">quality</label><input id="q" type="range" min="1" max="100" value="82"><p class="hint"><span id="qv">82</span>%</p></div></section>
 <p class="err" id="err" role="alert"></p><figure class="figure"><canvas id="preview" role="img" aria-label="resized image preview"></canvas></figure><div class="row"><button class="btn" id="dl" disabled>download</button><span class="hint" id="meta" aria-live="polite"></span></div>
-</main><footer class="foot"><a href="../index.html">← all tools</a></footer></div><script src="../tools.js"></script><script src="../s.js"></script><script>
-(function () {
+</main>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+E.tool(function () {
   "use strict";
   var file = E.qs("#file"), w = E.qs("#w"), h = E.qs("#h"), lock = E.qs("#lock"), original = E.qs("#original"), fmt = E.qs("#fmt"), q = E.qs("#q"), canvas = E.qs("#preview"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl");
   var source = null, sourceWidth = 0, sourceHeight = 0, sourceBytes = 0, name = "image", loadSeq = 0, renderSeq = 0, encoded = null, MAX_PIXELS = 40000000;
@@ -73,5 +87,7 @@
   try { var probe = document.createElement("canvas"), webp = fmt.querySelector('option[value="image/webp"]'); probe.width = probe.height = 1; if (webp && probe.toDataURL("image/webp").indexOf("data:image/webp") !== 0) webp.remove(); if (probe.toDataURL("image/avif").indexOf("data:image/avif") === 0) fmt.appendChild(E.el("option", { value: "image/avif", text: "avif" })); } catch (e) {}
   E.on(window, "pagehide", function (event) { if (event && event.persisted) return; loadSeq++; renderSeq++; discard(source); source = null; });
   q.disabled = fmt.value === "image/png";
-})();
-</script></body></html>
+});
+</script>
+</body>
+</html>

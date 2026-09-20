@@ -3,13 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>dump · 𓁹𓁹</title>
-<meta name="description" content="write, sort, and clean up text in a scratchpad that autosaves in your browser.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
 <style>
@@ -24,112 +18,92 @@
   #line-tools > summary:hover,
   #line-tools > summary:active { color: var(--color-ink); }
 </style>
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="dump">
-<div class="wrap">
 
-  <header class="top">
-    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
-    <p class="crumb" data-crumb></p>
-    <span class="top__spacer"></span>
-    <button class="tbtn" type="button" data-theme-toggle>theme</button>
-  </header>
+<main class="stack-6">
 
-  <div class="head">
-    <h1 class="h1" data-title></h1>
-    <p class="lede" data-lede></p>
+  <div>
+    <label class="lbl" for="pad">text</label>
+    <textarea class="field" id="pad" rows="14"></textarea>
+    <div aria-live="polite"><p class="err" id="err"></p></div>
+    <div class="hint" id="offer" hidden></div>
   </div>
 
-  <main class="stack-6">
-
-    <div>
-      <label class="lbl" for="pad">text</label>
-      <textarea class="field" id="pad" rows="14"></textarea>
-      <div aria-live="polite"><p class="err" id="err"></p></div>
-      <div class="hint" id="offer" hidden></div>
-    </div>
-
-    <details class="section--ruled" id="line-tools">
-      <summary>lines</summary>
-      <div class="stack mt-3">
-        <div>
-          <label class="lbl" for="line-order">order</label>
-          <select class="field" id="line-order"><option value="keep">keep original order</option><option value="asc">sort a → z</option><option value="desc">sort z → a</option><option value="reverse">reverse</option></select>
-          <div class="row mt-3">
-            <label class="check"><input type="checkbox" id="line-dedupe" checked><span>remove duplicates</span></label>
-            <label class="check"><input type="checkbox" id="line-trim" checked><span>trim each line</span></label>
-            <label class="check"><input type="checkbox" id="line-empty" checked><span>remove empty lines</span></label>
-            <label class="check"><input type="checkbox" id="line-ignore-case"><span>ignore case</span></label>
-          </div>
-        </div>
-        <p class="err" id="line-error" role="alert"></p>
-        <div>
-          <div class="out-head"><label class="lbl" for="line-preview">preview</label><span class="row__spacer"></span><span class="hint num" id="line-stats" aria-live="polite"></span></div>
-          <textarea class="field" id="line-preview" rows="6" readonly spellcheck="false" aria-describedby="line-error"></textarea>
-        </div>
-        <div class="row">
-          <button class="btn -sm" id="line-apply" type="button" disabled>apply to pad</button>
-          <button class="btn -ghost -sm" id="line-undo" type="button" disabled>undo</button>
-          <button class="btn -ghost -sm" id="line-copy" type="button" disabled>copy preview</button>
-          <button class="btn -ghost -sm" id="line-download" type="button" disabled>download preview</button>
+  <details class="section--ruled" id="line-tools">
+    <summary>lines</summary>
+    <div class="stack mt-3">
+      <div>
+        <label class="lbl" for="line-order">order</label>
+        <select class="field" id="line-order"><option value="keep">keep original order</option><option value="asc">sort a → z</option><option value="desc">sort z → a</option><option value="reverse">reverse</option></select>
+        <div class="row mt-3">
+          <label class="check"><input type="checkbox" id="line-dedupe" checked><span>remove duplicates</span></label>
+          <label class="check"><input type="checkbox" id="line-trim" checked><span>trim each line</span></label>
+          <label class="check"><input type="checkbox" id="line-empty" checked><span>remove empty lines</span></label>
+          <label class="check"><input type="checkbox" id="line-ignore-case"><span>ignore case</span></label>
         </div>
       </div>
-    </details>
-
-    <section class="section--ruled">
-      <div class="grid2">
-        <div><label class="lbl" for="find">find</label><input class="field" id="find" autocomplete="off"></div>
-        <div><label class="lbl" for="replace">replace with</label><input class="field" id="replace" autocomplete="off"></div>
+      <p class="err" id="line-error" role="alert"></p>
+      <div>
+        <div class="out-head"><label class="lbl" for="line-preview">preview</label><span class="row__spacer"></span><span class="hint num" id="line-stats" aria-live="polite"></span></div>
+        <textarea class="field" id="line-preview" rows="6" readonly spellcheck="false" aria-describedby="line-error"></textarea>
       </div>
-      <div class="row mt-3">
-        <button class="btn -ghost -sm" type="button" id="findnext">find next</button>
-        <button class="btn -ghost -sm" type="button" id="replaceone">replace</button>
-        <button class="btn -ghost -sm" type="button" id="replaceall">replace all</button>
-        <label class="check"><input type="checkbox" id="matchcase"><span>match case</span></label>
-      </div>
-      <p class="hint" id="findinfo" aria-live="polite"></p>
-    </section>
-
-    <div>
-      <div class="out-head">
-        <span class="lbl">count</span>
-        <span class="row__spacer"></span>
-        <button class="tbtn" type="button" id="copycount">copy</button>
-      </div>
-      <dl class="kv">
-        <dt>chars</dt><dd class="num" id="k-chars">0</dd>
-        <dt>words</dt><dd class="num" id="k-words">0</dd>
-        <dt>lines</dt><dd class="num" id="k-lines">0</dd>
-        <dt>utf-8</dt><dd class="num" id="k-bytes">0 B</dd>
-        <dt>saved</dt><dd class="num" id="k-saved">—</dd>
-      </dl>
-    </div>
-
-    <div>
       <div class="row">
-        <button class="btn -sm" type="button" id="copyall">copy all</button>
-        <button class="btn -ghost -sm" type="button" id="dl">download .txt</button>
-        <button class="btn -ghost -sm" type="button" id="link">share by link</button>
-        <button class="btn -ghost -sm" type="button" id="clear">clear</button>
+        <button class="btn -sm" id="line-apply" type="button" disabled>apply to pad</button>
+        <button class="btn -ghost -sm" id="line-undo" type="button" disabled>undo</button>
+        <button class="btn -ghost -sm" id="line-copy" type="button" disabled>copy preview</button>
+        <button class="btn -ghost -sm" id="line-download" type="button" disabled>download preview</button>
       </div>
-      <p class="hint" id="linkinfo"></p>
     </div>
+  </details>
 
-  </main>
+  <section class="section--ruled">
+    <div class="grid2">
+      <div><label class="lbl" for="find">find</label><input class="field" id="find" autocomplete="off"></div>
+      <div><label class="lbl" for="replace">replace with</label><input class="field" id="replace" autocomplete="off"></div>
+    </div>
+    <div class="row mt-3">
+      <button class="btn -ghost -sm" type="button" id="findnext">find next</button>
+      <button class="btn -ghost -sm" type="button" id="replaceone">replace</button>
+      <button class="btn -ghost -sm" type="button" id="replaceall">replace all</button>
+      <label class="check"><input type="checkbox" id="matchcase"><span>match case</span></label>
+    </div>
+    <p class="hint" id="findinfo" aria-live="polite"></p>
+  </section>
 
-  <footer class="foot">
-    <a href="../index.html">← all tools</a>
-    <span class="row__spacer"></span>
-    <span>runs in your browser · nothing is uploaded</span>
-  </footer>
+  <div>
+    <div class="out-head">
+      <span class="lbl">count</span>
+      <span class="row__spacer"></span>
+      <button class="tbtn" type="button" id="copycount">copy</button>
+    </div>
+    <dl class="kv">
+      <dt>chars</dt><dd class="num" id="k-chars">0</dd>
+      <dt>words</dt><dd class="num" id="k-words">0</dd>
+      <dt>lines</dt><dd class="num" id="k-lines">0</dd>
+      <dt>utf-8</dt><dd class="num" id="k-bytes">0 B</dd>
+      <dt>saved</dt><dd class="num" id="k-saved">—</dd>
+    </dl>
+  </div>
 
-</div>
+  <div>
+    <div class="row">
+      <button class="btn -sm" type="button" id="copyall">copy all</button>
+      <button class="btn -ghost -sm" type="button" id="dl">download .txt</button>
+      <button class="btn -ghost -sm" type="button" id="link">share by link</button>
+      <button class="btn -ghost -sm" type="button" id="clear">clear</button>
+    </div>
+    <p class="hint" id="linkinfo"></p>
+  </div>
+
+</main>
 
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
 <script>
-(function () {
+E.tool(function () {
   "use strict";
 
   /* ── core ── pure, no dom ─────────────────────────────────────────── */
@@ -591,7 +565,7 @@
   E.on(document, "visibilitychange", function () { if (document.hidden) flushSave(); });
 
   try { pad.setSelectionRange(pad.value.length, pad.value.length); } catch (e) {}
-})();
+});
 </script>
 </body>
 </html>

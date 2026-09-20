@@ -3,60 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>case · 𓁹𓁹</title>
-<meta name="description" content="camel, snake, kebab, title, constant — and back.">
-<meta name="theme-color" content="#070707">
-<link rel="icon" href="../favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<script>(function(){try{var t=localStorage.getItem("eyes.theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<script src="../site.js"></script>
+<script src="../theme.js"></script>
 </head>
 <body data-tool="case">
-<div class="wrap">
 
-  <header class="top">
-    <a class="eyes" href="../index.html" data-eyes aria-label="𓁹𓁹 — all tools">𓁹𓁹</a>
-    <p class="crumb" data-crumb></p>
-    <span class="top__spacer"></span>
-    <button class="tbtn" type="button" data-theme-toggle>theme</button>
-  </header>
+<main class="stack-6">
 
-  <div class="head">
-    <h1 class="h1" data-title></h1>
-    <p class="lede" data-lede></p>
+  <div>
+    <label class="lbl" for="in">text</label>
+    <textarea class="field" id="in" rows="4" spellcheck="false"
+              placeholder="the quick brown fox"></textarea>
+    <div class="row mt-3">
+      <button class="btn -ghost -sm" type="button" id="paste">paste</button>
+      <button class="btn -ghost -sm" type="button" id="clear">clear</button>
+    </div>
   </div>
 
-  <main class="stack-6">
+  <div id="out"></div>
 
-    <div>
-      <label class="lbl" for="in">text</label>
-      <textarea class="field" id="in" rows="4" spellcheck="false"
-                placeholder="the quick brown fox"></textarea>
-      <div class="row mt-3">
-        <button class="btn -ghost -sm" type="button" id="paste">paste</button>
-        <button class="btn -ghost -sm" type="button" id="clear">clear</button>
-      </div>
-    </div>
-
-    <div id="out"></div>
-
-  </main>
-
-  <footer class="foot">
-    <a href="../index.html">← all tools</a>
-    <span class="row__spacer"></span>
-    <span>runs in your browser · nothing is uploaded</span>
-  </footer>
-
-</div>
+</main>
 
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
 <script>
-(function () {
+E.tool(function () {
   "use strict";
 
   var input = E.qs("#in"), out = E.qs("#out");
@@ -124,7 +98,7 @@
 
   input.value = E.param("t") || "";
   run();
-})();
+});
 </script>
 </body>
 </html>
