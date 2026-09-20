@@ -2,7 +2,7 @@
  *
  * Despite the filename this is the production server for self-hosted
  * deployments (see `deploy/README.md`): static hosts can serve the pages, but
- * only this process provides share discovery and the parsed subdomain proxy.
+ * only this process provides share discovery.
  * It has no npm runtime dependencies and no build step, so what runs in
  * production is the file in the repository.
  *
@@ -15,8 +15,8 @@
  *   Rewriting HTML in front of this server — an edge "optimizer", an injected
  *   analytics tag — invalidates those hashes and breaks the page.
  *
- *   Routing. `/healthz`, then the two APIs, then pages and static files. Anything
- *   that is not a GET or HEAD past the APIs is refused. Pages have clean
+ *   Routing. `/healthz`, then the API modules, then pages and static files.
+ *   Anything that is not a GET or HEAD past the APIs is refused. Pages have clean
  *   addresses — `/share`, not `/t/share.html` — and the old spellings redirect.
  *
  *   Publication by allow list. `PUBLIC_FILES` is built at startup from the
@@ -59,8 +59,6 @@ import { promisify } from "node:util";
 
 import { PUBLIC_ROOT_FILES } from "./public-files.mjs";
 import { createShareService } from "./share-server.mjs";
-
-import { createSubdomainLookup, responseHeaders } from "./subdomains-core.mjs";
 
 const compressBrotli = promisify(brotliCompress);
 const compressGzip = promisify(gzip);
@@ -494,28 +492,12 @@ async function serveStatic(request, response, url) {
   return sendBuffer(response, 200, entry.type, body, request.method, headers);
 }
 
-/** The crt.name proxy endpoint. Validation and limits live in subdomains-core. */
-async function serveSubdomains(request, response, url, lookup) {
-  if (request.method !== "GET") {
-    return sendText(response, 405, "method not allowed\n", request.method, { Allow: "GET" });
-  }
-
-  const result = await lookup(url.searchParams.get("apex"));
-  const body = Buffer.from(JSON.stringify(result.body));
-  response.statusCode = result.status;
-  setHeaders(response, {
-    ...responseHeaders(result.status, result.headers),
-    "Content-Length": body.byteLength
-  });
-  response.end(body);
-}
-
 /**
  * Route one request. Order matters: liveness, then the APIs, then the method
  * gate, then static files — the gate sits after the APIs because share uses
  * POST and the static tree does not.
  */
-async function route(request, response, share, lookup) {
+async function route(request, response, share) {
   let url;
   try { url = new URL(request.url || "/", "http://127.0.0.1"); }
   catch (error) { return sendText(response, 400, "bad request\n", request.method); }
@@ -524,7 +506,6 @@ async function route(request, response, share, lookup) {
     return sendBuffer(response, 200, "application/json", Buffer.from('{"status":"ok"}\n'), request.method);
   }
   if (url.pathname.startsWith("/api/share/")) return share.handle(request, response, url);
-  if (url.pathname === "/api/subdomains") return serveSubdomains(request, response, url, lookup);
   if (request.method !== "GET" && request.method !== "HEAD") {
     return sendText(response, 405, "method not allowed\n", request.method, { Allow: "GET, HEAD" });
   }
@@ -537,7 +518,7 @@ async function route(request, response, share, lookup) {
 
 /**
  * Build the server without starting it, so tests can bind an ephemeral port and
- * inject a subdomain lookup.
+ * pass share options.
  *
  * The timeouts are deliberate: a client that opens a connection and sends
  * nothing must not hold a slot, and the header count and size caps bound what a
@@ -545,14 +526,13 @@ async function route(request, response, share, lookup) {
  *
  * @param {object} [options]
  * @param {object} [options.shareOptions] Passed to createShareService.
- * @param {Function} [options.lookup] Subdomain lookup, injected for tests.
  * @returns {{server: import("node:http").Server, close: () => Promise<void>}}
  */
-export function createEyesServer({ shareOptions, lookup = createSubdomainLookup() } = {}) {
+export function createEyesServer({ shareOptions } = {}) {
   const share = createShareService(shareOptions);
   const server = createServer({ headersTimeout: 15000, requestTimeout: 30000, maxHeaderSize: 16384 }, (request, response) => {
     securityHeaders(response);
-    route(request, response, share, lookup).catch((error) => {
+    route(request, response, share).catch((error) => {
       /* Log the class of failure, never the message: it can contain a path or
          a header the visitor supplied. */
       console.error("request failed:", error.code || error.name);

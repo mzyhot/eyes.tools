@@ -24,7 +24,6 @@
 /rng /t/rng 200
 /share /t/share 200
 /spectrogram /t/spectrogram 200
-/subdomains /t/subdomains 200
 /time /t/time 200
 /tz /t/tz 200
 /units /t/units 200

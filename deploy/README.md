@@ -117,6 +117,6 @@ buffering. `/healthz` confirms the Node process is responding, not that the prox
 TURN, or cross-network transfer is healthy. Never log session tokens or full
 signaling bodies while troubleshooting.
 
-The service is intentionally one process: memory stores presence, code
-reservations, and bounded subdomain-cache entries. Horizontal replicas require
+The service is intentionally one process: memory stores presence and code
+reservations. Horizontal replicas require
 shared coordination first. There is no durable user data to migrate or back up.

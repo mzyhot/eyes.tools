@@ -21,8 +21,8 @@ When in doubt, do what `case.html` does.
    QR and metadata parsing use vendored browser builds. The Geist stylesheet from
    Google Fonts, already in the skeleton, is the one remote file every page
    loads. Network tools are explicit exceptions: verified randomness contacts
-   Cloudflare's drand relay, subdomains calls the same-origin `/api/subdomains`
-   proxy, and share uses WebRTC.
+   Cloudflare's drand relay, and share uses the same-origin `/api/share/*`
+   endpoints plus WebRTC.
 3. **Classic scripts only.** No `<script type="module">`. The site must work when
    opened straight off disk via `file://`. All paths are relative (`../s.css`).
 4. **Local unless the tool says otherwise.** No telemetry or analytics. File

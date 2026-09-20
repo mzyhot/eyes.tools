@@ -11,8 +11,7 @@
  * publishes only `public-files.mjs` and `t/`. Two more files close that gap,
  * written from the same list so a new private file stays private everywhere:
  *
- *   `.vercelignore`  Vercel: leave private files out of the deployment, except
- *                    the three the subdomain function needs to run.
+ *   `.vercelignore`  Vercel: leave private files out of the deployment.
  *   `_routes.json`   Cloudflare Pages: send requests for private paths to
  *                    `functions/[[path]].js`, which answers with the 404 page.
  *
@@ -66,13 +65,11 @@ export function vercelConfig(slugs) {
 /* Top-level entries every host publishes. */
 const PUBLIC = new Set([...PUBLIC_ROOT_FILES, 't']);
 /* Private entries Vercel must still be given: its own config, which it reads
-   and never serves, and what it needs to build `api/subdomains.js`. The
-   function's directory is not served as static files; `subdomains-core.mjs`
-   is, and is the one private file Vercel publishes. */
-const VERCEL_KEEPS = new Set(['vercel.json', '.vercelignore', 'api', 'subdomains-core.mjs', 'package.json']);
+   and never serves. */
+const VERCEL_KEEPS = new Set(['vercel.json', '.vercelignore', 'package.json']);
 /* Private entries Cloudflare Pages needs no rule for: its own config, which it
-   reads and never serves, and `/api/*`, which is already routed to Functions. */
-const PAGES_SKIPS = new Set(['_redirects', '_routes.json', 'api']);
+   reads and never serves. */
+const PAGES_SKIPS = new Set(['_redirects', '_routes.json']);
 
 /**
  * Tracked top-level entries a visitor must not be able to fetch, sorted.
@@ -103,7 +100,7 @@ export function vercelIgnore(entries) {
 
 /** The Cloudflare Pages `_routes.json` for these private entries. */
 export function pagesRoutes(entries) {
-  const include = ['/api/*', ...entries.filter(entry => !PAGES_SKIPS.has(entry.name)).map(entry => '/' + entry.name + (entry.dir ? '/*' : ''))];
+  const include = entries.filter(entry => !PAGES_SKIPS.has(entry.name)).map(entry => '/' + entry.name + (entry.dir ? '/*' : ''));
   /* Pages allows at most 100 rules. */
   if (include.length > 100) throw new Error('too many private top-level entries for _routes.json');
   return JSON.stringify({ version: 1, include, exclude: [] }, null, 2) + '\n';

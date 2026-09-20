@@ -97,10 +97,6 @@
       "destination": "/t/spectrogram.html"
     },
     {
-      "source": "/subdomains",
-      "destination": "/t/subdomains.html"
-    },
-    {
       "source": "/time",
       "destination": "/t/time.html"
     },
