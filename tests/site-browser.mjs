@@ -16,7 +16,7 @@ try {
   for (const route of routes) {
     const response = await page.goto(base + route, { waitUntil: 'domcontentloaded' });
     assert.equal(response.status(), 200, route);
-    await page.waitForFunction(() => document.readyState !== 'loading');
+    await page.waitForFunction(() => document.body.dataset.ready === '1');
     if (route === '/lines') await page.waitForURL('**/dump?mode=lines');
     if (route === '/units') await page.waitForURL('**/calc?mode=units');
     const controls = await page.evaluate(() => ({

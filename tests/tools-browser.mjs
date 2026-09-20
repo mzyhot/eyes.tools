@@ -13,7 +13,12 @@ await context.addInitScript(() => document.addEventListener('securitypolicyviola
 // Tests never depend on font services or the public randomness relay.
 await context.route('https://fonts.googleapis.com/**', route => route.fulfill({ contentType: 'text/css', body: '' }));
 await context.route('https://drand.cloudflare.com/**', route => route.abort());
-const go = name => page.goto(`${base}/${name}`, { waitUntil: 'domcontentloaded' });
+const go = async name => {
+  const response = await page.goto(`${base}/${name}`, { waitUntil: 'domcontentloaded' });
+  // s.js marks the body ready once the chrome is built and the registry's deps have run.
+  await page.waitForFunction(() => document.body.dataset.ready === '1');
+  return response;
+};
 const text = selector => page.locator(selector).textContent();
 const fill = (selector, value) => page.locator(selector).fill(value);
 const click = selector => page.locator(selector).click();
@@ -144,8 +149,6 @@ try {
   await check('coin and dice rendering with a deterministic verified-beacon fixture', async () => {
     for (const name of ['coin', 'dice']) {
       await go(name);
-      // The registry's deps load after the page, so wait for the module itself.
-      await page.waitForFunction(() => !!window.R);
       await page.evaluate(() => { R.source = async (_, n) => ({ bytes: new Uint8Array(n), verified: true, round: 123, chainHash: R.chainHash }); });
       await click(name === 'coin' ? '#flip' : '#roll'); await enabled('#copy'); await has('#round', '123');
       if (name === 'coin') assert.match(await text('#first'), /heads|tails/i); else assert.equal((await text('#total')).trim(), '2');
