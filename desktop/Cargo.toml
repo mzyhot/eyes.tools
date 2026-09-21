@@ -1,10 +1,10 @@
 [package]
 name = "eyes"
-version = "1.0.0"
+version = "1.1.0"
 description = "𓁹𓁹 as a desktop app"
 license = "AGPL-3.0-only"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 publish = false
 
 [build-dependencies]
@@ -13,6 +13,11 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
+
+# WebKitGTK's settings, to switch on WebRTC for share. The version Tauri's
+# webview already uses.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "2.0", features = ["v2_38"] }
 
 # The pages are always embedded in the binary, so `cargo run` behaves exactly
 # like a release build rather than waiting for a dev server that never starts.

@@ -11,8 +11,9 @@ Differences from the site:
   the one thing a server is needed for. Files still go device to device, and
   the app finds browsers on the site and other copies of the app alike. The
   server must list the app's origins in `SHARE_ALLOWED_ORIGINS` (see
-  `deploy/README.md`). Room links the app makes point at eyes.tools, so anyone
-  can open them in a browser.
+  `deploy/README.md`).
+- **Links for other people** — dump's text links, share's room links — point at
+  eyes.tools, so anyone can open them in a browser.
 - **User agent** is `eyes-desktop/<version>`, not a browser's, so a bot check
   that challenges browsers leaves share's requests alone without the site
   having to open its API to everyone.
@@ -22,7 +23,7 @@ Differences from the site:
 
 ## Building
 
-Needs Rust 1.85 or newer. Node is not needed.
+Needs Rust 1.88 or newer. Node is not needed.
 
 ```bash
 cargo run
@@ -62,8 +63,8 @@ scripts itself; `dangerousDisableAssetCspModification` stops it hashing styles,
 which would switch off the `'unsafe-inline'` the pages' `style=""` attributes
 need.
 
-Share's service is `https://eyes.tools` unless the build sets
-`EYES_SHARE_SERVICE`. A build for another server sets that, adds the server to
+The public site is `https://eyes.tools` unless the build sets
+`EYES_PUBLIC_ORIGIN`. A build for another server sets that, adds the server to
 `connect-src` (by editing `tauri.conf.json`, or with `TAURI_CONFIG` for a
 one-off build), and the server lists the app's origins.
 
@@ -88,7 +89,7 @@ SHARE_ALLOWED_ORIGINS=tauri://localhost node dev-server.mjs 8880
 in the repository root, then in `desktop/`:
 
 ```bash
-EYES_SHARE_SERVICE=http://127.0.0.1:8880 TAURI_CONFIG="{\"app\":{\"security\":{\"csp\":{\"connect-src\":\"'self' http://127.0.0.1:8880\"}}}}" EYES_PROBE=1 EYES_PROBE_PEER=hello cargo run
+EYES_PUBLIC_ORIGIN=http://127.0.0.1:8880 TAURI_CONFIG="{\"app\":{\"security\":{\"csp\":{\"connect-src\":\"'self' http://127.0.0.1:8880\"}}}}" EYES_PROBE=1 EYES_PROBE_PEER=hello cargo run
 ```
 
 and open <http://127.0.0.1:8880/share> in a browser and send the app "hello".

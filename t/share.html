@@ -126,8 +126,8 @@ E.tool(function () {
      that, pressing send on the device tries again. */
   const MAX_RETRIES = 5;
   /* The discovery and signaling service: this site's own server unless the
-     site configuration names another, as the desktop app's does. */
-  const SERVICE = SITE.shareService || '';
+     site configuration names the public site, as the desktop app's does. */
+  const SERVICE = SITE.publicOrigin || '';
   const peers = new Map();
   let session = null, stream = null, epoch = 0, stopped = false, retained = 0, reserved = 0, chosen = null, textPeer = null;
   let room = '', online = false, creatingRoom = false;
