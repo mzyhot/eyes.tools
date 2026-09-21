@@ -34,8 +34,11 @@
  *   visitor into one shared room, so anything ambiguous falls back to a room
  *   of one.
  *
- *   Requests must be same-origin. There is no CORS here and no cross-site
- *   discovery: a page on another domain cannot enumerate anyone.
+ *   Requests must be same-origin, or come from an origin the operator has
+ *   listed in `SHARE_ALLOWED_ORIGINS` — the desktop app's, which serves its
+ *   pages itself and uses this service only for discovery and signaling. Only
+ *   those origins get CORS headers, and the list is empty unless set, so a
+ *   page on another domain cannot enumerate anyone.
  *
  *   Tokens are compared in constant time, every payload is size-capped before
  *   it is parsed, joins and signals are rate limited per address and per
@@ -151,11 +154,14 @@ export function networkOf(ip) {
  * @param {string} [options.turnSecret] Shared secret for time-limited TURN
  *   credentials. Never leaves the process; only the derived HMAC is sent.
  * @param {string} [options.turnUrls] Comma-separated TURN URLs.
+ * @param {string} [options.allowedOrigins] Comma-separated origins, besides
+ *   this site's own, whose pages may use the service, such as the desktop app's
+ *   `tauri://localhost` and `http://tauri.localhost`. Empty by default.
  * @param {() => number} [options.now] Clock, injected for tests.
  * @param {(n: number) => Buffer} [options.random] Entropy, injected for tests.
  * @returns {{handle: Function, close: Function}}
  */
-export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_CLOUDFLARE === '1', turnSecret = process.env.SHARE_TURN_SECRET, turnUrls = process.env.SHARE_TURN_URLS, now = Date.now, random = randomBytes } = {}) {
+export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_CLOUDFLARE === '1', turnSecret = process.env.SHARE_TURN_SECRET, turnUrls = process.env.SHARE_TURN_URLS, allowedOrigins = process.env.SHARE_ALLOWED_ORIGINS, now = Date.now, random = randomBytes } = {}) {
   /** @type {Map<string, object>} session id → session */
   const sessions = new Map();
   /** @type {Map<string, Set<object>>} room key → sessions in it */
@@ -169,8 +175,10 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   const codes = new Set(), tokens = new Set();
   const salt = randomBytes(32);
 
-  /* TURN URLs are fixed for the process; parse them once rather than per join. */
+  /* TURN URLs and allowed origins are fixed for the process; parse them once
+     rather than per request. */
   const turnUrlList = turnUrls ? turnUrls.split(',').map(v => v.trim()).filter(Boolean) : [];
+  const crossOrigins = new Set(allowedOrigins ? allowedOrigins.split(',').map(v => v.trim()).filter(Boolean) : []);
 
   /**
    * Draw a unique random hex value, retrying on collision and failing closed.
@@ -353,6 +361,12 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     };
   }
 
+  /** The request's origin if the operator allows it cross-origin, else null. */
+  function allowedCrossOrigin(req) {
+    const origin = req.headers.origin;
+    return typeof origin === 'string' && crossOrigins.has(origin) ? origin : null;
+  }
+
   /** Whether the request came from this site rather than another origin. */
   function sameOrigin(req) {
     const site = req.headers['sec-fetch-site'];
@@ -496,8 +510,19 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   /* ── dispatch ────────────────────────────────────────── */
 
   async function handle(req, res, url) {
-    // Browser requests must stay on this origin. No CORS or cross-site discovery.
-    if (!sameOrigin(req)) return reply(res, 403, { error: 'use share on this website' });
+    /* Browser requests must stay on this origin, or come from one the operator
+       listed. Only a listed origin gets CORS headers, answered on every
+       response, the preflight included, and varied on so no cache mixes them. */
+    const cross = allowedCrossOrigin(req);
+    if (!cross && !sameOrigin(req)) return reply(res, 403, { error: 'use share on this website' });
+    if (cross) {
+      res.setHeader('Access-Control-Allow-Origin', cross);
+      res.setHeader('Vary', 'Origin');
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '600', 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+    }
 
     const where = locate(req);
     if (url.pathname === '/api/share/join' && req.method === 'POST') return join(req, res, where);
