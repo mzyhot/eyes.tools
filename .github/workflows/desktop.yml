@@ -2,7 +2,8 @@ name: desktop
 
 # Builds the desktop app's installers on each platform's own runner: a
 # universal .dmg for macOS, .msi and setup .exe for Windows, and .deb, .rpm and
-# .AppImage for Linux. They are unsigned and attached to the run as artifacts.
+# .AppImage for Linux. They are unsigned and attached to the run as artifacts,
+# and to the GitHub release when the run is for a version tag.
 # It runs when a push changes the app or this workflow, on any branch, and on a
 # version tag; from the Actions tab once this file is on the default branch.
 on:
@@ -79,3 +80,25 @@ jobs:
           name: eyes-${{ matrix.name }}
           path: ${{ matrix.bundles }}
           if-no-files-found: error
+
+  # A version tag's installers go on its release, which is created with
+  # generated notes if it does not exist yet. Only this job can write.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: bundles
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes
+          find bundles -type f -print0 | xargs -0 gh release upload "$TAG" --clobber

@@ -193,7 +193,9 @@ E.tool(function () {
       kBytes = E.qs("#k-bytes"), kSaved = E.qs("#k-saved");
 
   var KEY = "eyes.dump", KEY_AT = "eyes.dump.at";
-  var BASE = location.href.split("#")[0].split("?")[0];
+  /* Links open on the public site when these pages are served from elsewhere,
+     such as the desktop app, whose own addresses nobody else can open. */
+  var BASE = SITE.publicOrigin ? SITE.publicOrigin + "/dump" : location.href.split("#")[0].split("?")[0];
   var LINK_SOFT = 2000;                 /* url length some clients start truncating */
   var LINK_MAX_BYTES = 384 * 1024;      /* past this a link is useless, not just long */
   var SAVE_MS = 400, STAT_MS = 90, CHEAP = 20000, UNDO_MS = 7000;
