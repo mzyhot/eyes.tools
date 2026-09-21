@@ -23,7 +23,7 @@ Differences from the site:
 
 ## Building
 
-Needs Rust 1.85 or newer. Node is not needed.
+Needs Rust 1.88 or newer. Node is not needed.
 
 ```bash
 cargo run
