@@ -12,18 +12,18 @@ on:
 
 jobs:
   claude:
-    # Only people with a stake in the repository may start a run: it holds
+    # Only the owner and collaborators may start a run: it holds
     # write access and spends the maintainer's token, and on a public
     # repository anyone can comment.
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+        contains(fromJSON('["OWNER","COLLABORATOR"]'), github.event.comment.author_association)) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+        contains(fromJSON('["OWNER","COLLABORATOR"]'), github.event.comment.author_association)) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
+        contains(fromJSON('["OWNER","COLLABORATOR"]'), github.event.review.author_association)) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
+        contains(fromJSON('["OWNER","COLLABORATOR"]'), github.event.issue.author_association))
     runs-on: ubuntu-latest
     # Actions are pinned to commits, like check.yml: a moved tag cannot change
     # what runs with write access. Update the SHA and comment together.
