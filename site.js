@@ -73,6 +73,12 @@ window.SITE = {
     escapeToIndex: true    /* Esc leaves a field, then leaves the tool */
   },
 
+  /* Where share finds devices and sets up connections. Empty means this
+     site's own server. A copy of the pages served from somewhere without the
+     service, such as the desktop app, points it at a server that runs it; file
+     contents still travel device to device. */
+  shareService: "",
+
   /* Browser storage keys. Tools add their own; these belong to the chrome. */
   storage: {
     theme: "eyes.theme",

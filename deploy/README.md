@@ -78,6 +78,20 @@ proxy's and would put every visitor in one discovery group. Behind any proxy,
 automatic discovery therefore needs the flag and a proxy that sets
 `CF-Connecting-IP`; room links work either way.
 
+`SHARE_ALLOWED_ORIGINS` lists origins, besides the site's own, whose pages may use
+the share service. The desktop app serves its pages itself and uses this
+service only to find devices and set up connections, so to serve it set:
+
+```
+SHARE_ALLOWED_ORIGINS=tauri://localhost,http://tauri.localhost
+```
+
+(`tauri://localhost` is the app on macOS and Linux, `http://tauri.localhost` on
+Windows.) Only listed origins get CORS headers; unset, the service is same-origin
+only. The app identifies itself as `eyes-desktop/<version>` rather than as a
+browser, so a bot check that challenges browser-like clients, as Anubis does by
+default, lets it through with no rule opening `/api/share/*`.
+
 ### Required proxy behavior
 
 - `/api/share/*` stays on the website's origin. Preserve Authorization, cookies,

@@ -52,7 +52,8 @@ npm run test:browser
 - Same-network IPv6 discovery groups addresses by their `/64` prefix, while
   IPv4-mapped IPv6 must agree with the equivalent IPv4 address. Untrusted or
   missing proxy identity must isolate a visitor rather than grouping strangers.
-- Preserve same-origin checks, constant-time bearer-token comparison, bounded
+- Preserve same-origin checks (cross-origin only for origins an operator lists in
+  `SHARE_ALLOWED_ORIGINS`), constant-time bearer-token comparison, bounded
   inputs, and the rule that only actively streaming peers may signal each other.
 
 ### Published surface
