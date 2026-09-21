@@ -3,11 +3,15 @@ name: desktop
 # Builds the desktop app's installers on each platform's own runner: a
 # universal .dmg for macOS, .msi and setup .exe for Windows, and .deb, .rpm and
 # .AppImage for Linux. They are unsigned and attached to the run as artifacts.
-# Run it from the Actions tab, or push a version tag.
+# It runs when a push changes the app or this workflow, on any branch, and on a
+# version tag; from the Actions tab once this file is on the default branch.
 on:
   workflow_dispatch:
   push:
+    # Branch pushes need the paths to match; a tag builds regardless.
+    branches: ['**']
     tags: ['v*']
+    paths: ['desktop/**', '.github/workflows/desktop.yml']
 
 permissions:
   contents: read
