@@ -9,6 +9,7 @@
     "/_dev/*",
     "/api-modules.mjs",
     "/deploy/*",
+    "/desktop/*",
     "/dev-server.mjs",
     "/functions/*",
     "/package-lock.json",
