@@ -36,7 +36,9 @@ cargo install tauri-cli --version "^2" --locked
 cargo tauri build
 ```
 
-The bundles land in `target/release/bundle/`. They are unsigned, so macOS asks
+The bundles land in `target/release/bundle/`. The CLI refuses to start
+without `dist/`, which the build fills, so on a fresh clone run `cargo build`
+(or `mkdir dist`) first. They are unsigned, so macOS asks
 before opening one downloaded from elsewhere.
 
 ## How it works
