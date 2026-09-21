@@ -1,0 +1,22 @@
+name: Tool request
+description: Suggest a new tool or a change to an existing one.
+labels: [tool request]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What should it do
+      description: The task it solves, and what goes in and comes out.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why here
+      description: What you use for this today, and why a small local tool is better.
+  - type: checkboxes
+    id: local
+    attributes:
+      label: Fit
+      options:
+        - label: It can work entirely in the browser, without sending data anywhere.
