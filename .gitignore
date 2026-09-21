@@ -5,3 +5,6 @@ node_modules/
 .env.*
 !.env.example
 *.log
+/desktop/dist/
+/desktop/target/
+/desktop/gen/

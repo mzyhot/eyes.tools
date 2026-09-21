@@ -41,6 +41,7 @@ vercel.json      Vercel: serves each tool at /<slug> (generated)
 scripts/        check.mjs (static checks), static-routes.mjs (writes the four files above)
 tests/           Node tests and Playwright browser suites
 deploy/          systemd unit, environment example, and self-hosting notes
+desktop/         the tools as a Tauri desktop app (Rust); see desktop/README.md
 _dev/           the contract and the page skeleton — reference material, not shipped code
 THIRDPARTYLICENSES  licenses and copyright notices for vendored dependencies
 ```
@@ -59,6 +60,18 @@ for example `node dev-server.mjs 9000`. Most local tools also work when
 `index.html` is opened straight off disk. The included server runs the share
 discovery service. WebRTC sharing needs HTTPS (or localhost during development)
 plus a reachable peer.
+
+## Desktop app
+
+`desktop/` builds the tools into a desktop app with Tauri. It embeds the same
+pages the server publishes and works offline; share uses eyes.tools's service to
+find devices, so the app meets people on the website. With Rust installed:
+
+```bash
+cd desktop && cargo run
+```
+
+[desktop/README.md](desktop/README.md) covers release builds and installers.
 
 ## Changing things
 

@@ -125,6 +125,9 @@ E.tool(function () {
   /* Automatic reconnection gives up after this many consecutive failures; after
      that, pressing send on the device tries again. */
   const MAX_RETRIES = 5;
+  /* The discovery and signaling service: this site's own server unless the
+     site configuration names another, as the desktop app's does. */
+  const SERVICE = SITE.shareService || '';
   const peers = new Map();
   let session = null, stream = null, epoch = 0, stopped = false, retained = 0, reserved = 0, chosen = null, textPeer = null;
   let room = '', online = false, creatingRoom = false;
@@ -149,7 +152,7 @@ E.tool(function () {
     $('#network-label').textContent = room ? 'in this room' : 'on your network';
   }
   async function api(path, body, current = session) {
-    const response = await fetch('/api/share/' + path + (current ? '?id=' + current.id : ''), {
+    const response = await fetch(SERVICE + '/api/share/' + path + (current ? '?id=' + current.id : ''), {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(current ? { Authorization: 'Bearer ' + current.token } : {}) },
       body: JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout(15000)
     });
@@ -240,12 +243,18 @@ E.tool(function () {
           $('#your-name').textContent = joined.name;
           $('#empty-note').textContent = room ? 'open the room link on another device. it will appear here.' : 'open share on another device using the same wi-fi.';
           if (!room && !joined.networkKnown) $('#empty-note').textContent = 'use a room link to connect your devices.';
+          /* Devices on one wi-fi only meet if the service sees one network.
+             Private Relay, a VPN, or IPv6 turned off on just one of them makes
+             it see two, so say so once it has been quiet for a while. */
+          if (!room && joined.networkKnown) setTimeout(() => {
+            if (session === joined && !room && !peers.size) $('#empty-note').textContent = 'nothing yet? private relay, a vpn, or ipv6 turned off on one device makes it look like another network. use connect another network instead.';
+          }, 10000);
         }
         const current = session;
         const connection = stream = new AbortController();
         const armWatchdog = () => { lastBeat = Date.now(); clearTimeout(watchdog); watchdog = setTimeout(() => connection.abort(), 45000); };
         armWatchdog();
-        const response = await fetch('/api/share/events?id=' + current.id, { headers: { Authorization: 'Bearer ' + current.token }, signal: connection.signal, cache: 'no-store' });
+        const response = await fetch(SERVICE + '/api/share/events?id=' + current.id, { headers: { Authorization: 'Bearer ' + current.token }, signal: connection.signal, cache: 'no-store' });
         if (response.status === 401) {
           /* Gone longer than the server's grace period. Peers have already been
              told this device left, so its connections are dead either way. */
@@ -598,7 +607,7 @@ E.tool(function () {
     $('#room-panel').hidden = !room;
     $('#room-button').textContent = room ? 'copy room link' : 'connect another network';
     if (room) {
-      const link = new URL(location.href); link.hash = 'room=' + room;
+      const link = new URL(SERVICE ? SERVICE + '/share' : location.href); link.hash = 'room=' + room;
       $('#room-link').value = link.href;
       const host = $('#room-qr'); host.replaceChildren();
       // Render the vendored QR matrix with the existing theme-independent QR tokens.
@@ -648,7 +657,7 @@ E.tool(function () {
   window.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
   window.addEventListener('drop', e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
   window.addEventListener('beforeunload', e => { if (activity()) { e.preventDefault(); e.returnValue = ''; } });
-  window.addEventListener('pagehide', () => { stopped = true; stream?.abort(); if (session) fetch('/api/share/leave?id=' + session.id, { method: 'POST', headers: { Authorization: 'Bearer ' + session.token }, keepalive: true }).catch(() => {}); clearPeers('page closed'); });
+  window.addEventListener('pagehide', () => { stopped = true; stream?.abort(); if (session) fetch(SERVICE + '/api/share/leave?id=' + session.id, { method: 'POST', headers: { Authorization: 'Bearer ' + session.token }, keepalive: true }).catch(() => {}); clearPeers('page closed'); });
   window.addEventListener('pageshow', e => { if (e.persisted) { stopped = false; discover(); } });
   /* Coming back to the tab. A phone suspends background tabs, and the event
      stream can die without either end noticing; the server pings every 15
@@ -661,7 +670,7 @@ E.tool(function () {
   window.addEventListener('online', hurry);
   window.addEventListener('hashchange', () => { if (readRoom()) { showRoom(); discover(); } });
   if (!window.isSecureContext || !window.RTCPeerConnection || !window.crypto?.subtle) { error('open share over https in a browser that supports WebRTC.'); $('#status').textContent = 'unavailable'; }
-  else if (location.protocol === 'file:') { error('open share on the website to find other devices.'); $('#status').textContent = 'offline'; }
+  else if (location.protocol === 'file:' && !SERVICE) { error('open share on the website to find other devices.'); $('#status').textContent = 'offline'; }
   else if (readRoom()) { showRoom(); discover(); }
 });
 </script>

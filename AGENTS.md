@@ -52,7 +52,8 @@ npm run test:browser
 - Same-network IPv6 discovery groups addresses by their `/64` prefix, while
   IPv4-mapped IPv6 must agree with the equivalent IPv4 address. Untrusted or
   missing proxy identity must isolate a visitor rather than grouping strangers.
-- Preserve same-origin checks, constant-time bearer-token comparison, bounded
+- Preserve same-origin checks (cross-origin only for origins an operator lists in
+  `SHARE_ALLOWED_ORIGINS`), constant-time bearer-token comparison, bounded
   inputs, and the rule that only actively streaming peers may signal each other.
 
 ### Published surface
@@ -63,3 +64,7 @@ npm run test:browser
   `node scripts/static-routes.mjs` so static hosts hide it too.
 - Clean tool URLs, legacy redirects, Cloudflare routes, and Vercel rewrites must
   stay consistent. A change that works only on the Node server is incomplete.
+- The desktop app (`desktop/`) embeds exactly what `public-files.mjs` and `t/`
+  publish, and its CSP in `desktop/tauri.conf.json` mirrors `dev-server.mjs`.
+  A CSP change belongs in both. For page changes, `EYES_PROBE=1 cargo run` in
+  `desktop/` checks every page in the app's WebKit webview.

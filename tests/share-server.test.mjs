@@ -106,6 +106,43 @@ test('rejects cross-origin requests, invalid credentials and malformed payloads'
   assert.equal((await fetch(f.base + '/api/share/events?id=' + a.id)).status, 401);
 });
 
+test('only origins the operator lists may use the service cross-origin, with CORS', async t => {
+  const f = await fixture(t, { allowedOrigins: 'tauri://localhost, http://tauri.localhost' });
+  const app = { Origin: 'tauri://localhost', 'Sec-Fetch-Site': 'cross-site' };
+
+  const preflight = await fetch(f.base + '/api/share/join', { method: 'OPTIONS', headers: { ...app, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' } });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'tauri://localhost');
+  assert.match(preflight.headers.get('access-control-allow-headers'), /Authorization/);
+
+  const joined = await f.post('join', {}, null, app);
+  assert.equal(joined.status, 200);
+  assert.equal(joined.headers.get('access-control-allow-origin'), 'tauri://localhost');
+  assert.equal(joined.headers.get('vary'), 'Origin');
+  const a = await joined.json();
+  const b = await f.join({}, { Origin: 'http://tauri.localhost', 'Sec-Fetch-Site': 'cross-site' });
+  const b1 = await f.events(b, { Origin: 'http://tauri.localhost' });
+  assert.deepEqual((await b1.next()).data, []);
+  const a1 = await f.events(a, app);
+  assert.equal((await a1.next()).data[0].id, b.id);
+
+  // Same-origin pages keep working and get no CORS headers; anyone else is refused.
+  const site = await f.post('join');
+  assert.equal(site.status, 200);
+  assert.equal(site.headers.get('access-control-allow-origin'), null);
+  for (const Origin of ['https://unrelated.example', 'tauri://localhost.example', 'null']) {
+    const refused = await f.post('join', {}, null, { Origin, 'Sec-Fetch-Site': 'cross-site' });
+    assert.equal(refused.status, 403);
+    assert.equal(refused.headers.get('access-control-allow-origin'), null);
+  }
+  assert.equal((await fetch(f.base + '/api/share/join', { method: 'OPTIONS', headers: { Origin: 'https://unrelated.example' } })).status, 403);
+});
+
+test('no origin is allowed cross-origin unless listed', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.post('join', {}, null, { Origin: 'tauri://localhost', 'Sec-Fetch-Site': 'cross-site' })).status, 403);
+});
+
 test('limits room size and rate of joining', async t => {
   const f = await fixture(t);
   for (let i = 0; i < 16; i++) await f.join({ room: 'a'.repeat(32) });
