@@ -9,6 +9,7 @@
 /_routes.json
 /api-modules.mjs
 /deploy/
+/desktop/
 /dev-server.mjs
 /functions/
 /package-lock.json

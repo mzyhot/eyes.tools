@@ -1,0 +1,28 @@
+[package]
+name = "eyes"
+version = "1.0.0"
+description = "𓁹𓁹 as a desktop app"
+license = "AGPL-3.0-only"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+
+# The pages are always embedded in the binary, so `cargo run` behaves exactly
+# like a release build rather than waiting for a dev server that never starts.
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

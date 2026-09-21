@@ -64,3 +64,7 @@ npm run test:browser
   `node scripts/static-routes.mjs` so static hosts hide it too.
 - Clean tool URLs, legacy redirects, Cloudflare routes, and Vercel rewrites must
   stay consistent. A change that works only on the Node server is incomplete.
+- The desktop app (`desktop/`) embeds exactly what `public-files.mjs` and `t/`
+  publish, and its CSP in `desktop/tauri.conf.json` mirrors `dev-server.mjs`.
+  A CSP change belongs in both. For page changes, `EYES_PROBE=1 cargo run` in
+  `desktop/` checks every page in the app's WebKit webview.
