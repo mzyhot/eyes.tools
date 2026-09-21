@@ -6,7 +6,8 @@
 //! Share is the one tool that needs a server, for finding devices and setting
 //! up connections, so it uses eyes.tools's service for that; files still go
 //! device to device, and the app meets browsers on the site and other copies
-//! of the app alike. Links to other sites open in the system browser, and
+//! of the app alike. Links the pages make for other people point at
+//! eyes.tools too. Links to other sites open in the system browser, and
 //! downloads land in the Downloads folder.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -26,11 +27,12 @@ use tauri_plugin_opener::OpenerExt;
 #[cfg(debug_assertions)]
 const LOCAL_ORIGIN: &str = if cfg!(windows) { "http://tauri.localhost" } else { "tauri://localhost" };
 
-/// The share service the app uses. A build for another server sets
-/// `EYES_SHARE_SERVICE`, and that server lists the app's origins in
-/// `SHARE_ALLOWED_ORIGINS`; the CSP in `tauri.conf.json` must allow it too.
-const SHARE_SERVICE: &str = match option_env!("EYES_SHARE_SERVICE") {
-    Some(service) => service,
+/// The public site: where share's service is, and where links the pages make
+/// for other people point. A build for another server sets
+/// `EYES_PUBLIC_ORIGIN`, that server lists the app's origins in
+/// `SHARE_ALLOWED_ORIGINS`, and the CSP in `tauri.conf.json` must allow it.
+const PUBLIC_ORIGIN: &str = match option_env!("EYES_PUBLIC_ORIGIN") {
+    Some(origin) => origin,
     None => "https://eyes.tools",
 };
 
@@ -44,16 +46,16 @@ const USER_AGENT: &str = concat!("eyes-desktop/", env!("CARGO_PKG_VERSION"), " (
 /// flashes white before the first paint.
 const PAPER: Color = Color(7, 7, 7, 255);
 
-/// Runs before each page's own scripts: points share at [`SHARE_SERVICE`] as
-/// `site.js` assigns the site configuration.
-fn share_service_script() -> String {
+/// Runs before each page's own scripts: sets the configuration's
+/// `publicOrigin` to [`PUBLIC_ORIGIN`] as `site.js` assigns it.
+fn public_origin_script() -> String {
     format!(
         r#"(() => {{
   let site;
   Object.defineProperty(window, 'SITE', {{
     configurable: true,
     get: () => site,
-    set: value => {{ site = value; if (value) value.shareService = {SHARE_SERVICE:?}; }}
+    set: value => {{ site = value; if (value) value.publicOrigin = {PUBLIC_ORIGIN:?}; }}
   }});
 }})();"#
     )
@@ -81,7 +83,7 @@ fn open_window(app: &AppHandle) -> tauri::Result<()> {
         .user_agent(USER_AGENT)
         // Let drops reach the page, where the tools' drop zones handle them.
         .disable_drag_drop_handler()
-        .initialization_script(share_service_script())
+        .initialization_script(public_origin_script())
         .on_document_title_changed(|window, title| {
             let _ = window.set_title(&title);
         })
@@ -120,8 +122,23 @@ fn open_window(app: &AppHandle) -> tauri::Result<()> {
         window = window.initialization_script(probe::SCRIPT).always_on_top(true);
     }
 
-    window.build()?;
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+    let window = window.build()?;
+    #[cfg(target_os = "linux")]
+    enable_webrtc(&window);
     Ok(())
+}
+
+/// WebKitGTK leaves WebRTC off unless asked, and share needs it. It applies to
+/// pages loaded from now on, and the window opens on the index, not share.
+#[cfg(target_os = "linux")]
+fn enable_webrtc(window: &tauri::WebviewWindow) {
+    use webkit2gtk::{SettingsExt, WebViewExt};
+    let _ = window.with_webview(|webview| {
+        if let Some(settings) = webview.inner().settings() {
+            settings.set_enable_webrtc(true);
+        }
+    });
 }
 
 /// The navigation handler: `true` lets the webview load `url`. The app's own

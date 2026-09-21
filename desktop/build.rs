@@ -41,7 +41,7 @@ fn main() {
     }
     pages.sort();
     println!("cargo:rustc-env=EYES_PAGES={}", pages.join(","));
-    println!("cargo:rerun-if-env-changed=EYES_SHARE_SERVICE");
+    println!("cargo:rerun-if-env-changed=EYES_PUBLIC_ORIGIN");
 
     tauri_build::build();
 }
