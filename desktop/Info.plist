@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Share connects straight to the other device. On a local network macOS
+       asks before an app may do that, and without this it is refused without
+       asking, which looks like a connection that opens and then dies. -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Share sends files directly to devices on your network, so they never leave it.</string>
+</dict>
+</plist>

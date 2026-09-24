@@ -7,9 +7,9 @@ server. No page is loaded from eyes.tools.
 
 Differences from the site:
 
-- **Share uses eyes.tools's service** to find devices and set up connections —
-  the one thing a server is needed for. Files still go device to device, and
-  the app finds browsers on the site and other copies of the app alike. The
+- **Share uses eyes.tools's service** for its rooms and connection setup — the
+  one thing a server is needed for. Files still go device to device, and the
+  app's link opens for browsers on the site and other copies of the app. The
   server must list the app's origins in `SHARE_ALLOWED_ORIGINS` (see
   `deploy/README.md`).
 - **Links for other people** — dump's text links, share's room links — point at
@@ -17,6 +17,11 @@ Differences from the site:
 - **User agent** is `eyes-desktop/<version>`, not a browser's, so a bot check
   that challenges browsers leaves share's requests alone without the site
   having to open its API to everyone.
+- **macOS asks for local network access** the first time share runs. Say yes:
+  without it macOS blocks the direct connection to a device on the same Wi-Fi,
+  and share can only fall back to the long way round or a relay. The reason
+  shown in the prompt is in `Info.plist`; the answer is in System Settings →
+  Privacy & Security → Local Network.
 - **Links to other sites** open in the system browser.
 - **Downloads** go to the Downloads folder, renamed `name (2).ext` if the name
   is taken.
@@ -48,6 +53,7 @@ before opening one downloaded from elsewhere.
 build.rs         copies the site into dist/ before Tauri embeds it
 src/main.rs      the window: routing, outside links, downloads
 src/probe.rs     the smoke test (debug builds only)
+Info.plist       extra macOS keys, merged into the bundle's own
 tauri.conf.json  app name, bundle settings, and the page CSP
 icon.svg         the source for icons/ (cargo tauri icon icon.svg)
 ```
@@ -89,9 +95,10 @@ SHARE_ALLOWED_ORIGINS=tauri://localhost node dev-server.mjs 8880
 in the repository root, then in `desktop/`:
 
 ```bash
-EYES_PUBLIC_ORIGIN=http://127.0.0.1:8880 TAURI_CONFIG="{\"app\":{\"security\":{\"csp\":{\"connect-src\":\"'self' http://127.0.0.1:8880\"}}}}" EYES_PROBE=1 EYES_PROBE_PEER=hello cargo run
+EYES_PUBLIC_ORIGIN=http://127.0.0.1:8880 TAURI_CONFIG="{\"app\":{\"security\":{\"csp\":{\"connect-src\":\"'self' http://127.0.0.1:8880\"}}}}" EYES_PROBE=1 EYES_PROBE_PEER=hello EYES_PROBE_ROOM=0123456789abcdef01234567 cargo run
 ```
 
-and open <http://127.0.0.1:8880/share> in a browser and send the app "hello".
+and open <http://127.0.0.1:8880/share#room=0123456789abcdef01234567> in a
+browser — the same link the app is in — and send the app "hello".
 The app sends "from the app" back and passes once both arrive. Keep the screen
 awake: WebKit suspends a hidden window's page, connections included.

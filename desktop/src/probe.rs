@@ -8,10 +8,11 @@
 //! or a blocked request. Prints one line per step and exits non-zero if any
 //! failed.
 //!
-//! With `EYES_PROBE_PEER` set, it opens share instead and waits for another
-//! device — a browser on the same service and network — to appear, sends it
-//! "from the app", and expects `EYES_PROBE_PEER`'s value back. The screen must
-//! be awake: WebKit suspends a hidden page, and its connections with it.
+//! With `EYES_PROBE_PEER` set, it opens share instead, in the room named by
+//! `EYES_PROBE_ROOM` (24 hex characters, the same link a browser opens), waits
+//! for that browser to appear, sends it "from the app", and expects
+//! `EYES_PROBE_PEER`'s value back. The screen must be awake: WebKit suspends a
+//! hidden page, and its connections with it.
 //!
 //! The page reports by navigating to `eyes-probe://report?…`, which the
 //! navigation handler hands to `intercept` instead of loading.
@@ -41,7 +42,7 @@ pub const SCRIPT: &str = r#"
     const ready = !!document.body && document.body.dataset.ready === '1';
     if (!ready && Date.now() - started < 8000) return setTimeout(wait, 50);
     if (ready && location.hash === '#probe-download') return E.download('probe', 'eyes-probe.txt', 'text/plain');
-    if (ready && location.hash === '#probe-peer') return peer().then(report, e => { errors.push(e.message); report(''); });
+    if (ready && location.hash.includes('probe-peer')) return peer().then(report, e => { errors.push(e.message); report(''); });
     setTimeout(() => report(''), 300);
     function report(received) {
       location.href = 'eyes-probe://report?' + new URLSearchParams({
@@ -55,7 +56,7 @@ pub const SCRIPT: &str = r#"
   };
   /* Share's connection attempts, printed if the peer step fails. */
   const iceLog = [];
-  if (location.hash === '#probe-peer' && window.RTCPeerConnection) {
+  if (location.hash.includes('probe-peer') && window.RTCPeerConnection) {
     const Native = RTCPeerConnection;
     window.RTCPeerConnection = function (...args) {
       const pc = new Native(...args);
@@ -116,9 +117,15 @@ pub fn start(app: &AppHandle) -> bool {
 
     let mut steps = VecDeque::from([Step { name: "index".into(), go: None, expect: Expect::Page(String::new()) }]);
     if let Ok(text) = std::env::var("EYES_PROBE_PEER") {
-        // Straight to share, so the other device is not left talking to a
-        // session the probe has already moved on from.
-        steps.push_back(Step { name: "share with a peer".into(), go: local("/share#probe-peer"), expect: Expect::Peer(text) });
+        // Straight to share, in the room both sides were given, so the other
+        // device is not left talking to a session the probe has moved on from.
+        let room = std::env::var("EYES_PROBE_ROOM").expect("EYES_PROBE_PEER needs EYES_PROBE_ROOM: the link both sides open");
+        assert!(room.len() == 24 && room.chars().all(|c| c.is_ascii_hexdigit()), "EYES_PROBE_ROOM is 24 hex characters");
+        steps.push_back(Step {
+            name: "share with a peer".into(),
+            go: local(&format!("/share#room={room}&probe-peer")),
+            expect: Expect::Peer(text),
+        });
     } else {
         for pair in env!("EYES_PAGES").split(',') {
             let (slug, tool) = pair.split_once(':').expect("slug:tool");
