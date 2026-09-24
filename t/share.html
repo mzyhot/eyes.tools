@@ -66,13 +66,12 @@ body[data-tool="share"] [hidden] { display: none !important; }
 <main class="stack-6">
   <section aria-label="devices">
     <div class="share-toolbar">
-      <p class="lbl"><span id="device-count">devices</span> · <span id="network-label">on your network</span></p>
-      <button class="btn -ghost -sm" type="button" id="room-button" disabled>connect another network</button>
+      <p class="lbl"><span id="device-count">devices</span> · in this room</p>
     </div>
     <div class="share-space">
       <div id="empty" class="share-empty">
         <p>ready when you are.</p>
-        <p class="hint" id="empty-note">open share on another device using the same wi-fi.</p>
+        <p class="hint" id="empty-note">open this link on the other device. it will appear here.</p>
       </div>
       <ul class="device-list" id="devices" aria-label="available devices"></ul>
     </div>
@@ -87,9 +86,9 @@ body[data-tool="share"] [hidden] { display: none !important; }
   <section class="room-panel" id="room-panel" aria-label="room invitation" hidden>
     <div class="stack-2">
       <label class="lbl" for="room-link">one link. both devices.</label>
-      <p class="hint">open this link or scan the code on the other device. anyone with the link can join.</p>
+      <p class="hint">open this link or scan the code on the other device. anyone with the link can join, until you close this page or take a new link.</p>
       <input class="field" id="room-link" readonly>
-      <div class="row"><button class="btn -sm" id="copy-room" type="button">copy link</button><button class="tbtn" id="leave-room" type="button">leave room</button></div>
+      <div class="row"><button class="btn -sm" id="copy-room" type="button">copy link</button><button class="tbtn" id="new-link" type="button">new link</button></div>
     </div>
     <div id="room-qr" role="img" aria-label="scan to join this room"></div>
   </section>
@@ -98,10 +97,10 @@ body[data-tool="share"] [hidden] { display: none !important; }
     <ul class="transfer-list" id="transfers"></ul>
   </section>
   <details class="share-help">
-    <summary>can’t see your device?</summary>
-    <p class="hint">Keep share open on both devices. On the same Wi-Fi, they appear automatically. On another network, open the same room link on both devices. VPNs and some networks may need a room link too.</p>
+    <summary>can’t see the other device?</summary>
+    <p class="hint">Open the link, or scan the code, on the other device, and keep share open on both. The link works from any network. It stops working when this page closes, when you take a new link, or half a minute after a connection drops.</p>
     <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Up to 256 MB per transfer; remove received files to free space.</p>
-    <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site’s server storage. The server handles device discovery and connection details. A relay may carry encrypted data when configured.</p>
+    <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site’s server storage. The server only introduces the two devices and passes the connection details. A relay may carry encrypted data when configured.</p>
     <button class="tbtn" id="retry" type="button">refresh devices</button>
   </details>
 </main>
@@ -125,12 +124,20 @@ E.tool(function () {
   /* Automatic reconnection gives up after this many consecutive failures; after
      that, pressing send on the device tries again. */
   const MAX_RETRIES = 5;
+  /* A link is only as private as the devices holding it. Once a connection has
+     been made and then lost for this long, the room is abandoned and a fresh
+     link replaces it, so the old one reaches nobody. */
+  const SEVERED_MS = 30000;
   /* The discovery and signaling service: this site's own server unless the
      site configuration names the public site, as the desktop app's does. */
   const SERVICE = SITE.publicOrigin || '';
   const peers = new Map();
   let session = null, stream = null, epoch = 0, stopped = false, retained = 0, reserved = 0, chosen = null, textPeer = null;
-  let room = '', online = false, creatingRoom = false;
+  let room = '', online = false;
+  /* everConnected: whether a direct connection has ever been open in this room,
+     so a page nobody has joined yet keeps its link. severedTimer: counts the
+     silence out before the link is replaced. */
+  let everConnected = false, severedTimer = null;
   /* lastBeat: when the discovery stream last delivered anything, so a tab
      returning from the background can tell a silently dead stream from a live one.
      wake: cuts the current reconnect backoff short. */
@@ -146,10 +153,32 @@ E.tool(function () {
   function render() {
     $('#empty').hidden = peers.size > 0;
     $('#device-count').textContent = peers.size ? peers.size + (peers.size === 1 ? ' device' : ' devices') : 'devices';
-    $('#status').textContent = online ? (room ? 'room open' : 'you’re visible') : 'reconnecting…';
-    $('#room-button').disabled = !online || activity() || creatingRoom;
-    $('#leave-room').disabled = activity();
-    $('#network-label').textContent = room ? 'in this room' : 'on your network';
+    $('#status').textContent = online ? 'room open' : 'reconnecting…';
+    $('#new-link').disabled = activity();
+    watchLink();
+  }
+  const connected = () => [...peers.values()].some(p => p.dc?.readyState === 'open');
+  /** Replace the link once every connection in this room has been gone a while. */
+  function watchLink() {
+    if (connected()) { everConnected = true; clearTimeout(severedTimer); severedTimer = null; return; }
+    if (!everConnected || severedTimer || stopped) return;
+    severedTimer = setTimeout(() => {
+      severedTimer = null;
+      if (connected() || activity() || stopped) return;
+      newLink('that connection dropped. this link is new — the old one no longer works.');
+    }, SEVERED_MS);
+  }
+  /**
+   * Leave this room for a fresh one, so the link just handed out goes dead.
+   * Any notice goes under the empty list, where the next step is: reconnecting
+   * clears the error line, and this has to outlive that.
+   */
+  function newLink(note) {
+    if (activity()) return;
+    clearTimeout(severedTimer); severedTimer = null; everConnected = false;
+    room = ''; history.replaceState(null, '', location.pathname + location.search);
+    if (note) $('#empty-note').textContent = note;
+    discover();
   }
   async function api(path, body, current = session) {
     const response = await fetch(SERVICE + '/api/share/' + path + (current ? '?id=' + current.id : ''), {
@@ -241,14 +270,14 @@ E.tool(function () {
           if (version !== epoch || stopped) { api('leave', {}, joined).catch(() => {}); return; }
           session = joined;
           $('#your-name').textContent = joined.name;
-          $('#empty-note').textContent = room ? 'open the room link on another device. it will appear here.' : 'open share on another device using the same wi-fi.';
-          if (!room && !joined.networkKnown) $('#empty-note').textContent = 'use a room link to connect your devices.';
-          /* Devices on one wi-fi only meet if the service sees one network.
-             Private Relay, a VPN, or IPv6 turned off on just one of them makes
-             it see two, so say so once it has been quiet for a while. */
-          if (!room && joined.networkKnown) setTimeout(() => {
-            if (session === joined && !room && !peers.size) $('#empty-note').textContent = 'nothing yet? private relay, a vpn, or ipv6 turned off on one device makes it look like another network. use connect another network instead.';
-          }, 10000);
+          /* Arriving without a link, the service mints one from this session's
+             own id. It is the page's address from here on, so a reload rejoins
+             the same room rather than opening another. */
+          if (!room && /^[a-f0-9]{24}$/.test(joined.room || '')) {
+            room = joined.room;
+            history.replaceState(null, '', '#room=' + room);
+          }
+          showRoom();
         }
         const current = session;
         const connection = stream = new AbortController();
@@ -397,7 +426,7 @@ E.tool(function () {
         /* Connected again: retract this device's own connection error, but never
            someone else's. */
         if (this.lastError && $('#err').textContent === this.lastError) error('');
-        this.lastError = ''; this.pump();
+        this.lastError = ''; render(); this.pump();
       };
       dc.onclose = () => {
         if (this.dc !== dc || this.closed) return;
@@ -605,7 +634,6 @@ E.tool(function () {
   }
   function showRoom() {
     $('#room-panel').hidden = !room;
-    $('#room-button').textContent = room ? 'copy room link' : 'connect another network';
     if (room) {
       const link = new URL(SERVICE ? SERVICE + '/share' : location.href); link.hash = 'room=' + room;
       $('#room-link').value = link.href;
@@ -625,25 +653,11 @@ E.tool(function () {
   }
   function readRoom() {
     const hash = new URLSearchParams(location.hash.slice(1)); room = hash.get('room') || '';
-    if (room && !/^[a-f0-9]{32}$/.test(room)) { error('this room link is incomplete. ask for a new link.'); $('#status').textContent = 'invalid room'; return false; }
+    if (room && !/^[a-f0-9]{24}$/.test(room)) { error('this room link is incomplete. ask for a new link.'); $('#status').textContent = 'invalid room'; return false; }
     return true;
   }
-  $('#room-button').addEventListener('click', async () => {
-    if (room) { E.copy($('#room-link').value, $('#room-button')); return; }
-    if (creatingRoom || !online || activity()) return;
-    const current = session, version = epoch;
-    creatingRoom = true; $('#room-button').dataset.state = 'loading'; render();
-    try {
-      const result = await api('room', {}, current);
-      if (session !== current || epoch !== version || stopped) return;
-      if (activity()) throw new Error('finish the current transfer before opening a room.');
-      if (!/^[a-f0-9]{32}$/.test(result.room || '')) throw new Error('could not create a room link. please try again.');
-      room = result.room; history.replaceState(null, '', '#room=' + room); showRoom(); discover();
-    } catch (e) { if (epoch === version) error(e.message); }
-    finally { creatingRoom = false; delete $('#room-button').dataset.state; render(); }
-  });
   $('#copy-room').addEventListener('click', () => E.copy($('#room-link').value, $('#copy-room')));
-  $('#leave-room').addEventListener('click', () => { if (activity()) return; room = ''; history.replaceState(null, '', location.pathname + location.search); showRoom(); discover(); });
+  $('#new-link').addEventListener('click', () => newLink());
   $('#retry').addEventListener('click', () => { if (!activity()) discover(); });
   $('#files').addEventListener('change', () => { chosen?.files([...$('#files').files]); $('#files').value = ''; });
   $('#text-cancel').addEventListener('click', () => $('#text-dialog').close());

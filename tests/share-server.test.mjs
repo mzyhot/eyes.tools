@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createHmac, randomBytes } from 'node:crypto';
-import { createShareService } from '../share-server.mjs';
+import { createShareService, networkOf } from '../share-server.mjs';
 
 async function fixture(t, options = {}) {
   const share = createShareService(options);
@@ -28,10 +28,11 @@ async function fixture(t, options = {}) {
   return { base, post, join, events };
 }
 
-test('same-network discovery, signaling, and departure', { timeout: 10000 }, async t => {
+test('a link introduces two devices, relays their signals, and reports a departure', { timeout: 10000 }, async t => {
   const f = await fixture(t), a = await f.join(), ae = await f.events(a);
+  assert.equal(a.room, a.id, 'a join without a link is given its own id as one');
   assert.deepEqual(await ae.next(), { type: 'peers', data: [] });
-  const b = await f.join(), be = await f.events(b);
+  const b = await f.join({ room: a.room }), be = await f.events(b);
   assert.equal((await be.next()).data[0].id, a.id);
   assert.equal((await ae.next()).data.id, b.id);
   const signal = { connection: 'a'.repeat(24), description: { type: 'offer', sdp: 'v=0\r\n' } };
@@ -43,7 +44,7 @@ test('same-network discovery, signaling, and departure', { timeout: 10000 }, asy
 
 test('stream loss is temporary but session removal is final', { timeout: 10000 }, async t => {
   const f = await fixture(t), a = await f.join(), ae = await f.events(a); await ae.next();
-  const b = await f.join(), be = await f.events(b); await be.next(); await ae.next();
+  const b = await f.join({ room: a.room }), be = await f.events(b); await be.next(); await ae.next();
 
   ae.abort.abort();
   assert.deepEqual(await be.next(), { type: 'left', data: { id: a.id } });
@@ -56,42 +57,50 @@ test('stream loss is temporary but session removal is final', { timeout: 10000 }
   assert.deepEqual(await be.next(), { type: 'left', data: { id: a.id, removed: true } });
 });
 
-test('room links cross networks, isolate rooms, and never publish tokens', { timeout: 10000 }, async t => {
+test('a link crosses networks, isolates other rooms, and never publishes tokens', { timeout: 10000 }, async t => {
   const f = await fixture(t, { trustCloudflare: true });
-  const room = 'a'.repeat(32), a = await f.join({ room }, { 'CF-Connecting-IP': '192.0.2.1' }), ae = await f.events(a); await ae.next();
+  const room = 'a'.repeat(24), a = await f.join({ room }, { 'CF-Connecting-IP': '192.0.2.1' }), ae = await f.events(a); await ae.next();
   const b = await f.join({ room }, { 'CF-Connecting-IP': '198.51.100.2' }), be = await f.events(b);
   const snapshot = await be.next(); assert.equal(snapshot.data[0].id, a.id); assert.equal(snapshot.data[0].token, undefined);
-  const c = await f.join({ room: 'b'.repeat(32) }), ce = await f.events(c);
+  const c = await f.join({ room: 'b'.repeat(24) }), ce = await f.events(c);
   assert.deepEqual((await ce.next()).data, []);
   assert.equal((await f.post('signal', { to: c.id, signal: { connection: 'c'.repeat(24), description: { type: 'offer', sdp: 'v=0' } } }, a)).status, 404);
 });
 
-test('Cloudflare discovery trusts only explicit proxy configuration', { timeout: 10000 }, async t => {
-  const f = await fixture(t);
-  const a = await f.join({}, { 'CF-Connecting-IP': '192.0.2.1' }), ae = await f.events(a); await ae.next();
-  const b = await f.join({}, { 'CF-Connecting-IP': '192.0.2.1' }), be = await f.events(b);
-  assert.equal(a.networkKnown, false); assert.deepEqual((await be.next()).data, []);
-  const trusted = await fixture(t, { trustCloudflare: true });
-  const c = await trusted.join({}, { 'CF-Connecting-IP': '192.0.2.1' }), ce = await trusted.events(c); await ce.next();
-  const d = await trusted.join({}, { 'CF-Connecting-IP': '192.0.2.2' }), de = await trusted.events(d);
-  assert.equal(c.networkKnown, true); assert.deepEqual((await de.next()).data, []);
-  const e = await trusted.join({}, { 'CF-Connecting-IP': '192.0.2.1' }), ee = await trusted.events(e);
-  assert.equal((await ee.next()).data[0].id, c.id);
-  const missing = await trusted.join(), missingEvents = await trusted.events(missing);
-  assert.equal(missing.networkKnown, false); assert.deepEqual((await missingEvents.next()).data, []);
-  const missingAgain = await trusted.join(), missingAgainEvents = await trusted.events(missingAgain);
-  assert.equal(missingAgain.networkKnown, false); assert.deepEqual((await missingAgainEvents.next()).data, []);
-  const malformed = await trusted.join({}, { 'CF-Connecting-IP': 'not-an-ip' });
-  assert.equal(malformed.networkKnown, false);
+test('without a link a session is alone, and its link dies with it', { timeout: 10000 }, async t => {
+  const f = await fixture(t, { trustCloudflare: true });
+  const headers = { 'CF-Connecting-IP': '192.0.2.1' };
+  // Two tabs on one network, and one address: still two rooms, never one.
+  const a = await f.join({}, headers), ae = await f.events(a); await ae.next();
+  const b = await f.join({}, headers), be = await f.events(b);
+  assert.notEqual(a.room, b.room);
+  assert.deepEqual((await be.next()).data, []);
+
+  // The link reaches its session, and nobody once that session has gone.
+  const guest = await f.join({ room: a.room }), ge = await f.events(guest);
+  assert.equal((await ge.next()).data[0].id, a.id);
+  await f.post('leave', {}, a); await f.post('leave', {}, guest);
+  const late = await f.join({ room: a.room }), le = await f.events(late);
+  assert.deepEqual((await le.next()).data, []);
 });
 
-test('an untrusted proxy isolates visitors instead of grouping them by its address', { timeout: 10000 }, async t => {
+test('behind a trusted proxy the join limit follows the visitor, not the proxy', async t => {
+  const f = await fixture(t, { trustCloudflare: true });
+  const visitor = { 'CF-Connecting-IP': '192.0.2.1' };
+  for (let i = 0; i < 30; i++) assert.equal((await f.post('join', {}, null, visitor)).status, 200, 'join ' + i);
+  assert.equal((await f.post('join', {}, null, visitor)).status, 429);
+  assert.equal((await f.post('join', {}, null, { 'CF-Connecting-IP': '192.0.2.2' })).status, 200);
+  // A malformed or absent header falls back to the socket address, never to trust.
+  assert.equal((await f.post('join', {}, null, { 'CF-Connecting-IP': 'not-an-ip' })).status, 200);
+});
+
+test('an untrusted proxy header cannot move a visitor off their own limit', async t => {
   const f = await fixture(t);
-  for (const headers of [{ 'X-Forwarded-For': '192.0.2.1' }, { 'X-Real-IP': '192.0.2.1' }, { Forwarded: 'for=192.0.2.1' }]) {
-    const a = await f.join({}, headers), ae = await f.events(a); await ae.next();
-    const b = await f.join({}, headers), be = await f.events(b);
-    assert.equal(b.networkKnown, false, Object.keys(headers)[0]);
-    assert.deepEqual((await be.next()).data, [], Object.keys(headers)[0]);
+  for (let i = 0; i < 30; i++) {
+    assert.equal((await f.post('join', {}, null, { 'X-Forwarded-For': '192.0.2.' + i })).status, 200, 'join ' + i);
+  }
+  for (const headers of [{ 'X-Forwarded-For': '203.0.113.9' }, { 'X-Real-IP': '203.0.113.9' }, { Forwarded: 'for=203.0.113.9' }, {}]) {
+    assert.equal((await f.post('join', {}, null, headers)).status, 429, Object.keys(headers)[0] || 'no header');
   }
 });
 
@@ -120,7 +129,7 @@ test('only origins the operator lists may use the service cross-origin, with COR
   assert.equal(joined.headers.get('access-control-allow-origin'), 'tauri://localhost');
   assert.equal(joined.headers.get('vary'), 'Origin');
   const a = await joined.json();
-  const b = await f.join({}, { Origin: 'http://tauri.localhost', 'Sec-Fetch-Site': 'cross-site' });
+  const b = await f.join({ room: a.room }, { Origin: 'http://tauri.localhost', 'Sec-Fetch-Site': 'cross-site' });
   const b1 = await f.events(b, { Origin: 'http://tauri.localhost' });
   assert.deepEqual((await b1.next()).data, []);
   const a1 = await f.events(a, app);
@@ -145,9 +154,9 @@ test('no origin is allowed cross-origin unless listed', async t => {
 
 test('limits room size and rate of joining', async t => {
   const f = await fixture(t);
-  for (let i = 0; i < 16; i++) await f.join({ room: 'a'.repeat(32) });
-  assert.equal((await f.post('join', { room: 'a'.repeat(32) })).status, 429);
-  for (let i = 0; i < 13; i++) await f.join({ room: 'b'.repeat(32) });
+  for (let i = 0; i < 16; i++) await f.join({ room: 'a'.repeat(24) });
+  assert.equal((await f.post('join', { room: 'a'.repeat(24) })).status, 429);
+  for (let i = 0; i < 13; i++) await f.join({ room: 'b'.repeat(24) });
   assert.equal((await f.post('join', { room: 'c'.repeat(32) })).status, 429);
 });
 
@@ -165,7 +174,7 @@ test('retries duplicate IDs, visible short codes, and authentication tokens with
   const ids = [first, first, sameCode, unique];
   const tokens = ['aa'.repeat(32), 'aa'.repeat(32), 'bb'.repeat(32)];
   const f = await fixture(t, { random: n => Buffer.from((n === 12 ? ids : tokens).shift(), 'hex') });
-  const a = await f.join(), b = await f.join();
+  const a = await f.join(), b = await f.join({ room: a.room });
   assert.equal(a.id, first); assert.equal(b.id, unique);
   assert.notEqual(a.name.split(' ').at(-1), b.name.split(' ').at(-1));
   assert.notEqual(a.token, b.token);
@@ -176,7 +185,7 @@ test('retries duplicate IDs, visible short codes, and authentication tokens with
 test('concurrent joins reserve distinct short codes across separate rooms', async t => {
   let sequence = 0;
   const f = await fixture(t, { random: n => n === 12 ? Buffer.from(Math.floor(sequence++ / 2).toString(16).padStart(24, '0'), 'hex') : randomBytes(n) });
-  const joined = await Promise.all(Array.from({ length: 12 }, (_, i) => f.join({ room: i.toString(16).padStart(32, '0') })));
+  const joined = await Promise.all(Array.from({ length: 12 }, (_, i) => f.join({ room: i.toString(16).padStart(24, '0') })));
   assert.equal(new Set(joined.map(s => s.id.slice(-4))).size, joined.length);
   assert.equal(new Set(joined.map(s => s.name)).size, joined.length);
 });
@@ -189,53 +198,11 @@ test('broken randomness fails closed instead of overwriting a session', async t 
   assert.equal((await f.post('leave', {}, a)).status, 200);
 });
 
-test('room creation reserves unused links, retries collisions, and is idempotent', async t => {
-  const values = ['a'.repeat(32), 'a'.repeat(32), 'b'.repeat(32)];
-  const f = await fixture(t, { random: n => n === 16 ? Buffer.from(values.shift(), 'hex') : randomBytes(n) });
-  const a = await f.join(), b = await f.join();
-  const [ar, br] = await Promise.all([f.post('room', {}, a), f.post('room', {}, b)]);
-  const ac = (await ar.json()).room, bc = (await br.json()).room;
-  assert.notEqual(ac, bc); assert.equal(new Set([ac, bc]).size, 2);
-  const repeats = await Promise.all([f.post('room', {}, a), f.post('room', {}, a)]);
-  for (const response of repeats) assert.equal((await response.json()).room, ac);
-  // The allocation remains reserved after its creator leaves without using the link.
-  await f.post('leave', {}, a);
-  values.push(ac, 'c'.repeat(32));
-  const c = await f.join();
-  assert.equal((await (await f.post('room', {}, c)).json()).room, 'c'.repeat(32));
-  assert.equal((await f.post('room')).status, 401);
-});
-
-test('room generation cannot collide with a legacy room or reuse a reserved link on exhaustion', async t => {
-  const existing = 'd'.repeat(32), fresh = 'e'.repeat(32);
-  const values = [existing, fresh];
-  const f = await fixture(t, { random: n => n === 16 ? Buffer.from(values.shift() || fresh, 'hex') : randomBytes(n) });
-  const existingPeer = await f.join({ room: existing }), creator = await f.join();
-  assert.equal((await (await f.post('room', {}, creator)).json()).room, fresh);
-  assert.equal((await f.post('room', {}, existingPeer)).status, 503);
-  // Sharing an existing link intentionally still joins the same room.
-  const another = await f.join({ room: existing });
-  const ae = await f.events(existingPeer); await ae.next();
-  const be = await f.events(another); assert.equal((await be.next()).data[0].id, existingPeer.id);
-});
-
-test('IPv6 devices on one network share a room; other networks and cellular stay apart', { timeout: 10000 }, async t => {
-  const f = await fixture(t, { trustCloudflare: true });
-  // Two devices on one Wi-Fi: same /64 prefix, different interface identifiers.
-  const laptop = await f.join({}, { 'CF-Connecting-IP': '2600:1700:abcd:1230:1c2d:3e4f:5a6b:7c8d' });
-  const laptopEvents = await f.events(laptop); await laptopEvents.next();
-  const phone = await f.join({}, { 'CF-Connecting-IP': '2600:1700:abcd:1230:9f8e:7d6c:5b4a:3928' });
-  const phoneEvents = await f.events(phone);
-  assert.equal(phone.networkKnown, true);
-  assert.equal((await phoneEvents.next()).data[0].id, laptop.id);
-  // The neighbouring /64 is a different network.
-  const neighbour = await f.join({}, { 'CF-Connecting-IP': '2600:1700:abcd:1231:1c2d:3e4f:5a6b:7c8d' });
-  const neighbourEvents = await f.events(neighbour);
-  assert.deepEqual((await neighbourEvents.next()).data, []);
-  // An IPv4-mapped address and its plain form are the same client network.
-  const mapped = await f.join({}, { 'CF-Connecting-IP': '::ffff:198.51.100.9' });
-  const mappedEvents = await f.events(mapped); await mappedEvents.next();
-  const plain = await f.join({}, { 'CF-Connecting-IP': '198.51.100.9' });
-  const plainEvents = await f.events(plain);
-  assert.equal((await plainEvents.next()).data[0].id, mapped.id);
+test('the join limit counts a network, not one address in it', async t => {
+  // Two devices on one Wi-Fi share a /64; the neighbouring one is another
+  // network, and an IPv4-mapped address is the same client as its plain form.
+  assert.equal(networkOf('2600:1700:abcd:1230:1c2d:3e4f:5a6b:7c8d'), networkOf('2600:1700:abcd:1230:9f8e:7d6c:5b4a:3928'));
+  assert.notEqual(networkOf('2600:1700:abcd:1230::1'), networkOf('2600:1700:abcd:1231::1'));
+  assert.equal(networkOf('::ffff:198.51.100.9'), networkOf('198.51.100.9'));
+  assert.equal(networkOf('2600:1700:abcd:1230::1'), '2600:1700:abcd:1230::/64');
 });

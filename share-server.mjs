@@ -10,13 +10,12 @@
  *   A *session* is one open share tab. It holds an id, a bearer token, a room,
  *   a display name, and — while the tab is open — a server-sent event stream.
  *
- *   A *room* is a hashed string that decides who can see whom. It comes from
- *   one of three places, in order of preference:
- *     · an explicit room link, so two people on different networks can meet;
- *     · the visitor's network address, so two tabs on one network find each
- *       other with no link at all;
- *     · the session's own id, which is a room of one — the correct fallback
- *       when the address is not trustworthy.
+ *   A *room* is a hashed string that decides who can see whom. A session joins
+ *   the room its link names, or, with no link, the room named by its own id,
+ *   which it hands back as the link to pass on. That is the whole of the room
+ *   bookkeeping: a room exists while someone is in it, its code is unique
+ *   because session ids are, and a link reaches nobody once the tab that
+ *   minted it has gone. Nobody is ever put in a room with a stranger.
  *
  *   Nothing is persisted. Everything is in memory and dies with the process,
  *   which is the intended lifetime: discovery is ephemeral by design.
@@ -27,12 +26,12 @@
  *   link codes, so the in-memory state does not accumulate readable network
  *   identifiers and a leaked key reveals nothing and works nowhere else.
  *
- *   The address is only trusted as a room when the operator has said this
- *   process sits behind Cloudflare *and* the request arrived from loopback with
- *   a valid `CF-Connecting-IP`, or when no proxy header is present at all. A
- *   stripped, forged or untrusted proxy header must never put every unrelated
- *   visitor into one shared room, so anything ambiguous falls back to a room
- *   of one.
+ *   Joins are rate limited per network, which needs the visitor's address.
+ *   It is only believed when the operator has said this process sits behind
+ *   Cloudflare *and* the request arrived from loopback with a valid
+ *   `CF-Connecting-IP`, or when no proxy header is present at all; anything
+ *   ambiguous is counted against the proxy's own address instead. The address
+ *   decides nothing else — it never puts two visitors together.
  *
  *   Requests must be same-origin, or come from an origin the operator has
  *   listed in `SHARE_ALLOWED_ORIGINS` — the desktop app's, which serves its
@@ -42,15 +41,14 @@
  *
  *   Tokens are compared in constant time, every payload is size-capped before
  *   it is parsed, joins and signals are rate limited per address and per
- *   session, and rooms, sessions and streams all have hard ceilings.
+ *   session, and room size, sessions and streams all have hard ceilings.
  *
  * Bookkeeping
  *
  *   `sessions` is keyed by id. `roomMembers` indexes those same sessions by
- *   room, so finding someone's peers, counting a room, and listing the rooms in
- *   use are all proportional to the room rather than to everyone connected. The
- *   two must be updated together; `remember` and `forget` are the only places
- *   that do it.
+ *   room, so finding someone's peers and counting a room are proportional to
+ *   the room rather than to everyone connected. The two must be updated
+ *   together; `remember` and `forget` are the only places that do it.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -60,9 +58,7 @@ import { isIP } from 'node:net';
    which device in the list is theirs without anything identifying appearing. */
 const NAMES = ['quiet fox', 'silver heron', 'little owl', 'calm otter', 'swift finch', 'still deer', 'pale moth', 'soft lynx'];
 
-/* A room link is idle-expired a day after the last session in it disconnects. */
-const ROOM_IDLE_MS = 24 * 60 * 60 * 1000;
-/* How often to sweep dead sessions and expired rooms, and to ping live streams. */
+/* How often to sweep dead sessions and to ping live streams. */
 const SWEEP_MS = 15000;
 /* A session with no stream is collected this long after it was last seen. */
 const SESSION_GRACE_MS = 45000;
@@ -72,7 +68,6 @@ const MAX_JOINS_PER_WINDOW = 30;
 const MAX_SIGNALS_PER_WINDOW = 1000;
 const MAX_SESSIONS = 1000;
 const MAX_ROOM_MEMBERS = 16;
-const MAX_ROOMS = 1000;
 const MAX_RATE_KEYS = 10000;
 /* A stream this far behind is a client that has stopped reading; drop it rather
    than buffer for it. */
@@ -84,10 +79,6 @@ const MAX_SDP_LENGTH = 60000;
 const MAX_CANDIDATE_LENGTH = 4096;
 
 const LOOPBACK = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
-/* Headers a reverse proxy adds to say who the visitor really is. Without trust,
-   any of them means the socket address belongs to the proxy, shared by every
-   visitor, so it must not be used as a network. */
-const PROXY_HEADERS = ['cf-connecting-ip', 'x-forwarded-for', 'x-real-ip', 'forwarded'];
 
 /**
  * Expand a valid IPv6 address to its eight 16-bit groups.
@@ -117,16 +108,18 @@ export function expandIPv6(ip) {
 /**
  * The part of an address that identifies a network rather than one device.
  *
+ * Joins are counted against this, so that one visitor cannot spend everyone's
+ * limit and cannot escape their own.
+ *
  * IPv4 behind a home router is already shared: every device on the Wi-Fi
  * leaves through one public address, so the address *is* the network.
  *
- * IPv6 is not. Each device on the same Wi-Fi gets its own public address — and
- * usually rotates a temporary one besides — so grouping by the full address
- * puts two devices on one network into two different rooms. What they share is
- * the /64 prefix: the network half of the address, handed to the whole local
- * link by the router. Grouping by it gives IPv6 the same meaning IPv4 already
- * had. Mobile carriers assign each phone its own /64, so this does not group
- * strangers on cellular.
+ * IPv6 is not. Each device gets its own public address and usually rotates a
+ * temporary one besides, so counting by the full address lets one client
+ * rotate through 2^64 of them and never reach the limit. What the devices on
+ * one link share is the /64 prefix the router hands out, so the count goes
+ * there. Mobile carriers give each phone its own /64, so one phone's joins
+ * never count against another's.
  *
  * IPv4-mapped IPv6 (`::ffff:a.b.c.d`, what a dual-stack socket reports for an
  * IPv4 client) is reduced to the plain IPv4 address so both spellings of one
@@ -150,7 +143,9 @@ export function networkOf(ip) {
  *
  * @param {object} [options]
  * @param {boolean} [options.trustCloudflare] Whether `CF-Connecting-IP` from
- *   loopback may be believed. Opt-in: wrong here means strangers share a room.
+ *   loopback may be believed, for rate limiting per visitor rather than per
+ *   proxy. Opt-in: behind a proxy without it, one visitor's joins count
+ *   against everyone's limit.
  * @param {string} [options.turnSecret] Shared secret for time-limited TURN
  *   credentials. Never leaves the process; only the derived HMAC is sent.
  * @param {string} [options.turnUrls] Comma-separated TURN URLs.
@@ -168,8 +163,6 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   const roomMembers = new Map();
   /** @type {Map<string, {count: number, start: number}>} hashed address → joins */
   const rates = new Map();
-  /** @type {Map<string, number>} room key → expiry, for links with nobody in them */
-  const rooms = new Map();
   /* Reserved short codes and tokens, so a collision is retried rather than
      silently overwriting a live session. */
   const codes = new Set(), tokens = new Set();
@@ -279,7 +272,6 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
    *   · collect sessions whose tab closed and never came back;
    *   · ping live streams, which both keeps intermediaries from timing the
    *     connection out and surfaces sockets that have silently died;
-   *   · push out the expiry of rooms still in use and drop the rest;
    *   · forget rate-limit counters whose window has passed.
    */
   const sweep = setInterval(() => {
@@ -287,10 +279,6 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     for (const s of sessions.values()) {
       if (!s.stream && at - s.seen > SESSION_GRACE_MS) remove(s);
       else if (s.stream) send(s, 'ping', {});
-    }
-    for (const [room, expires] of rooms) {
-      if (roomMembers.has(room)) rooms.set(room, at + ROOM_IDLE_MS);
-      else if (expires <= at) rooms.delete(room);
     }
     for (const [ip, rate] of rates) if (at - rate.start > RATE_WINDOW_MS) rates.delete(ip);
   }, SWEEP_MS);
@@ -341,24 +329,19 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   }
 
   /**
-   * Decide which room a visitor belongs to, and whether their network is known.
+   * The address a request's joins are counted against.
    *
-   * The second value is the important one. When the answer is "not known" the
-   * caller must put the visitor in a room of one: a missing or stripped proxy
-   * header would otherwise collapse every public visitor into a single room
-   * where they could all see each other. Without trust, a request that shows
-   * any sign of having passed through a proxy is treated the same way, since
-   * its socket address is the proxy's.
+   * Behind a trusted Cloudflare proxy that is the visitor; otherwise it is the
+   * socket address, which may be the proxy's and so shared by everyone behind
+   * it. Nothing but the rate limit depends on this: an address never decides
+   * who can see whom.
    */
   function locate(req) {
     const address = req.socket.remoteAddress || '';
     const forwarded = req.headers['cf-connecting-ip'];
     const loopback = LOOPBACK.includes(address);
-    const trustedVisitor = trustCloudflare && loopback && typeof forwarded === 'string' && isIP(forwarded);
-    return {
-      ip: trustedVisitor ? forwarded : address,
-      networkKnown: trustCloudflare ? !!trustedVisitor : !PROXY_HEADERS.some(name => req.headers[name] !== undefined)
-    };
+    const trusted = trustCloudflare && loopback && typeof forwarded === 'string' && isIP(forwarded);
+    return trusted ? forwarded : address;
   }
 
   /** The request's origin if the operator allows it cross-origin, else null. */
@@ -382,11 +365,14 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   /**
    * POST /api/share/join — create a session and return its credentials.
    *
+   * With a room, the session joins it; without one, it joins the room its own
+   * id names and hands that id back as the link to pass on.
+   *
    * Rate limited per address. The id, its visible four-character short code and
    * the bearer token are all allocated and reserved without an await in between,
    * so two concurrent joins cannot be handed the same one.
    */
-  async function join(req, res, { ip, networkKnown }) {
+  async function join(req, res, ip) {
     /* Rate limit per network: an IPv6 client can otherwise rotate through the
        2^64 addresses in its own /64 and never hit the limit. */
     const network = networkOf(ip);
@@ -397,10 +383,11 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     if (++rate.count > MAX_JOINS_PER_WINDOW) return reply(res, 429, { error: 'too many joins; try again in a minute' });
 
     const body = await readBody(req);
-    if (body.room !== undefined && !/^[a-f0-9]{32}$/.test(body.room)) return reply(res, 400, { error: 'this room link is invalid' });
+    if (body.room !== undefined && !/^[a-f0-9]{24}$/.test(body.room)) return reply(res, 400, { error: 'this room link is invalid' });
 
     const id = allocate(12, value => sessions.has(value) || codes.has(value.slice(-4)));
-    const room = body.room ? key('room:' + body.room) : networkKnown ? key('network:' + network) : key('alone:' + id);
+    const code = body.room || id;
+    const room = key('room:' + code);
     if (sessions.size >= MAX_SESSIONS || roomSize(room) >= MAX_ROOM_MEMBERS) {
       return reply(res, 429, { error: 'this room is full; try a new room link' });
     }
@@ -420,32 +407,7 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     remember(s);
     codes.add(id.slice(-4));
     tokens.add(s.token);
-    return reply(res, 200, { id, token: s.token, name: s.name, iceServers: iceServers(id), networkKnown: !!networkKnown });
-  }
-
-  /**
-   * POST /api/share/room — mint a room link this session can pass to someone.
-   *
-   * Idempotent per session, so a double tap gives out one link. The link is
-   * reserved the moment it is issued, before its creator has joined it, so the
-   * same code cannot be handed to two people in the gap.
-   */
-  async function createRoom(req, res, s) {
-    await readBody(req);
-    /* The session may have been retired while its body was being read. */
-    if (sessions.get(s.id) !== s) return reply(res, 401, { error: 'session expired' });
-    if (s.createdRoom && rooms.has(key('room:' + s.createdRoom))) return reply(res, 200, { room: s.createdRoom });
-    if (rooms.size >= MAX_ROOMS) return reply(res, 503, { error: 'share is busy; try again later' });
-    /* Avoid both reserved links and rooms that already have people in them —
-       the latter can exist without a reservation when the link predates it. */
-    const code = allocate(16, value => {
-      const roomKey = key('room:' + value);
-      return rooms.has(roomKey) || roomMembers.has(roomKey);
-    });
-    // Reserve before returning the link, including before its creator joins it.
-    rooms.set(key('room:' + code), now() + ROOM_IDLE_MS);
-    s.createdRoom = code;
-    return reply(res, 200, { room: code });
+    return reply(res, 200, { id, token: s.token, name: s.name, room: code, iceServers: iceServers(id) });
   }
 
   /**
@@ -524,8 +486,7 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
       }
     }
 
-    const where = locate(req);
-    if (url.pathname === '/api/share/join' && req.method === 'POST') return join(req, res, where);
+    if (url.pathname === '/api/share/join' && req.method === 'POST') return join(req, res, locate(req));
 
     /* Everything past this point needs a session. The token is compared in
        constant time, after a length check, so neither its value nor its length
@@ -537,7 +498,6 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     }
     s.seen = now();
 
-    if (url.pathname === '/api/share/room' && req.method === 'POST') return createRoom(req, res, s);
     if (url.pathname === '/api/share/events' && req.method === 'GET') return events(res, s);
     if (url.pathname === '/api/share/leave' && req.method === 'POST') { remove(s); return reply(res, 200, {}); }
     if (url.pathname === '/api/share/signal' && req.method === 'POST') return signal(req, res, s);
