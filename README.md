@@ -7,9 +7,9 @@ A directory of small, mostly local tools. No build step, framework, runtime npm
 dependencies, or analytics. Every interface is one HTML file holding its own
 markup and one script; everything around it — the header, the title, the
 footer, the fonts, the scripts a tool loads — comes from two registries, so a
-change lands in one place. Share uses a small in-memory service for device
-discovery and WebRTC connection setup. File contents travel between browsers,
-never through the signaling service.
+change lands in one place. Share gives every visitor a room and a link to pass
+on, and a small in-memory service introduces the two devices and relays their
+connection setup. File contents travel between browsers, never through it.
 
 ```
 site.js         the site registry — wordmark, copy, footers, shortcuts, storage keys
@@ -32,7 +32,7 @@ exif-reader.js   vendored ExifReader browser build for image metadata
 dev-server.mjs   the Node server, for development and self-hosting
 api-modules.mjs  the API registry: one row per same-origin endpoint the server mounts
 public-files.mjs the root files the site publishes; everything else stays private
-share-server.mjs  ephemeral discovery, private rooms, and WebRTC signaling
+share-server.mjs  ephemeral rooms and WebRTC signaling
 functions/[[path]].js  Cloudflare Pages: answers private paths with the 404 page
 _redirects       Cloudflare Pages: serves each tool at /<slug> (generated)
 _routes.json     Cloudflare Pages: sends private paths to a 404 Function (generated)
@@ -58,7 +58,7 @@ Then open <http://127.0.0.1:8777>. Each tool lives at a clean address such as
 `/share` or `/json`; old `/t/<slug>.html` links redirect there. Pass a different port as the first argument,
 for example `node dev-server.mjs 9000`. Most local tools also work when
 `index.html` is opened straight off disk. The included server runs the share
-discovery service. WebRTC sharing needs HTTPS (or localhost during development)
+service. WebRTC sharing needs HTTPS (or localhost during development)
 plus a reachable peer.
 
 ## Desktop app

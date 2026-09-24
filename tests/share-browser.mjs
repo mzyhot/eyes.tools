@@ -10,7 +10,9 @@ const base = process.env.SHARE_TEST_URL || 'http://127.0.0.1:8877';
 const output = process.env.SHARE_TEST_OUTPUT || '/tmp/eyes-share-tests';
 await mkdir(output, { recursive: true });
 const errors = [], requests = [];
-async function page({ holdPeerConnectionOpen = false } = {}) {
+/* Every page opens a room of its own; a second device joins by opening the
+   first one's link, which is how share now works — there is no discovery. */
+async function page({ holdPeerConnectionOpen = false, link = '' } = {}) {
   const context = await browser.newContext({ acceptDownloads: true });
   if (holdPeerConnectionOpen) await context.addInitScript(() => {
     /* Model a deliberate departure whose remote data channel remains open.
@@ -28,7 +30,7 @@ async function page({ holdPeerConnectionOpen = false } = {}) {
   const p = await context.newPage();
   p.on('pageerror', e => errors.push(e.message));
   p.on('request', r => { if (r.url().includes('/api/share/')) requests.push({ url: r.url(), bytes: Buffer.byteLength(r.postData() || '') }); });
-  await p.goto(base + '/share');
+  await p.goto(link || base + '/share');
   return p;
 }
 async function connected(p, count = 1) {
@@ -38,6 +40,13 @@ async function choose(p, files) {
   const chooser = p.waitForEvent('filechooser'); await p.getByRole('button', { name: /^send files to / }).first().click(); await (await chooser).setFiles(files);
 }
 const digest = b => createHash('sha256').update(b).digest('hex');
+/** The room link a page is handing out, once the service has minted it. */
+async function roomLink(p) {
+  await p.locator('#room-panel').waitFor();
+  const link = await p.locator('#room-link').inputValue();
+  assert.match(link, /#room=[a-f0-9]{24}$/, 'a link to pass on');
+  return link;
+}
 async function cuttableProxy(target) {
   const upstream = new URL(target), sockets = new Set(); let cut = false;
   const server = createTcpServer(client => {
@@ -60,9 +69,11 @@ async function download(p, name, expected) {
   assert.equal(digest(await readFile(await file.path())), digest(expected));
 }
 try {
-  const a = await page({ holdPeerConnectionOpen: true }), b = await page();
+  const a = await page({ holdPeerConnectionOpen: true });
+  const b = await page({ link: await roomLink(a) });
   await Promise.all([connected(a), connected(b)]);
-  console.log('PASS automatic discovery and real WebRTC connection');
+  assert.equal(await a.locator('#room-qr canvas').count(), 1, 'a code to scan');
+  console.log('PASS a room and its link on arrival, then a real WebRTC connection');
   const payload = randomBytes(2 * 1024 * 1024 + 7);
   await choose(a, [{ name: 'random.bin', mimeType: 'application/octet-stream', buffer: payload }, { name: 'empty.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) }]);
   await b.getByRole('button', { name: 'accept', exact: true }).click();
@@ -87,15 +98,19 @@ try {
   await b.locator('.transfer__state').filter({ hasText: 'sender cancelled' }).waitFor();
   console.log('PASS decline and sender cancellation');
 
+  // Taking a new link abandons the room: the old link is dead and the device
+  // that had it drops away, until it opens the new one.
+  const stale = await roomLink(a);
   await a.evaluate(() => { globalThis.__holdPeerConnectionOpenForTest = true; });
-  await a.locator('#room-button').click();
-  await a.locator('#room-link').waitFor(); const link = await a.locator('#room-link').inputValue();
-  assert.match(link, /#room=[a-f0-9]{32}$/);
+  await a.locator('#new-link').click();
+  await a.waitForFunction(old => document.querySelector('#room-link').value !== old, stale);
+  const link = await roomLink(a);
+  assert.notEqual(link, stale);
   await b.waitForFunction(() => document.querySelectorAll('.device').length === 0);
   await a.evaluate(() => { globalThis.__holdPeerConnectionOpenForTest = false; });
   await b.goto(link); await Promise.all([connected(a), connected(b)]);
   assert.equal(await a.locator('#room-qr canvas').count(), 1);
-  console.log('PASS private room switch, QR generation, automatic reconnection');
+  console.log('PASS a new link replaces the room, and the old one connects nobody');
 
   // Simultaneous transfers work in both directions over one ordered channel.
   await Promise.all([choose(a, [{ name: 'from-a.txt', mimeType: 'text/plain', buffer: Buffer.from('alpha') }]), choose(b, [{ name: 'from-b.txt', mimeType: 'text/plain', buffer: Buffer.from('beta') }])]);
@@ -167,6 +182,17 @@ try {
   assert.equal(await a.locator('#text-dialog').evaluate(e => e.open), false);
   assert.equal(new URL(a.url()).pathname, '/share');
   console.log('PASS keyboard text sharing and Escape dismissal');
+  // A connection that has been gone for half a minute takes the link with it.
+  const doomed = await roomLink(a);
+  await b.close();
+  await a.waitForFunction(old => document.querySelector('#room-link').value !== old, doomed, { timeout: 60000 });
+  assert.notEqual(await roomLink(a), doomed);
+  assert.match(await a.locator('#empty-note').textContent(), /old one no longer works/);
+  const late = await page({ link: doomed });
+  await late.waitForFunction(() => document.querySelector('#status').textContent === 'room open');
+  assert.equal(await late.locator('.device').count(), 0, 'the abandoned link reaches nobody');
+  console.log('PASS a severed connection replaces the link');
+
   assert.deepEqual(errors, []);
   assert.ok(requests.every(r => r.bytes < 65536));
   console.log('PASS no page errors or file payloads in signaling requests');

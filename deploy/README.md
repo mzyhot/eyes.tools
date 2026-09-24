@@ -67,16 +67,12 @@ header: sharing checks the browser's origin against `Host`, so rewriting it to
 `localhost` causes a 403.
 
 `SHARE_TRUST_CLOUDFLARE=1` accepts the `CF-Connecting-IP` visitor-IP header only
-from loopback connections. Enable it only when every request reaching Node passes
-through a trusted local proxy that sets or preserves the real header. If the header
-is absent or invalid, automatic network discovery stays isolated and room links
-still work. Never expose a trusted proxy or origin port directly to the internet.
-
-Without the flag, a request carrying `CF-Connecting-IP`, `X-Forwarded-For`,
-`X-Real-IP` or `Forwarded` is also isolated, because its socket address is the
-proxy's and would put every visitor in one discovery group. Behind any proxy,
-automatic discovery therefore needs the flag and a proxy that sets
-`CF-Connecting-IP`; room links work either way.
+from loopback connections. It decides nothing but the join rate limit, which
+counts per visitor network. Enable it only when every request reaching Node passes
+through a trusted local proxy that sets or preserves the real header. Without it,
+behind a proxy, every visitor's joins count against one limit — the proxy's own
+address — so a busy site needs the flag. Never expose a trusted proxy or origin
+port directly to the internet.
 
 `SHARE_ALLOWED_ORIGINS` lists origins, besides the site's own, whose pages may use
 the share service. The desktop app serves its pages itself and uses this
@@ -119,12 +115,14 @@ curl --head http://127.0.0.1:8777/share
 
 Then visit your public HTTPS site in two browsers and verify:
 
-1. Same-network devices appear, with different four-character codes.
-2. A room link connects devices on different networks.
+1. Share opens with a link and a code, and the two devices show different
+   four-character codes once the link is opened on the second one.
+2. The link connects devices on different networks.
 3. A binary file and a text message arrive intact after the receiver accepts.
 4. Cancelling a transfer leaves no partial download; retry works.
-5. Discovery still works after leaving both tabs open for at least two minutes.
-6. Refreshing and switching rooms do not expose devices from the old room.
+5. The room still works after leaving both tabs open for at least two minutes.
+6. Taking a new link, and closing one device for half a minute, both leave the
+   old link connecting nobody.
 
 Use the browser network panel to diagnose 403s, unexpected HTML responses, or SSE
 buffering. `/healthz` confirms the Node process is responding, not that the proxy,

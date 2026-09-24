@@ -49,9 +49,13 @@ npm run test:browser
 
 ### Network identity and isolation
 
-- Same-network IPv6 discovery groups addresses by their `/64` prefix, while
-  IPv4-mapped IPv6 must agree with the equivalent IPv4 address. Untrusted or
-  missing proxy identity must isolate a visitor rather than grouping strangers.
+- A room only ever holds the people given its link. A session with no link joins
+  the room named by its own id and hands that back; an address must never decide
+  who can see whom.
+- A visitor's address is for the join rate limit alone, counted per IPv6 `/64`
+  and per IPv4 address, with IPv4-mapped IPv6 agreeing with its plain form. An
+  untrusted or missing proxy header must fall back to the socket address rather
+  than be believed.
 - Preserve same-origin checks (cross-origin only for origins an operator lists in
   `SHARE_ALLOWED_ORIGINS`), constant-time bearer-token comparison, bounded
   inputs, and the rule that only actively streaming peers may signal each other.
