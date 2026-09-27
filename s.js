@@ -257,15 +257,18 @@
   var KB = 1024, MB = 1048576, GB = 1073741824;
 
   /**
-   * Format a byte count for display. Binary units, one unit step per magnitude,
-   * chosen so a size never needs more than four significant figures.
+   * Format a byte count for display. Binary units, one decimal for KB and two
+   * for MB and GB. A size that would round to 1024 of one unit is shown as 1 of
+   * the next, so 1048575 bytes reads "1.00 MB", never "1024.0 KB".
    * @param {number} n Bytes.
    * @returns {string} e.g. "1.5 KB".
    */
   E.bytes = function (n) {
     if (n < KB) return n + " B";
-    if (n < MB) return (n / KB).toFixed(1) + " KB";
-    if (n < GB) return (n / MB).toFixed(2) + " MB";
+    var kb = (n / KB).toFixed(1);
+    if (+kb < 1024) return kb + " KB";
+    var mb = (n / MB).toFixed(2);
+    if (+mb < 1024) return mb + " MB";
     return (n / GB).toFixed(2) + " GB";
   };
 

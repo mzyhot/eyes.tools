@@ -22,8 +22,13 @@ fn main() {
     println!("cargo:rerun-if-changed={}", list.display());
     for name in public_root_files(&fs::read_to_string(&list).expect("read public-files.mjs")) {
         let from = site.join(&name);
+        let to = dist.join(&name);
         println!("cargo:rerun-if-changed={}", from.display());
-        fs::copy(&from, dist.join(&name)).unwrap_or_else(|e| panic!("copy {name}: {e}"));
+        // An entry may sit in a folder, as self-hosted fonts in `fonts/` do.
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent).unwrap_or_else(|e| panic!("create {}: {e}", parent.display()));
+        }
+        fs::copy(&from, &to).unwrap_or_else(|e| panic!("copy {name}: {e}"));
     }
 
     // slug:tool pairs for the smoke test — the tool a page should end up on,

@@ -27,7 +27,7 @@
         <input class="field" id="in" type="text" inputmode="numeric" maxlength="32"
                value="590123412345" autocomplete="off" spellcheck="false">
         <p class="hint">enter 12 digits; the check digit is added. a valid 13th digit is accepted.</p>
-        <p class="err" id="err" role="alert" aria-live="polite"></p>
+        <p class="err" id="err" role="alert"></p>
       </section>
 
       <section>
@@ -125,7 +125,10 @@
           bits += "101";
 
           var namespace = "http://www.w3.org/2000/svg";
-          var scale = 2;
+          /* Two units per module. EAN-13 asks for a quiet zone of 11 modules
+             before the start guard and 7 after the end guard, so the 95 bars
+             begin 22 units in and the 226-unit symbol ends 14 units after them. */
+          var scale = 2, left = 11 * scale;
           /* Scannable codes use the theme-independent QR tokens, read here so the
              exported svg carries literal values. */
           var style = getComputedStyle(document.documentElement);
@@ -140,7 +143,7 @@
           for (index = 0; index < bits.length; index += 1) {
             if (bits[index] !== "1") continue;
             var bar = document.createElementNS(namespace, "rect");
-            bar.setAttribute("x", String(18 + index * scale));
+            bar.setAttribute("x", String(left + index * scale));
             bar.setAttribute("y", "8");
             bar.setAttribute(
               "height",
@@ -152,7 +155,7 @@
           }
 
           var label = document.createElementNS(namespace, "text");
-          label.setAttribute("x", "113");
+          label.setAttribute("x", String(left + 95 * scale / 2));
           label.setAttribute("y", "106");
           label.setAttribute("text-anchor", "middle");
           label.setAttribute("font-family", style.getPropertyValue("--font-mono").trim());

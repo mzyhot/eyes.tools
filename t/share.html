@@ -29,7 +29,7 @@ body[data-tool="share"] [hidden] { display: none !important; }
 .self p { margin:0; }
 #your-name { color:var(--color-ink); }
 .room-panel { border:var(--rule) solid var(--color-rule); padding:var(--space-5); display:grid; grid-template-columns:minmax(0,1fr) 8rem; align-items:center; gap:var(--space-5); }
-#room-qr { background:var(--color-qr-paper); padding:4px; }
+#room-qr { background:var(--color-qr-paper); }
 #room-qr canvas { width:100%; height:auto; display:block; }
 #room-link { min-width:0; font-size:var(--text-xs); }
 .transfer-list { list-style:none; margin:0; padding:0; }
@@ -79,7 +79,7 @@ body[data-tool="share"] [hidden] { display: none !important; }
       <p class="hint">you are <span class="mono" id="your-name">…</span></p>
       <p class="hint" id="status" role="status">finding devices…</p>
     </div>
-    <p class="hint">press send files on a device · or drop files onto it</p>
+    <p class="hint">use send files on a device, or drop files onto it</p>
     <p class="err" id="err" role="alert"></p>
     <input type="file" id="files" aria-label="files to send" multiple hidden>
   </section>
@@ -97,10 +97,10 @@ body[data-tool="share"] [hidden] { display: none !important; }
     <ul class="transfer-list" id="transfers"></ul>
   </section>
   <details class="share-help">
-    <summary>can’t see the other device?</summary>
+    <summary>can't see the other device?</summary>
     <p class="hint">Open the link, or scan the code, on the other device, and keep share open on both. The link works from any network. It stops working when this page closes, when you take a new link, or half a minute after a connection drops.</p>
     <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Up to 256 MB per transfer; remove received files to free space.</p>
-    <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site’s server storage. The server only introduces the two devices and passes the connection details. A relay may carry encrypted data when configured.</p>
+    <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site's server storage. The server only introduces the two devices and passes the connection details. A relay may carry encrypted data when configured.</p>
     <button class="tbtn" id="retry" type="button">refresh devices</button>
   </details>
 </main>
@@ -173,11 +173,12 @@ E.tool(function () {
    * Any notice goes under the empty list, where the next step is: reconnecting
    * clears the error line, and this has to outlive that.
    */
+  const EMPTY_NOTE = $('#empty-note').textContent;
   function newLink(note) {
     if (activity()) return;
     clearTimeout(severedTimer); severedTimer = null; everConnected = false;
     room = ''; history.replaceState(null, '', location.pathname + location.search);
-    if (note) $('#empty-note').textContent = note;
+    $('#empty-note').textContent = note || EMPTY_NOTE;
     discover();
   }
   async function api(path, body, current = session) {
@@ -185,7 +186,7 @@ E.tool(function () {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(current ? { Authorization: 'Bearer ' + current.token } : {}) },
       body: JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout(15000)
     });
-    let data; try { data = await response.json(); } catch { throw new Error('sharing needs the updated server. please try again after it is restarted.'); }
+    let data; try { data = await response.json(); } catch { throw new Error('unexpected reply from the sharing service (http ' + response.status + '). check the connection and try again.'); }
     if (!response.ok) throw new Error(data.error || 'could not reach the sharing service');
     return data;
   }
@@ -497,7 +498,7 @@ E.tool(function () {
       const batch = this.outgoing = this.queue.shift(); batch.state = 'offered';
       batch.ui.update('waiting for ' + this.name + ' to accept');
       this.control({ t: 'offer', id: batch.id, items: batch.items.map(({ name, size, kind }) => ({ name, size, kind })) });
-      batch.timer = setTimeout(() => this.cancelOutgoing(batch, 'no response. send again when they’re ready.'), 120000);
+      batch.timer = setTimeout(() => this.cancelOutgoing(batch, "no response. send again when they're ready."), 120000);
     }
     finishOutgoing(message) {
       const batch = this.outgoing; if (!batch) return;
@@ -542,14 +543,19 @@ E.tool(function () {
         items.forEach(item => names.append(E.el('li', { text: item.name + ' · ' + E.bytes(item.size) })));
         details.append(summary, names); batch.ui.row.insertBefore(details, batch.ui.actions);
       }
+      /* The channel can close between the offer and the click. Accepting then
+         fails the connection like any other drop; declining or expiring still
+         clears the row, whether or not the answer reaches the sender. */
+      const answer = data => { try { this.control(data); return true; } catch { return false; } };
       batch.ui.actions.append(button('accept', () => {
         if (this.incoming !== batch || batch.accepted) return;
         if (retained + reserved + size > RETAIN) { error('remove received files to make room first.'); return; }
+        if (!answer({ t: 'accept', id: batch.id })) { this.fail('device is not connected.'); return; }
         batch.accepted = true; reserved += size; batch.ui.progress.hidden = false; batch.ui.update('receiving…', 0);
         batch.ui.actions.replaceChildren(button('cancel', () => this.fail('transfer cancelled.')));
-        this.incomingTimeout(batch); this.control({ t: 'accept', id: batch.id }); render();
-      }, true), button('decline', () => { this.control({ t: 'reject', id: batch.id, reason: 'declined' }); this.finishIncoming('declined'); }));
-      batch.timer = setTimeout(() => { if (this.incoming === batch && !batch.accepted) { this.control({ t: 'reject', id: batch.id, reason: 'no response' }); this.finishIncoming('request expired'); } }, 120000);
+        this.incomingTimeout(batch); render();
+      }, true), button('decline', () => { answer({ t: 'reject', id: batch.id, reason: 'declined' }); this.finishIncoming('declined'); }));
+      batch.timer = setTimeout(() => { if (this.incoming === batch && !batch.accepted) { answer({ t: 'reject', id: batch.id, reason: 'no response' }); this.finishIncoming('request expired'); } }, 120000);
       render();
     }
     message(raw) {
@@ -608,7 +614,7 @@ E.tool(function () {
         for (let offset = 0; offset < file.size; offset += chunkSize) {
           check(); await this.buffer(dc);
           const data = await file.slice(offset, offset + chunkSize).arrayBuffer(); check(); dc.send(data); sent += data.byteLength;
-          batch.ui.update('sending · ' + Math.floor(sent / batch.size * 100) + '%', sent / batch.size);
+          batch.ui.update('sending · ' + (batch.size ? Math.floor(sent / batch.size * 100) : 100) + '%', batch.size ? sent / batch.size : 1);
         }
         check(); this.control({ t: 'file-end', id: batch.id, index: i });
       }
@@ -641,12 +647,13 @@ E.tool(function () {
       // Render the vendored QR matrix with the existing theme-independent QR tokens.
       const qr = new QRCode(document.createElement('div'), { text: link.href, correctLevel: QRCode.CorrectLevel.M });
       const matrix = qr._oQRCode, count = matrix.getModuleCount(), canvas = document.createElement('canvas');
-      // CSS supplies the 4px white border so it stays fixed as the QR scales.
-      canvas.width = canvas.height = count * 4;
+      // Four modules of quiet zone on every side, as the standard asks, drawn
+      // into the canvas so they scale with the code.
+      canvas.width = canvas.height = (count + 8) * 4;
       const ctx = canvas.getContext('2d'), style = getComputedStyle(document.documentElement);
       ctx.fillStyle = style.getPropertyValue('--color-qr-paper').trim(); ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = style.getPropertyValue('--color-qr-ink').trim();
-      for (let y = 0; y < count; y++) for (let x = 0; x < count; x++) if (matrix.isDark(y, x)) ctx.fillRect(x * 4, y * 4, 4, 4);
+      for (let y = 0; y < count; y++) for (let x = 0; x < count; x++) if (matrix.isDark(y, x)) ctx.fillRect((x + 4) * 4, (y + 4) * 4, 4, 4);
       host.append(canvas);
     }
     render();
@@ -665,6 +672,7 @@ E.tool(function () {
     const value = $('#text').value; if (!value.trim()) { $('#text-error').textContent = 'write some text first.'; return; }
     const blob = new Blob([value], { type: 'text/plain;charset=utf-8' });
     if (blob.size > 8 * 1024 * 1024) { $('#text-error').textContent = 'text is limited to 8 MB.'; return; }
+    if (!textPeer) { $('#text-error').textContent = 'choose a device to send to first.'; return; }
     try { textPeer.enqueue([{ blob, name: 'shared-text.txt', size: blob.size, kind: 'text' }]); $('#text-dialog').close(); $('#text').value = ''; }
     catch (e) { $('#text-error').textContent = e.message; }
   });

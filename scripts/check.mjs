@@ -27,15 +27,16 @@
  *   fragment must exist on disk at the path the page asks for. A tool page that
  *   references `../s.js` incorrectly still renders — it just stops working.
  *
- * And for every JavaScript file outside the vendored builds — the root modules,
- * the Pages function, these scripts and the tests: that Node itself can parse
- * it, via `node --check`. The Pages function runs only on its hosting platform,
- * so nothing else here would load it.
+ * And for every JavaScript file — the root modules and vendored builds, the
+ * Pages function, these scripts and the tests: that Node itself can parse it,
+ * via `node --check`. The Pages function runs only on its hosting platform, so
+ * nothing else here would load it.
  *
  * Finally, that the generated static-host files are current: `_redirects` and
- * `vercel.json` list exactly the pages in `t/`, and `.vercelignore` and
- * `_routes.json` hide exactly the files `public-files.mjs` does not publish. A
- * stale one would 404 a page, or publish a private file, on those hosts while
+ * `vercel.json` list exactly the pages in `t/`, `vercel.json` and `_headers`
+ * carry the server's security headers, and `.vercelignore` and `_routes.json`
+ * hide exactly the files `public-files.mjs` does not publish. A stale one would
+ * 404 a page, drop a header, or publish a private file on those hosts while
  * everything works locally.
  */
 
@@ -46,7 +47,7 @@ import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PUBLIC_ROOT_FILES } from '../public-files.mjs';
-import { pageSlugs, pagesRedirects, pagesRoutes, privateEntries, vercelConfig, vercelIgnore } from './static-routes.mjs';
+import { pageSlugs, pagesHeaders, pagesRedirects, pagesRoutes, privateEntries, vercelConfig, vercelIgnore } from './static-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const rootFiles = await readdir(root);
@@ -116,9 +117,10 @@ console.log(`PASS ${registry.size} registry rows match their pages and the share
 const slugs = await pageSlugs();
 assert.equal(await readFile(resolve(root, '_redirects'), 'utf8'), pagesRedirects(slugs), '_redirects is out of date; run node scripts/static-routes.mjs');
 assert.equal(await readFile(resolve(root, 'vercel.json'), 'utf8'), vercelConfig(slugs), 'vercel.json is out of date; run node scripts/static-routes.mjs');
+assert.equal(await readFile(resolve(root, '_headers'), 'utf8'), pagesHeaders(), '_headers is out of date; run node scripts/static-routes.mjs');
 const entries = privateEntries();
 assert.equal(await readFile(resolve(root, '.vercelignore'), 'utf8'), vercelIgnore(entries), '.vercelignore is out of date; run node scripts/static-routes.mjs');
 assert.equal(await readFile(resolve(root, '_routes.json'), 'utf8'), pagesRoutes(entries), '_routes.json is out of date; run node scripts/static-routes.mjs');
-console.log(`PASS static-host routes cover all ${slugs.length} pages and hide ${entries.length} private entries`);
+console.log(`PASS static-host routes cover all ${slugs.length} pages, send the server's headers, and hide ${entries.length} private entries`);
 console.log(`PASS ${pages.length} HTML pages: inline script syntax, unique IDs and local assets (${scripts} inline scripts)`);
 console.log(`PASS ${sources.length} JavaScript files parse`);

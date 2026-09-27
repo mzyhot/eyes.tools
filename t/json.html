@@ -18,7 +18,7 @@
     <textarea class="field" id="in"></textarea>
     <div class="grid2 mt-2"><div><label class="lbl" for="indent">indent</label><select class="field" id="indent"><option value="2">2 spaces</option><option value="4">4 spaces</option><option value="tab">tabs</option></select></div></div>
     <div class="row mt-2"><button class="btn" id="fmt" type="button">format</button><button class="btn -ghost" id="min" type="button">minify</button><button class="btn -ghost" id="esc" type="button">escape</button><button class="btn -ghost" id="unesc" type="button">unescape</button><button class="btn -ghost" type="button" data-copy="#out">copy</button></div>
-    <p class="err" id="err" role="alert" aria-live="polite"></p>
+    <p class="err" id="err" role="alert"></p>
   </section>
   <section><label class="lbl" for="out">result</label><textarea class="field" id="out" readonly aria-live="polite"></textarea></section>
 </main>
@@ -81,7 +81,7 @@ E.tool(function () {
         }
       }
       error.classList.add("status-ok");
-      error.textContent = mode === "unescape" ? "decoded string" : "valid json";
+      error.textContent = mode === "unescape" ? "decoded string" : mode === "escape" ? "escaped as a json string" : "valid json";
     } catch (e) {
       output.value = "";
       clearStatus();

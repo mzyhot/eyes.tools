@@ -150,14 +150,16 @@ const COMPRESS_MIN_BYTES = 1024;
 /* Assets larger than this are streamed from disk instead of held in memory. */
 const COMPRESS_MAX_BYTES = 4 * 1024 * 1024;
 
-const CSP = "default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; " +
+/* `script-src` stays last: each page's inline-script hashes are appended to
+   it (see pagePolicy), and the static hosts append 'unsafe-inline' instead. */
+export const CSP = "default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; " +
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; " +
   "img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self' https://drand.cloudflare.com; " +
   "worker-src 'self' blob:; script-src 'self'";
 
-/* Pre-split so the per-request path is a flat loop over pairs rather than an
-   Object.entries allocation. */
-const SECURITY_HEADERS = Object.entries({
+/* The headers every response carries. `scripts/static-routes.mjs` writes the
+   static hosts' headers from this same table. */
+export const SECURITY_HEADER_VALUES = Object.freeze({
   "Content-Security-Policy": CSP,
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
@@ -165,6 +167,10 @@ const SECURITY_HEADERS = Object.entries({
   "Cross-Origin-Resource-Policy": "same-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
 });
+
+/* Pre-split so the per-request path is a flat loop over pairs rather than an
+   Object.entries allocation. */
+const SECURITY_HEADERS = Object.entries(SECURITY_HEADER_VALUES);
 
 /** Apply the headers every response gets, before anything decides what to send. */
 function securityHeaders(response) {
@@ -386,9 +392,11 @@ function sentNotModified(request, response, entry, headers) {
   const inm = request.headers["if-none-match"];
   let fresh = false;
   if (inm) {
+    /* Stripped from our own tag too: the streamed path's tags are weak. */
+    const current = entry.etag.replace(/^W\//, "");
     fresh = inm.split(",").some((tag) => {
       const value = tag.trim();
-      return value === "*" || value.replace(/^W\//, "") === entry.etag;
+      return value === "*" || value.replace(/^W\//, "") === current;
     });
   } else if (request.headers["if-modified-since"]) {
     const since = Date.parse(request.headers["if-modified-since"]);

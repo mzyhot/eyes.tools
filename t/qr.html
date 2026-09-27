@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
 <style>
-  #qr { display:grid; grid-template-columns:minmax(0,1fr); place-items:center; width:fit-content; max-width:100%; min-width:0; padding:4px; background:var(--color-qr-paper); }
+  #qr { display:grid; grid-template-columns:minmax(0,1fr); place-items:center; width:fit-content; max-width:100%; min-width:0; background:var(--color-qr-paper); }
   #qr:empty { display:none; }
   #qr img, #qr canvas { max-width:100%; height:auto; }
   .figure { overflow:auto; padding:0; background:transparent; }
@@ -50,51 +50,47 @@ E.tool(function () {
     download.disabled = true;
     svgButton.disabled = true; svgText = ""; result = null;
     if (!input.value) return;
+    var size = +E.qs("#size").value, model;
     try {
-      var size = +E.qs("#size").value;
-      var encoder = new QRCode(document.createElement("div"), { text: input.value, width: size, height: size,
-        colorDark: getComputedStyle(document.documentElement).getPropertyValue("--color-qr-ink").trim(),
-        colorLight: getComputedStyle(document.documentElement).getPropertyValue("--color-qr-paper").trim(),
-        correctLevel: QRCode.CorrectLevel[E.qs("#level").value] });
-      var model = encoder._oQRCode, count = model.getModuleCount(), border = 4, contentSize = size - border * 2;
+      model = new QRCode(document.createElement("div"), { text: input.value, width: size, height: size,
+        correctLevel: QRCode.CorrectLevel[E.qs("#level").value] })._oQRCode;
+    } catch (e) { error.textContent = "input is too long for this error-correction level"; return; }
+    try {
+      /* The code sits inside a quiet zone four modules wide, as the standard
+         asks, so a scanner can find it on any background. The whole image,
+         zone included, is the selected size; each edge is rounded to a whole
+         pixel so modules stay crisp. */
+      var count = model.getModuleCount(), span = count + 8;
       var style = getComputedStyle(document.documentElement), ink = hexColor(style.getPropertyValue("--color-qr-ink").trim()), paper = hexColor(style.getPropertyValue("--color-qr-paper").trim());
       var canvas = document.createElement("canvas"), path = [];
       canvas.width = canvas.height = size;
       var context = canvas.getContext("2d");
       if (!context) throw new Error("canvas");
+      var edge = function (k) { return Math.round(k * size / span); };
       context.fillStyle = paper; context.fillRect(0, 0, size, size); context.fillStyle = ink;
       for (var row = 0; row < count; row++) for (var col = 0; col < count; col++) {
         if (!model.isDark(row, col)) continue;
-        var left = border + Math.round(col * contentSize / count), top = border + Math.round(row * contentSize / count);
-        var width = Math.round((col + 1) * contentSize / count) - Math.round(col * contentSize / count);
-        var height = Math.round((row + 1) * contentSize / count) - Math.round(row * contentSize / count);
+        var left = edge(col + 4), top = edge(row + 4), width = edge(col + 5) - left, height = edge(row + 5) - top;
         path.push("M" + left + " " + top + "h" + width + "v" + height + "h-" + width + "z");
         context.fillRect(left, top, width, height);
       }
       svgText = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="' + E.esc(paper) + '"/><path d="' + path.join("") + '" fill="' + E.esc(ink) + '"/></svg>';
-      // The preview uses CSS for a fixed 4px border even when it shrinks on mobile.
-      // Downloads include the same border inside the selected image dimensions.
-      var preview = document.createElement("canvas");
-      preview.width = preview.height = contentSize;
-      preview.getContext("2d").drawImage(canvas, border, border, contentSize, contentSize, 0, 0, contentSize, contentSize);
-      result = canvas; host.appendChild(preview); download.disabled = false; svgButton.disabled = false;
-    } catch (e) { error.textContent = "input is too long for this error-correction level"; }
+      result = canvas; host.appendChild(canvas); download.disabled = false; svgButton.disabled = false;
+    } catch (e) { error.textContent = "this browser could not draw the code"; }
   }
   E.on(input, "input", E.debounce(run, 160));
   E.on(E.qs("#size"), "change", run);
   E.on(E.qs("#level"), "change", run);
   E.on(download, "click", function () {
-    var canvas = result, button = this;
-    if (canvas) {
-      button.disabled = true;
-      canvas.toBlob(function (blob) {
-        button.disabled = false;
-        if (!blob) { error.textContent = "the browser could not create a png"; return; }
-        E.download(blob, "qr.png", "image/png");
-        E.flash(button, "downloaded");
-      }, "image/png");
-      return;
-    }
+    var button = this;
+    if (!result) return;
+    button.disabled = true;
+    result.toBlob(function (blob) {
+      button.disabled = false;
+      if (!blob) { error.textContent = "the browser could not create a png"; return; }
+      E.download(blob, "qr.png", "image/png");
+      E.flash(button, "downloaded");
+    }, "image/png");
   });
   E.on(svgButton, "click", function () { if (svgText) { E.download(svgText, "qr.svg", "image/svg+xml"); E.flash(this, "downloaded"); } });
   var query = E.param("t");

@@ -92,3 +92,23 @@ test('starts when run through a symlinked release directory', { timeout: 10000 }
   });
   assert.equal(started, true);
 });
+
+test('static hosts send the same security headers, with inline scripts allowed', async t => {
+  const { STATIC_HEADERS, pageSlugs, pagesHeaders, vercelConfig } = await import('../scripts/static-routes.mjs');
+  const app = createEyesServer();
+  await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+  t.after(() => app.close());
+  const res = await fetch(`http://127.0.0.1:${app.server.address().port}/json`);
+  for (const [name, value] of Object.entries(STATIC_HEADERS)) {
+    if (name !== 'Content-Security-Policy') { assert.equal(res.headers.get(name), value, name); continue; }
+    /* The server's policy for a page is the base policy plus that page's
+       script hashes; the static one swaps the hashes for 'unsafe-inline'. */
+    const served = res.headers.get(name).replace(/ 'sha256-[^']+'/g, '');
+    assert.equal(value, served + " 'unsafe-inline'");
+  }
+  const vercel = JSON.parse(vercelConfig(await pageSlugs()));
+  assert.deepEqual(vercel.headers, [{ source: '/(.*)', headers: Object.entries(STATIC_HEADERS).map(([key, value]) => ({ key, value })) }]);
+  const pages = pagesHeaders();
+  assert.match(pages, /^\/\*$/m);
+  for (const [name, value] of Object.entries(STATIC_HEADERS)) assert.ok(pages.includes(`\n  ${name}: ${value}\n`), name);
+});

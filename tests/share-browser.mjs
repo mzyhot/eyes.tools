@@ -11,7 +11,8 @@ const output = process.env.SHARE_TEST_OUTPUT || '/tmp/eyes-share-tests';
 await mkdir(output, { recursive: true });
 const errors = [], requests = [];
 /* Every page opens a room of its own; a second device joins by opening the
-   first one's link, which is how share now works — there is no discovery. */
+   first one's link, which is how share now works — nothing finds devices by
+   network address any more. */
 async function page({ holdPeerConnectionOpen = false, link = '' } = {}) {
   const context = await browser.newContext({ acceptDownloads: true });
   if (holdPeerConnectionOpen) await context.addInitScript(() => {

@@ -16,9 +16,11 @@ try {
   for (const route of routes) {
     const response = await page.goto(base + route, { waitUntil: 'domcontentloaded' });
     assert.equal(response.status(), 200, route);
-    await page.waitForFunction(() => document.body.dataset.ready === '1');
+    /* The compatibility stubs navigate away from <head>; wait for where they
+       land before asking whether that page is ready. */
     if (route === '/lines') await page.waitForURL('**/dump?mode=lines');
     if (route === '/units') await page.waitForURL('**/calc?mode=units');
+    await page.waitForFunction(() => document.body.dataset.ready === '1');
     const controls = await page.evaluate(() => ({
       title: document.querySelector('h1')?.textContent,
       fields: [...document.querySelectorAll('input,textarea,select')].map(e => ({ id: e.id, type: e.type, value: e.type === 'file' ? '' : e.value, options: e.options ? [...e.options].map(o => ({ value: o.value, text: o.textContent })) : undefined })),

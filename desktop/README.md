@@ -28,23 +28,27 @@ Differences from the site:
 
 ## Building
 
-Needs Rust 1.88 or newer. Node is not needed.
+Needs Rust 1.90 or newer. Node is not needed.
 
 ```bash
 cargo run
 ```
 
 opens the app from a debug build. For a release build and installers (`.app`
-and `.dmg` on macOS, `.msi`/`.exe` on Windows, `.deb`/`.AppImage` on Linux):
+and `.dmg` on macOS, `.msi`/`.exe` on Windows, `.deb`/`.rpm`/`.AppImage` on
+Linux):
 
 ```bash
-cargo install tauri-cli --version "^2" --locked
+cargo install tauri-cli --version 2.12.0 --locked
 cargo tauri build
 ```
 
-The bundles land in `target/release/bundle/`. The CLI refuses to start
-without `dist/`, which the build fills, so on a fresh clone run `cargo build`
-(or `mkdir dist`) first. They are unsigned, so macOS asks
+The bundles land in `target/release/bundle/`. The released macOS build is
+universal, made with `cargo tauri build --target universal-apple-darwin`
+(after `rustup target add aarch64-apple-darwin x86_64-apple-darwin`), and lands
+in `target/universal-apple-darwin/release/bundle/` instead. The CLI refuses to
+start without `dist/`, which the build fills, so on a fresh clone run
+`cargo build` (or `mkdir dist`) first. The bundles are unsigned, so macOS asks
 before opening one downloaded from elsewhere.
 
 ## How it works

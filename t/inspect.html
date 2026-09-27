@@ -41,7 +41,7 @@
       <section>
         <label class="lbl" for="in">text</label>
         <textarea class="field" id="in" spellcheck="false"></textarea>
-        <p class="err" id="err" role="alert" aria-live="polite"></p>
+        <p class="err" id="err" role="alert"></p>
       </section>
 
       <section>
@@ -172,7 +172,7 @@
                 : bytes;
             if (ascii && codePoint > 127 && !warnedNonAscii) {
               warnedNonAscii = true;
-              error.textContent += (error.textContent ? " · " : "") + "non-ascii characters are marked outside range";
+              error.textContent += (error.textContent ? " · " : "") + "non-ascii characters are marked outside ascii";
             }
             var glyph = shown(character);
             row(frag, glyph, code, label);

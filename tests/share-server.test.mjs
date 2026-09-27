@@ -155,9 +155,15 @@ test('no origin is allowed cross-origin unless listed', async t => {
 test('limits room size and rate of joining', async t => {
   const f = await fixture(t);
   for (let i = 0; i < 16; i++) await f.join({ room: 'a'.repeat(24) });
-  assert.equal((await f.post('join', { room: 'a'.repeat(24) })).status, 429);
+  const full = await f.post('join', { room: 'a'.repeat(24) });
+  assert.equal(full.status, 429);
+  assert.match((await full.json()).error, /room is full/);
+  /* The refused join still counts: 17 made, 13 more reach the limit of 30 a
+     minute, and the next is refused. */
   for (let i = 0; i < 13; i++) await f.join({ room: 'b'.repeat(24) });
-  assert.equal((await f.post('join', { room: 'c'.repeat(32) })).status, 429);
+  const limited = await f.post('join', { room: 'c'.repeat(24) });
+  assert.equal(limited.status, 429);
+  assert.match((await limited.json()).error, /too many joins/);
 });
 
 test('TURN uses expiring credentials without exposing its shared secret', async t => {

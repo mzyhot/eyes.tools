@@ -35,15 +35,17 @@
 
 <main class="stack-6">
 
-  <div>
+  <div role="search">
     <label class="vh" for="q">filter sites</label>
     <input class="field" id="q" type="search" autocomplete="off" autocorrect="off"
-           autocapitalize="off" spellcheck="false" placeholder="filter">
-    <p class="hint">
-      <span class="kbd">/</span> to filter · <span class="kbd">↑↓</span> to move ·
+           autocapitalize="off" spellcheck="false" placeholder="filter"
+           aria-controls="out" aria-describedby="q-help">
+    <p class="hint" aria-hidden="true">
+      <span class="kbd" id="filter-key">/</span> to filter · <span class="kbd">↑↓</span> to move ·
       <span class="kbd">↵</span> to open in a new tab
     </p>
-    <p class="err" id="err"></p>
+    <p class="vh" id="q-help">Type to filter. Use the up and down arrow keys to choose a site, then enter to open it in a new tab.</p>
+    <p class="err" id="err" role="alert"></p>
   </div>
 
   <div>
@@ -56,7 +58,7 @@
       <button class="tbtn" type="button" id="bookmarks">bookmarks</button>
     </div>
     <div id="out"></div>
-    <p class="hint" id="empty" hidden>nothing here.</p>
+    <p class="hint" id="empty" hidden>nothing by that name.</p>
   </div>
 
 </main>
@@ -85,7 +87,7 @@ E.tool(function () {
       { name: "wolframalpha",         url: "https://www.wolframalpha.com",     desc: "computational knowledge engine" },
       { name: "google scholar",       url: "https://scholar.google.com",        desc: "scholarly literature search" },
       { name: "semantic scholar",     url: "https://www.semanticscholar.org",   desc: "academic search and citations" },
-      { name: "openalex",             url: "https://openalex.org",              desc: "open scholarly works catalogue" },
+      { name: "openalex",             url: "https://openalex.org",              desc: "open scholarly works catalog" },
       { name: "crossref",             url: "https://search.crossref.org",       desc: "research metadata and dois" },
       { name: "internet encyclopedia of philosophy", url: "https://iep.utm.edu", desc: "open philosophy encyclopedia" }
     ]},
@@ -95,7 +97,7 @@ E.tool(function () {
       { name: "wayback machine",      url: "https://web.archive.org",          desc: "archived web pages" },
       { name: "project gutenberg",    url: "https://www.gutenberg.org",        desc: "public-domain text ebooks" },
       { name: "standard ebooks",      url: "https://standardebooks.org",       desc: "typeset public-domain ebooks" },
-      { name: "open library",         url: "https://openlibrary.org",          desc: "open book catalogue" },
+      { name: "open library",         url: "https://openlibrary.org",          desc: "open book catalog" },
       { name: "imslp",                url: "https://imslp.org",                desc: "public-domain music scores" },
       { name: "library of congress",  url: "https://www.loc.gov",              desc: "american cultural collections" },
       { name: "textfiles",            url: "http://textfiles.com",             desc: "bulletin-board era textfiles" },
@@ -131,7 +133,7 @@ E.tool(function () {
 
     { group: "learning", sites: [
       { name: "mit opencourseware",   url: "https://ocw.mit.edu",              desc: "free mit course materials" },
-      { name: "khan academy",         url: "https://www.khanacademy.org",      desc: "maths and science lessons" },
+      { name: "khan academy",         url: "https://www.khanacademy.org",      desc: "math and science lessons" },
       { name: "arxiv",                url: "https://arxiv.org",                desc: "science and computing preprints" },
       { name: "3blue1brown",          url: "https://www.3blue1brown.com",      desc: "animated mathematics explanations" },
       { name: "nand2tetris",          url: "https://www.nand2tetris.org",      desc: "logic-to-computer course" },
@@ -369,8 +371,12 @@ E.tool(function () {
     }
   });
 
+  /* The same key the index uses, from the site's configuration. */
+  var FILTER_KEY = (window.SITE && SITE.shortcuts && SITE.shortcuts.filterKey) || "/";
+  E.qs("#filter-key").textContent = FILTER_KEY;
+
   E.on(document, "keydown", function (e) {
-    if (e.key !== "/" || e.target === q || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.target.isContentEditable) return;
+    if (e.key !== FILTER_KEY || e.target === q || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.target.isContentEditable) return;
     var t = e.target.tagName;
     if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
     e.preventDefault();

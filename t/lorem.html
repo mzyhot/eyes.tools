@@ -60,9 +60,14 @@ E.tool(function () {
       for (i = 0; i < n; i++) parts.push(sentences[i % sentences.length]);
       out.textContent = parts.join(" ");
     } else {
+      /* Each paragraph starts one sentence further on, so no two neighbours
+         read the same; the first still opens with "Lorem ipsum". */
       var count = length.value === "short" ? 2 : length.value === "long" ? 5 : 3;
-      var paragraph = sentences.slice(0, count).join(" ");
-      for (i = 0; i < n; i++) parts.push(paragraph);
+      for (i = 0; i < n; i++) {
+        var paragraph = [];
+        for (var j = 0; j < count; j++) paragraph.push(sentences[(i + j) % sentences.length]);
+        parts.push(paragraph.join(" "));
+      }
       out.textContent = parts.join("\n\n");
     }
     E.qs("#copy").disabled = false;

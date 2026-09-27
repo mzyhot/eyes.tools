@@ -44,7 +44,7 @@ E.tool(function () {
   var copy = E.qs("#copy"), requestSeq = 0;
   var notes = {
     prng: "Math.random() · predictable · not for security",
-    trng: "fetches a public beacon from cloudflare drand; your range stays in this browser. signature verified.",
+    trng: "fetches a public beacon from cloudflare drand and verifies its signature. your range stays in this browser.",
     csrng: "web crypto api · suitable for secrets"
   };
   function mode() {

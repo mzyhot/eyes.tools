@@ -68,8 +68,8 @@
       <button class="tbtn" type="button" id="tdl">download</button>
     </div>
     <div id="tout"></div>
-    <p class="err" id="terr"></p>
-    <p class="hint">md5 is fine for checksums against accidental corruption and broken for security — collisions are cheap to manufacture. encoding and case apply to every digest on this page.</p>
+    <p class="err" id="terr" role="alert"></p>
+    <p class="hint">md5 is fine for checksums against accidental corruption but broken for security — collisions are cheap to manufacture. encoding and case apply to every digest on this page.</p>
   </section>
 
   <section class="section--ruled">
@@ -93,7 +93,7 @@
       <button class="tbtn" type="button" id="fdl">download</button>
     </div>
     <div id="fout"></div>
-    <p class="err" id="ferr"></p>
+    <p class="err" id="ferr" role="alert"></p>
     <p class="hint">md5 streams in 4 MB chunks. sha digests need a whole-file copy and are limited to 64 MB to protect this tab's memory; larger files still get an md5 checksum.</p>
   </section>
 
@@ -106,7 +106,7 @@
       <dt>vs text</dt><dd id="ctext"></dd>
       <dt>vs file</dt><dd id="cfile"></dd>
     </dl>
-    <p class="err" id="cerr"></p>
+    <p class="err" id="cerr" role="alert"></p>
     <p class="hint">hex is case-insensitive; base64 is case-sensitive. accepts a digest, a checksum-file line, or a labeled line from the results above.</p>
   </section>
 
@@ -397,9 +397,12 @@ E.tool(function () {
 
   E.on(input, "input", function () { ++textSeq; textD = {}; paint(); runText(); });
   E.on(E.qs("#clear"), "click", function () { input.value = ""; doText(); input.focus(); });
+  /* Where the browser cannot read the clipboard, name the paste shortcut for
+     this platform instead. */
+  var PASTE_KEY = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent) ? "⌘V" : "ctrl+V";
   E.on(E.qs("#paste"), "click", function () {
     var btn = this;
-    if (!navigator.clipboard || !navigator.clipboard.readText) { E.flash(btn, "use ⌘V"); input.focus(); return; }
+    if (!navigator.clipboard || !navigator.clipboard.readText) { E.flash(btn, "use " + PASTE_KEY); input.focus(); return; }
     navigator.clipboard.readText().then(function (t) { input.value = t; doText(); },
       function () { E.flash(btn, "blocked"); input.focus(); });
   });
@@ -597,7 +600,7 @@ E.tool(function () {
     if (!p) {
       ckind.textContent = ""; ctext.textContent = ""; cfile.textContent = "";
       cmp.setAttribute("aria-invalid", "true");
-      cerr.textContent = "not a digest of a known length — expected 32, 40, 64, 96 or 128 hex characters, or the same bytes in base64.";
+      cerr.textContent = "not a digest of a known length — expected 32, 40, 64, 96, or 128 hex characters, or the same bytes in base64.";
       return;
     }
     cmp.removeAttribute("aria-invalid");

@@ -2,7 +2,8 @@
 
 These notes cover running the Node server as a long-lived service. The files in
 this directory are templates: nothing here changes a server automatically, and
-GitHub Actions only runs checks.
+GitHub Actions never deploys the site. It runs the checks and builds the desktop
+app's installers.
 
 ## Runtime and service
 
@@ -56,8 +57,8 @@ On later updates, preserve `/etc/eyes/eyes.env`, switch the release symlink and
 run `sudo systemctl restart eyes`. Keep the previous release directory and record
 its path before switching. To roll back, point `/opt/eyes/current` at that previous
 directory, restart `eyes`, and check `/healthz` again. Never edit files in an active
-release; deploy a new revision. A restart resets presence and room reservations;
-tabs reconnect, but interrupted transfers must be sent again.
+release; deploy a new revision. A restart forgets every session; tabs rejoin their
+rooms by link, but interrupted transfers must be sent again.
 
 ## Reverse proxy
 
@@ -76,7 +77,7 @@ port directly to the internet.
 
 `SHARE_ALLOWED_ORIGINS` lists origins, besides the site's own, whose pages may use
 the share service. The desktop app serves its pages itself and uses this
-service only to find devices and set up connections, so to serve it set:
+service only for rooms and connection setup, so to serve it set:
 
 ```
 SHARE_ALLOWED_ORIGINS=tauri://localhost,http://tauri.localhost
@@ -129,6 +130,6 @@ buffering. `/healthz` confirms the Node process is responding, not that the prox
 TURN, or cross-network transfer is healthy. Never log session tokens or full
 signaling bodies while troubleshooting.
 
-The service is intentionally one process: memory stores presence and code
-reservations. Horizontal replicas require
-shared coordination first. There is no durable user data to migrate or back up.
+The service is intentionally one process: memory holds its sessions, rooms and
+code reservations. Horizontal replicas require shared coordination first. There
+is no durable user data to migrate or back up.

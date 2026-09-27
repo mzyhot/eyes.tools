@@ -23,7 +23,7 @@
         <label class="lbl" for="q">glyph, decimal, u+ code, html entity, or ascii name</label>
         <input class="field" id="q" placeholder="𓁹 or U+13079 or 0x41 or LF"
                autocomplete="off" spellcheck="false">
-        <p class="err" id="err" role="alert" aria-live="polite"></p>
+        <p class="err" id="err" role="alert"></p>
       </section>
 
       <section>
@@ -34,7 +34,7 @@
           <dt>utf-8</dt><dd id="utf"></dd>
           <dt>html</dt><dd id="html"></dd>
         </dl>
-        <div class="row mt-3"><button class="btn -ghost" id="copy" type="button" disabled>copy character</button><button class="btn -ghost" id="copy-code" type="button" disabled>copy code</button><button class="btn -ghost" id="copy-html" type="button" disabled>copy html</button></div>
+        <div class="row mt-3"><button class="btn -ghost" id="copy" type="button" disabled>copy character</button><button class="btn -ghost" id="copy-code" type="button" disabled>copy code</button><button class="btn -ghost" id="copy-html" type="button" aria-label="copy the decimal html entity" disabled>copy html</button></div>
       </section>
     </main>
 
@@ -134,7 +134,8 @@
         });
         E.on(copy, "click", function () { E.copy(character, this); });
         E.on(copyCode, "click", function () { E.copy(E.qs("#hex").textContent, this); });
-        E.on(copyHtml, "click", function () { E.copy("&#" + character.codePointAt(0) + ";", this); });
+        /* The html row shows the decimal entity, then the hex one; this copies the first. */
+        E.on(copyHtml, "click", function () { E.copy(E.qs("#html").textContent.split(" · ")[0], this); });
         input.value = E.param("t") || "";
         run();
       });
