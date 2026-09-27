@@ -386,9 +386,11 @@ function sentNotModified(request, response, entry, headers) {
   const inm = request.headers["if-none-match"];
   let fresh = false;
   if (inm) {
+    /* Stripped from our own tag too: the streamed path's tags are weak. */
+    const current = entry.etag.replace(/^W\//, "");
     fresh = inm.split(",").some((tag) => {
       const value = tag.trim();
-      return value === "*" || value.replace(/^W\//, "") === entry.etag;
+      return value === "*" || value.replace(/^W\//, "") === current;
     });
   } else if (request.headers["if-modified-since"]) {
     const since = Date.parse(request.headers["if-modified-since"]);
