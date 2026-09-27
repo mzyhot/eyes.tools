@@ -28,7 +28,7 @@ Differences from the site:
 
 ## Building
 
-Needs Rust 1.88 or newer. Node is not needed.
+Needs Rust 1.90 or newer. Node is not needed.
 
 ```bash
 cargo run
@@ -39,7 +39,7 @@ and `.dmg` on macOS, `.msi`/`.exe` on Windows, `.deb`/`.rpm`/`.AppImage` on
 Linux):
 
 ```bash
-cargo install tauri-cli --version "^2" --locked
+cargo install tauri-cli --version 2.12.0 --locked
 cargo tauri build
 ```
 
