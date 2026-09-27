@@ -6,7 +6,7 @@ body:
     id: tool
     attributes:
       label: Tool
-      description: The tool's address, for example https://eyes.tools/json
+      description: The tool's address, for example https://eyes.tools/json, or its name in the desktop app
     validations:
       required: true
   - type: textarea
@@ -27,8 +27,8 @@ body:
   - type: input
     id: browser
     attributes:
-      label: Browser and system
-      placeholder: Firefox 142 on macOS 26
+      label: Browser or app version, and system
+      placeholder: Firefox 142 on macOS 26, or the desktop app 1.2.0 on Windows 11
     validations:
       required: true
   - type: dropdown
@@ -40,5 +40,6 @@ body:
         - My own copy (Node server)
         - My own copy (Vercel or Cloudflare Pages)
         - Opened from disk
+        - The desktop app
     validations:
       required: true

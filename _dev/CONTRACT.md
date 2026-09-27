@@ -194,7 +194,10 @@ Must render with no horizontal scroll at **320 / 375 / 414 / 768 px**.
       no header, no footer, no `<title>`, no `<script src>` of its own.
 - [ ] Its row in `tools.js` carries the name, lede, meta, aliases, any `deps`
       and, for a network tool, the footer `note`.
-- [ ] `npm run check` passes, which is what enforces both of the above.
+- [ ] `npm run check` passes. It catches a page that writes its own header,
+      footer, `<title>` or description, a `deps` script the page also loads
+      itself, and a registry row with no page; the rest of the two items
+      above is for review.
 - [ ] Opens from `file://` and from a static server with no console errors.
 - [ ] Produces a correct result for a normal input, an empty input, a huge input,
       and a deliberately malformed input.
