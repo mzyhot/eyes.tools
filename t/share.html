@@ -79,7 +79,7 @@ body[data-tool="share"] [hidden] { display: none !important; }
       <p class="hint">you are <span class="mono" id="your-name">…</span></p>
       <p class="hint" id="status" role="status">finding devices…</p>
     </div>
-    <p class="hint">press send files on a device · or drop files onto it</p>
+    <p class="hint">use send files on a device, or drop files onto it</p>
     <p class="err" id="err" role="alert"></p>
     <input type="file" id="files" aria-label="files to send" multiple hidden>
   </section>
@@ -97,10 +97,10 @@ body[data-tool="share"] [hidden] { display: none !important; }
     <ul class="transfer-list" id="transfers"></ul>
   </section>
   <details class="share-help">
-    <summary>can’t see the other device?</summary>
+    <summary>can't see the other device?</summary>
     <p class="hint">Open the link, or scan the code, on the other device, and keep share open on both. The link works from any network. It stops working when this page closes, when you take a new link, or half a minute after a connection drops.</p>
     <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Up to 256 MB per transfer; remove received files to free space.</p>
-    <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site’s server storage. The server only introduces the two devices and passes the connection details. A relay may carry encrypted data when configured.</p>
+    <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site's server storage. The server only introduces the two devices and passes the connection details. A relay may carry encrypted data when configured.</p>
     <button class="tbtn" id="retry" type="button">refresh devices</button>
   </details>
 </main>
@@ -498,7 +498,7 @@ E.tool(function () {
       const batch = this.outgoing = this.queue.shift(); batch.state = 'offered';
       batch.ui.update('waiting for ' + this.name + ' to accept');
       this.control({ t: 'offer', id: batch.id, items: batch.items.map(({ name, size, kind }) => ({ name, size, kind })) });
-      batch.timer = setTimeout(() => this.cancelOutgoing(batch, 'no response. send again when they’re ready.'), 120000);
+      batch.timer = setTimeout(() => this.cancelOutgoing(batch, "no response. send again when they're ready."), 120000);
     }
     finishOutgoing(message) {
       const batch = this.outgoing; if (!batch) return;

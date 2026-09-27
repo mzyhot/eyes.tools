@@ -20,7 +20,7 @@
     <div>
       <label class="lbl" for="expression">expression</label>
       <input class="field" id="expression" type="text" autocomplete="off" spellcheck="false" placeholder="(125 + 75) * 1.08" aria-describedby="syntax">
-      <p class="hint" id="syntax">+ − × ÷ ^ · parentheses · sqrt, abs, round, floor, ceil · pi, e<br>percent means divide by 100: 200 × 10% = 20</p>
+      <p class="hint" id="syntax">+ − × ÷ (or * /) ^ · parentheses · sqrt, abs, round, floor, ceil · pi, e<br>percent means divide by 100: 200 × 10% = 20</p>
       <p class="err" id="error" role="alert"></p>
     </div>
     <div>
@@ -144,7 +144,7 @@ E.tool(function () {
   /* Units use a common base; temperature additionally has an offset. */
   var quantities = [
     { id: "length", name: "length", units: [["m", "meters", 1], ["cm", "centimeters", 0.01], ["mm", "millimeters", 0.001], ["km", "kilometers", 1000], ["in", "inches", 0.0254], ["ft", "feet", 0.3048], ["yd", "yards", 0.9144], ["mi", "miles", 1609.344]] },
-    { id: "mass", name: "weight", units: [["kg", "kilograms", 1], ["g", "grams", 0.001], ["mg", "milligrams", 0.000001], ["lb", "pounds", 0.45359237], ["oz", "ounces", 0.028349523125], ["t", "metric tonnes", 1000]] },
+    { id: "mass", name: "weight", units: [["kg", "kilograms", 1], ["g", "grams", 0.001], ["mg", "milligrams", 0.000001], ["lb", "pounds", 0.45359237], ["oz", "ounces", 0.028349523125], ["t", "metric tons", 1000]] },
     { id: "temperature", name: "temperature", units: [["°C", "celsius", 1, 273.15], ["°F", "fahrenheit", 5/9, 459.67 * 5/9], ["K", "kelvin", 1, 0]] },
     { id: "area", name: "area", units: [["m²", "square meters", 1], ["km²", "square kilometers", 1000000], ["ft²", "square feet", 0.09290304], ["ha", "hectares", 10000], ["ac", "acres", 4046.8564224]] },
     { id: "volume", name: "volume", note: "gallons, quarts, pints, cups, and fluid ounces are US liquid units.", units: [["L", "liters", 1], ["mL", "milliliters", 0.001], ["m³", "cubic meters", 1000], ["gal", "gallons", 3.785411784], ["qt", "quarts", 0.946352946], ["pt", "pints", 0.473176473], ["cup", "cups", 0.2365882365], ["fl oz", "fluid ounces", 0.0295735295625]] },

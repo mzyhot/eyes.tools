@@ -21,7 +21,7 @@
           <button class="btn -ghost" id="dec" type="button">decode</button>
         </div>
         <label class="check mt-2"><input type="checkbox" id="form"><span>form encoding (+ for spaces)</span></label>
-        <p class="err" id="err" role="alert" aria-live="polite"></p>
+        <p class="err" id="err" role="alert"></p>
       </section>
 
       <section>
@@ -83,7 +83,7 @@
               params.join("\n") || "—"
             ].join("\n"));
           } catch (e) {
-            error.textContent = mode === "dec" ? "invalid percent encoding" : mode === "enc" ? "text contains an invalid Unicode character" : "enter an absolute url, including https://";
+            error.textContent = mode === "dec" ? "invalid percent encoding" : mode === "enc" ? "text contains an invalid unicode character" : "enter an absolute url, including https://";
           }
         }
 
