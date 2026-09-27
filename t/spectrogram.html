@@ -13,7 +13,7 @@
 <body data-tool="spectrogram">
 
 <main class="stack-6">
-  <section><label class="lbl" for="file">audio file</label><input class="field" id="file" type="file" accept="audio/*,.wav,.wave,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.webm"><p class="hint">typically wav, mp3, m4a/aac, flac, ogg/opus/vorbis and webm · codec support depends on your browser</p><p class="err" id="err" role="alert"></p></section>
+  <section><label class="lbl" for="file">audio file</label><input class="field" id="file" type="file" accept="audio/*,.wav,.wave,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.webm"><p class="hint">typically wav, mp3, m4a/aac, flac, ogg/opus/vorbis, and webm · codec support depends on your browser</p><p class="err" id="err" role="alert"></p></section>
   <section><figure class="figure"><canvas id="canvas" width="960" height="480" role="img" aria-label="audio spectrogram"></canvas></figure><div class="row mt-2"><button class="btn" id="dl" type="button" disabled>download png</button><span class="hint" id="meta" aria-live="polite"></span></div></section>
 </main>
 
@@ -196,7 +196,7 @@ E.tool(function () {
     ctx.putImageData(image, 0, 0);
 
     meta.textContent = "time → 0–" + (length / rate).toFixed(2) + " s · frequency ↑ 0–" + Math.round(rate / 2).toLocaleString() + " hz · " + channelCount + " channel" + (channelCount === 1 ? "" : "s");
-    c.setAttribute("aria-label", "Spectrogram: time from 0 to " + (length / rate).toFixed(2) + " seconds, left to right. Frequency from 0 to " + Math.round(rate / 2) + " hertz, bottom to top. Brighter pixels indicate stronger frequencies.");
+    c.setAttribute("aria-label", "audio spectrogram: time from 0 to " + (length / rate).toFixed(2) + " seconds, left to right, and frequency from 0 to " + Math.round(rate / 2).toLocaleString() + " hertz, bottom to top. brighter pixels are stronger frequencies.");
     download.disabled = false;
   }
 

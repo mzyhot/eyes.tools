@@ -67,7 +67,7 @@
       <span class="row__spacer"></span>
       <button class="tbtn" type="button" id="regen">regenerate</button>
       <button class="tbtn" type="button" id="copy" disabled>copy all</button>
-      <button class="tbtn" type="button" id="dl" disabled>download .txt</button>
+      <button class="tbtn" type="button" id="dl" disabled>download txt</button>
     </div>
     <div class="out out--scroll" id="out"></div>
   </div>
@@ -78,7 +78,7 @@
       <dt>v4</dt>
       <dd>122 random bits from crypto.getRandomValues; version nibble 4 and variant bits 10 fixed per RFC 9562.</dd>
       <dt>v7</dt>
-      <dd>48-bit unix millisecond, then a 12-bit counter seeded low at each new millisecond, then 62 random bits. Ids from one run are strictly increasing, so sorting them as text restores generation order.</dd>
+      <dd>48-bit unix millisecond, then a 12-bit counter seeded low at each new millisecond, then 62 random bits. IDs from one run are strictly increasing, so sorting them as text restores generation order.</dd>
       <dt>ulid</dt>
       <dd>48-bit millisecond in 10 crockford base32 characters, 80 random bits in 16 more. Within one millisecond the random field is incremented, keeping the run ordered.</dd>
       <dt>short</dt>
@@ -210,13 +210,12 @@ E.tool(function () {
     return r ? r.value : "v4";
   }
 
+  /* The field's whole number, or { bad: true } when it is empty, not a whole
+     number, or outside min…max. */
   function whole(el, min, max) {
     var raw = el.value.trim();
-    if (!raw) return { bad: "empty" };
-    if (!/^[0-9]+$/.test(raw)) return { bad: "not a whole number" };
-    var v = parseInt(raw, 10);
-    if (v < min || v > max) return { bad: "out of range" };
-    return { v: v };
+    var v = /^[0-9]+$/.test(raw) ? parseInt(raw, 10) : NaN;
+    return v >= min && v <= max ? { v: v } : { bad: true };
   }
 
   function uniqueChars(s) {
@@ -253,7 +252,7 @@ E.tool(function () {
     var n = whole(nIn, 1, MAX_N);
     if (n.bad) {
       nIn.setAttribute("aria-invalid", "true");
-      err.textContent = "how many: " + n.bad + " — needs 1 to " + MAX_N;
+      err.textContent = "how many must be a whole number between 1 and " + MAX_N.toLocaleString();
       return;
     }
     nIn.removeAttribute("aria-invalid");
@@ -263,7 +262,7 @@ E.tool(function () {
       var l = whole(lenIn, 1, MAX_LEN);
       if (l.bad) {
         lenIn.setAttribute("aria-invalid", "true");
-        err.textContent = "length: " + l.bad + " — needs 1 to " + MAX_LEN;
+        err.textContent = "length must be a whole number between 1 and " + MAX_LEN;
         return;
       }
       lenIn.removeAttribute("aria-invalid");
@@ -271,7 +270,7 @@ E.tool(function () {
       alpha = uniqueChars(alphaIn.value);
       if (alpha.length < 2) {
         alphaIn.setAttribute("aria-invalid", "true");
-        err.textContent = "alphabet: needs at least 2 different characters";
+        err.textContent = "the alphabet needs at least 2 different characters";
         alphaHint.textContent = "";
         return;
       }
