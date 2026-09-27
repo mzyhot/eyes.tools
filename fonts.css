@@ -9,7 +9,9 @@
  *   2. Replace the @import with @font-face rules that use `url("fonts/…")`,
  *      with `font-display: swap`.
  *   3. Drop `https://fonts.googleapis.com` and `https://fonts.gstatic.com`
- *      from `style-src` and `font-src` in the CSP in `dev-server.mjs`.
+ *      from `style-src` and `font-src` in the CSP in `dev-server.mjs` and
+ *      in `desktop/tauri.conf.json`, then run `node scripts/static-routes.mjs`
+ *      so the static hosts' headers follow.
  * Nothing else in the site refers to a font by name.
  */
 

@@ -3,8 +3,8 @@
 //! The window shows the pages in this repository, embedded in the binary by
 //! `build.rs` and served from the app's own origin, so every tool works offline
 //! just as it does from the Node server. No page is loaded from eyes.tools.
-//! Share is the one tool that needs a server, for finding devices and setting
-//! up connections, so it uses eyes.tools's service for that; files still go
+//! Share is the one tool that needs a server, for its rooms and for setting up
+//! connections, so it uses eyes.tools's service for that; files still go
 //! device to device, and the app meets browsers on the site and other copies
 //! of the app alike. Links the pages make for other people point at
 //! eyes.tools too. Links to other sites open in the system browser, and

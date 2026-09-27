@@ -12,38 +12,38 @@ on, and a small in-memory service introduces the two devices and relays their
 connection setup. File contents travel between browsers, never through it.
 
 ```
-site.js         the site registry — wordmark, copy, footers, shortcuts, storage keys
-tools.js        the tool registry. one row per tool: name, lede, aliases, deps, note.
-fonts.css       the two font families. the one file to change to change the type.
-tokens.css      design tokens (colour, size, space, motion). the only place values live.
-s.css           shared stylesheet — every class a tool page may use
-theme.js        applies the saved theme before the first paint
-s.js            shared runtime — the `E` global, and the chrome built from the registries
-index.js        the index — filter field and registry-driven list
-index.html      an empty page index.js fills
-redirect.js     drives the compatibility stubs (t/lines.html, t/units.html)
-favicon.svg     one eye
-404.html        an empty page s.js fills from site.js
-t/*.html        one file per tool: its markup and its script, nothing else
-qrcode.min.js   vendored QR encoder; generation remains offline
+site.js           the site registry — wordmark, copy, footers, shortcuts, storage keys
+tools.js          the tool registry. one row per tool: name, lede, aliases, deps, note.
+fonts.css         the two font families. the one file to change to change the type.
+tokens.css        design tokens (colour, size, space, motion). the only place values live.
+s.css             shared stylesheet — every class a tool page may use
+theme.js          applies the saved theme before the first paint
+s.js              shared runtime — the `E` global, and the chrome built from the registries
+index.js          the index — filter field and registry-driven list
+index.html        an empty page index.js fills
+redirect.js       drives the compatibility stubs (t/lines.html, t/units.html)
+favicon.svg       one eye
+404.html          an empty page s.js fills from site.js
+t/*.html          one file per tool: its markup and its script, nothing else
+qrcode.min.js     vendored QR encoder; generation remains offline
 drand-client.min.js  vendored official drand client; verifies beacon signatures
-drand-tools.js   shared PRNG, drand TRNG and Web Crypto randomness helpers
-exif-reader.js   vendored ExifReader browser build for image metadata
-dev-server.mjs   the Node server, for development and self-hosting
-api-modules.mjs  the API registry: one row per same-origin endpoint the server mounts
-public-files.mjs the root files the site publishes; everything else stays private
+drand-tools.js    shared PRNG, drand TRNG and Web Crypto randomness helpers
+exif-reader.js    vendored ExifReader browser build for image metadata
+dev-server.mjs    the Node server, for development and self-hosting
+api-modules.mjs   the API registry: one row per same-origin endpoint the server mounts
+public-files.mjs  the root files the site publishes; everything else stays private
 share-server.mjs  ephemeral rooms and WebRTC signaling
 functions/[[path]].js  Cloudflare Pages: answers private paths with the 404 page
-_redirects       Cloudflare Pages: serves each tool at /<slug> (generated)
-_routes.json     Cloudflare Pages: sends private paths to a 404 Function (generated)
-_headers         Cloudflare Pages: the server's security headers (generated)
-vercel.json      Vercel: serves each tool at /<slug>, with those headers (generated)
-.vercelignore    Vercel: leaves private files out of the deployment (generated)
-scripts/         check.mjs (static checks), static-routes.mjs (writes the five files above)
-tests/           Node tests and Playwright browser suites
-deploy/          systemd unit, environment example, and self-hosting notes
-desktop/         the tools as a Tauri desktop app (Rust); see desktop/README.md
-_dev/           the contract and the page skeleton — reference material, not shipped code
+_redirects        Cloudflare Pages: serves each tool at /<slug> (generated)
+_routes.json      Cloudflare Pages: sends private paths to a 404 Function (generated)
+_headers          Cloudflare Pages: the server's security headers (generated)
+vercel.json       Vercel: serves each tool at /<slug>, with those headers (generated)
+.vercelignore     Vercel: leaves private files out of the deployment (generated)
+scripts/          check.mjs (static checks), static-routes.mjs (writes the five files above)
+tests/            Node tests and Playwright browser suites
+deploy/           systemd unit, environment example, and self-hosting notes
+desktop/          the tools as a Tauri desktop app (Rust); see desktop/README.md
+_dev/             the contract and the page skeleton — reference material, not shipped code
 THIRDPARTYLICENSES  licenses and copyright notices for vendored dependencies
 ```
 
@@ -65,8 +65,9 @@ plus a reachable peer.
 ## Desktop app
 
 `desktop/` builds the tools into a desktop app with Tauri. It embeds the same
-pages the server publishes and works offline; share uses eyes.tools's service to
-find devices, so the app meets people on the website. With Rust installed:
+pages the server publishes and works offline; share uses eyes.tools's service
+for its rooms, so a link from the app opens on the website and the other way
+round. With Rust installed:
 
 ```bash
 cd desktop && cargo run
@@ -95,12 +96,12 @@ cd desktop && cargo run
    footer note and any extra scripts (`deps`) all come from it.
 3. Run `node scripts/static-routes.mjs` so Vercel and Cloudflare Pages serve the
    page at `/<slug>`. Run it too after adding any file at the top level, so the
-   static hosts keep it private. The Node server needs nothing; `npm run check` fails until
-   this is done.
+   static hosts keep it private. The Node server needs nothing; `npm run check`
+   fails until this is done.
 4. Follow `_dev/CONTRACT.md`. It is short and it is the whole design system.
 
-Removing a tool is the same two deletions — the row and the file — plus that
-script. Nothing else refers to it.
+Removing a tool takes two deletions — the row and the file — plus that script.
+Nothing else refers to it.
 
 The wiki's [Adding a tool](https://github.com/mzyhot/eyes.tools/wiki/Adding-a-tool)
 walks through it in detail.
@@ -173,10 +174,10 @@ for what each suite covers and how to diagnose failures.
 
 ## Supporting the project
 
-eyes.tools is free, has no ads or analytics, and stays that way. if it saves
-you time, you can support its development with the button below!
+eyes.tools is free, has no ads or analytics, and stays that way. If it saves
+you time, you can support its development with the button below.
 
-[![Support us!](.github/assets/support-us-square.svg)](https://square.link/u/JduZKl4L)
+[![Support eyes.tools](.github/assets/support-us-square.svg)](https://square.link/u/JduZKl4L)
 
 ## License
 
