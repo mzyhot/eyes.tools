@@ -389,10 +389,16 @@ E.tool(function () {
 
   /* ── input ────────────────────────────────────────────────────────── */
 
-  E.on(pad, "input", function () {
+  /* An edit of the visitor's own makes every pending undo stale: the clear
+     undo, the line cleanup undo, and the offer to go back to the old pad. */
+  function forgetUndo() {
     endUndo();
     endLineUndo();
     if (undoOffered) { undoOffered = false; offer.hidden = true; }
+  }
+
+  E.on(pad, "input", function () {
+    forgetUndo();
     queueUpdate();
     queueLines();
     scheduleSave();
@@ -437,9 +443,9 @@ E.tool(function () {
     }
     var at = pad.selectionStart, value = replaceInput.value;
     pad.setRangeText(value, pad.selectionStart, pad.selectionEnd, "end");
-    endLineUndo();
+    forgetUndo();
     queueUpdate(); queueLines(); scheduleSave();
-    findInfo.textContent = "replaced one match.";
+    findInfo.textContent = "replaced 1 match.";
     findNext(at + value.length);
   });
 
@@ -449,6 +455,7 @@ E.tool(function () {
     var hits = 0;
     var result = pad.value.replace(literalPattern(needle), function () { hits++; return replaceInput.value; });
     if (!hits) { findInfo.textContent = "no matches."; return; }
+    forgetUndo();
     setText(result);
     findInfo.textContent = "replaced " + num(hits) + (hits === 1 ? " match." : " matches.");
     pad.focus();

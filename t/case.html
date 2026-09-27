@@ -82,9 +82,13 @@ E.tool(function () {
 
   E.on(input, "input", run);
 
+  /* Where the browser cannot read the clipboard, name the paste shortcut for
+     this platform instead. */
+  var PASTE_KEY = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent) ? "⌘V" : "ctrl+V";
+
   E.on(E.qs("#paste"), "click", function () {
     if (!navigator.clipboard || !navigator.clipboard.readText) {
-      E.flash(this, "use ⌘V");
+      E.flash(this, "use " + PASTE_KEY);
       input.focus();
       return;
     }

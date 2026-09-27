@@ -94,7 +94,7 @@ E.tool(function () {
     E.qs("#summary").textContent = "";
     copy.disabled = true;
     if (n > MAX_LINES || m > MAX_LINES) {
-      er.textContent = "these inputs are too large for a safe line diff; keep each side under " + MAX_LINES + " lines or reduce the combined size";
+      er.textContent = "keep each side under " + MAX_LINES.toLocaleString() + " lines for a line diff";
       copy.disabled = true;
       return;
     }
@@ -108,7 +108,7 @@ E.tool(function () {
 
     var coreN = n - head, coreM = m - head;
     if ((coreN + 1) * (coreM + 1) > MAX_CELLS) {
-      er.textContent = "these inputs are too large for a safe line diff; keep each side under " + MAX_LINES + " lines or reduce the combined size";
+      er.textContent = "too many lines after the first change to compare at once; try a smaller section";
       copy.disabled = true;
       return;
     }
