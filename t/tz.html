@@ -39,9 +39,9 @@
       <datalist id="zones"></datalist>
 
       <section id="overlap" hidden>
-        <label class="lbl" for="occurrence">this local time occurs twice</label>
-        <select class="field" id="occurrence"><option value="earlier">first occurrence</option><option value="later">second occurrence</option></select>
-        <p class="hint mt-2">the clock moves back in this zone. choose which instant you mean.</p>
+        <label class="lbl" for="occurrence">which occurrence</label>
+        <select class="field" id="occurrence" aria-describedby="occurrence-hint"><option value="earlier">first occurrence</option><option value="later">second occurrence</option></select>
+        <p class="hint mt-2" id="occurrence-hint">this local time happens twice: the clock moves back in this zone. choose which instant you mean.</p>
       </section>
 
       <div class="row">

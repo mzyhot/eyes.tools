@@ -81,7 +81,7 @@ E.tool(function () {
         }
       }
       error.classList.add("status-ok");
-      error.textContent = mode === "unescape" ? "decoded string" : "valid json";
+      error.textContent = mode === "unescape" ? "decoded string" : mode === "escape" ? "escaped as a json string" : "valid json";
     } catch (e) {
       output.value = "";
       clearStatus();

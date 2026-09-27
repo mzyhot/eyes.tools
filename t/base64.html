@@ -61,8 +61,14 @@ E.tool(function () {
     for (i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
     return new TextDecoder("utf-8", { fatal: true }).decode(data);
   }
-  E.on(E.qs("#enc"), "click", function () { try { error.textContent = ""; output.value = encode(input.value); } catch (e) { output.value = ""; error.textContent = "could not encode this text"; } });
-  E.on(E.qs("#dec"), "click", function () { try { error.textContent = ""; output.value = decode(input.value); } catch (e) { output.value = ""; error.textContent = "invalid base64 or utf-8"; } });
+  /* Which button produced the result, so the url-safe box can redo an encode
+     rather than leave the other alphabet on screen. */
+  var shown = null;
+  function runEncode() { shown = "enc"; try { error.textContent = ""; output.value = encode(input.value); } catch (e) { output.value = ""; error.textContent = "could not encode this text"; } }
+  function runDecode() { shown = "dec"; try { error.textContent = ""; output.value = decode(input.value); } catch (e) { output.value = ""; error.textContent = "invalid base64 or utf-8"; } }
+  E.on(E.qs("#enc"), "click", runEncode);
+  E.on(E.qs("#dec"), "click", runDecode);
+  E.on(E.qs("#url-safe"), "change", function () { if (shown === "enc") runEncode(); });
   E.on(fileInput, "change", function () {
     var file = this.files && this.files[0], seq = ++fileSeq;
     if (activeReader && activeReader.readyState === 1) activeReader.abort();

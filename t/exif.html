@@ -91,7 +91,7 @@ E.tool(function () {
       if (value == null || SKIP.test(group)) return;
       if (typeof value !== "object" || Array.isArray(value) || ArrayBuffer.isView(value) || hasDescription(value)) {
         single = valueText(value);
-        if (single && single !== BINARY) rows.push(["metadata · " + group, single]);
+        if (single && single !== BINARY && single !== STRUCTURED) rows.push(["metadata · " + group, single]);
         return;
       }
       Object.keys(value).sort().forEach(function (key) {
@@ -122,7 +122,7 @@ E.tool(function () {
       out.appendChild(E.el("dt", { text: r[0] }));
       out.appendChild(E.el("dd", { text: r[1] }));
     });
-    summary.textContent = shown.length + (term ? " of " + allRows.length : "") + " fields";
+    summary.textContent = shown.length + (term ? " of " + allRows.length : "") + ((term ? allRows.length : shown.length) === 1 ? " field" : " fields");
     filterWrap.hidden = !allRows.length;
     copy.disabled = !shown.length;
     download.disabled = !shown.length;

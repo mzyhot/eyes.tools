@@ -172,7 +172,7 @@
                 : bytes;
             if (ascii && codePoint > 127 && !warnedNonAscii) {
               warnedNonAscii = true;
-              error.textContent += (error.textContent ? " · " : "") + "non-ascii characters are marked outside range";
+              error.textContent += (error.textContent ? " · " : "") + "non-ascii characters are marked outside ascii";
             }
             var glyph = shown(character);
             row(frag, glyph, code, label);
