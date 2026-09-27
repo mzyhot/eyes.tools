@@ -183,7 +183,9 @@
     if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
     else if (e.key === "Enter") {
-      var el = links[cursor < 0 ? 0 : cursor];
+      /* Only a highlighted row opens: with nothing typed and nothing chosen,
+         Enter is not a request for whichever tool happens to be first. */
+      var el = cursor < 0 ? null : links[cursor];
       if (el) { e.preventDefault(); location.href = el.href; }
     } else if (e.key === "Escape") {
       /* First Escape clears the filter, a second one releases the field. */

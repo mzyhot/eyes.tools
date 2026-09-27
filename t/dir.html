@@ -35,14 +35,16 @@
 
 <main class="stack-6">
 
-  <div>
+  <div role="search">
     <label class="vh" for="q">filter sites</label>
     <input class="field" id="q" type="search" autocomplete="off" autocorrect="off"
-           autocapitalize="off" spellcheck="false" placeholder="filter">
-    <p class="hint">
-      <span class="kbd">/</span> to filter · <span class="kbd">↑↓</span> to move ·
+           autocapitalize="off" spellcheck="false" placeholder="filter"
+           aria-controls="out" aria-describedby="q-help">
+    <p class="hint" aria-hidden="true">
+      <span class="kbd" id="filter-key">/</span> to filter · <span class="kbd">↑↓</span> to move ·
       <span class="kbd">↵</span> to open in a new tab
     </p>
+    <p class="vh" id="q-help">Type to filter. Use the up and down arrow keys to choose a site, then enter to open it in a new tab.</p>
     <p class="err" id="err"></p>
   </div>
 
@@ -56,7 +58,7 @@
       <button class="tbtn" type="button" id="bookmarks">bookmarks</button>
     </div>
     <div id="out"></div>
-    <p class="hint" id="empty" hidden>nothing here.</p>
+    <p class="hint" id="empty" hidden>nothing by that name.</p>
   </div>
 
 </main>
@@ -369,8 +371,12 @@ E.tool(function () {
     }
   });
 
+  /* The same key the index uses, from the site's configuration. */
+  var FILTER_KEY = (window.SITE && SITE.shortcuts && SITE.shortcuts.filterKey) || "/";
+  E.qs("#filter-key").textContent = FILTER_KEY;
+
   E.on(document, "keydown", function (e) {
-    if (e.key !== "/" || e.target === q || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.target.isContentEditable) return;
+    if (e.key !== FILTER_KEY || e.target === q || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.target.isContentEditable) return;
     var t = e.target.tagName;
     if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
     e.preventDefault();
