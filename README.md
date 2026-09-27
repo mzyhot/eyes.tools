@@ -36,9 +36,10 @@ share-server.mjs  ephemeral rooms and WebRTC signaling
 functions/[[path]].js  Cloudflare Pages: answers private paths with the 404 page
 _redirects       Cloudflare Pages: serves each tool at /<slug> (generated)
 _routes.json     Cloudflare Pages: sends private paths to a 404 Function (generated)
-vercel.json      Vercel: serves each tool at /<slug> (generated)
+_headers         Cloudflare Pages: the server's security headers (generated)
+vercel.json      Vercel: serves each tool at /<slug>, with those headers (generated)
 .vercelignore    Vercel: leaves private files out of the deployment (generated)
-scripts/        check.mjs (static checks), static-routes.mjs (writes the four files above)
+scripts/         check.mjs (static checks), static-routes.mjs (writes the five files above)
 tests/           Node tests and Playwright browser suites
 deploy/          systemd unit, environment example, and self-hosting notes
 desktop/         the tools as a Tauri desktop app (Rust); see desktop/README.md
@@ -125,13 +126,21 @@ service, proxy requirements, and release checks.
 Static hosts can serve the tools, but not share:
 
 - **Vercel** reads `vercel.json`: `npx vercel deploy --prod`.
-- **Cloudflare Pages** reads `_redirects`, `_routes.json` and `functions/`. Connect
+- **Cloudflare Pages** reads `_redirects`, `_routes.json`, `_headers` and `functions/`. Connect
   the repo with no build command and the project root as the output directory,
   through Git integration or Wrangler; dashboard Direct Upload does not deploy
   Functions.
 
-Both hosts publish only what the Node server does: `.vercelignore` and
-`_routes.json` hide every file `public-files.mjs` does not list.
+Both hosts hide the files `public-files.mjs` does not list: `.vercelignore`
+leaves them out of a Vercel deployment and `_routes.json` answers them with the
+404 page on Pages. Vercel is still handed `package.json` and its own config
+files, so those are the exception there.
+
+Both also send the Node server's security headers, taken from `dev-server.mjs`
+when the files are generated, with one difference. The server hashes each
+page's inline scripts into its content security policy; a static host cannot,
+so its policy allows inline scripts instead. Scripts from any other origin are
+refused either way.
 
 The wiki's [Deployment](https://github.com/mzyhot/eyes.tools/wiki/Deployment) and
 [Sharing](https://github.com/mzyhot/eyes.tools/wiki/Sharing) pages cover visitor
