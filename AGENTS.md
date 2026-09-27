@@ -68,6 +68,10 @@ npm run test:browser
   `node scripts/static-routes.mjs` so static hosts hide it too.
 - Clean tool URLs, legacy redirects, Cloudflare routes, and Vercel rewrites must
   stay consistent. A change that works only on the Node server is incomplete.
+- The static hosts' security headers (`vercel.json`, `_headers`) are generated
+  from the table in `dev-server.mjs`; after changing a header there, run
+  `node scripts/static-routes.mjs`. They differ only in allowing inline
+  scripts, since a static host cannot hash each page's.
 - The desktop app (`desktop/`) embeds exactly what `public-files.mjs` and `t/`
   publish, and its CSP in `desktop/tauri.conf.json` mirrors `dev-server.mjs`.
   A CSP change belongs in both. For page changes, `EYES_PROBE=1 cargo run` in
