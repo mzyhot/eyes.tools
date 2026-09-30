@@ -13,6 +13,7 @@
     "/dev-server.mjs",
     "/functions/*",
     "/github-webhook.mjs",
+    "/mcp-server.mjs",
     "/package-lock.json",
     "/package.json",
     "/public-files.mjs",

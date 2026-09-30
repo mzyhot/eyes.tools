@@ -233,6 +233,35 @@ try {
     await go('uuid'); assert.equal((await call('generate_ids', { kind: 'ulid', count: 3 })).ids.length, 3);
     await go('dump'); await call('add_to_scratchpad', { text: 'from an agent' }); assert.ok((await page.locator('#pad').inputValue()).endsWith('from an agent'));
     await go('tz'); assert.equal((await call('convert_time_zone', { dateTime: '2026-11-01T01:30', from: 'America/New_York', to: 'UTC', occurrence: 'later' })).instant, '2026-11-01T06:30:00.000Z');
+    await go('case'); assert.equal((await call('convert_case', {})).error, 'text is required');
+
+    // The MCP server runs the same cores: it offers every page tool but those
+    // needing the visitor's own things, and answers exactly as the page does.
+    const mcp = async (method, params) => (await (await fetch(base + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })).json()).result;
+    const pageOnly = ['hash_chosen_file', 'resize_image', 'read_image_metadata', 'read_scratchpad', 'add_to_scratchpad'];
+    assert.deepEqual((await mcp('tools/list', {})).tools.map(t => t.name).sort(), [...names].filter(n => !pageOnly.includes(n)).sort());
+    for (const [slug, name, input] of [
+      ['case', 'convert_case', { text: 'Hello wide World' }], ['base64', 'base64_encode', { text: 'hé🌍', urlSafe: true }],
+      ['hash', 'hash_text', { text: 'abc', encoding: 'base64' }], ['json', 'format_json', { json: '{"b":[1,{"c":null}]}', indent: '4' }],
+      ['url', 'parse_url', { url: 'https://a.example:8080/p/q?x=1&y=%20#f' }], ['count', 'count_text', { text: 'one two\nthree' }],
+      ['char', 'look_up_character', { query: '&copy;' }], ['inspect', 'inspect_text', { text: 'a\u200bb', set: 'ascii' }],
+      ['diff', 'diff_text', { before: 'a\nb\nc', after: 'a\nc\nd' }], ['color', 'check_contrast', { foreground: '#777', background: 'white' }],
+      ['calc', 'calculate', { expression: 'sqrt(2) * 3!' }], ['calc', 'convert_units', { value: 5, from: 'mi', to: 'km' }],
+      ['barcode', 'make_ean13_barcode', { digits: '590123412345' }], ['qr', 'make_qr_code', { text: 'eyes', errorCorrection: 'high', size: 128 }],
+      ['dump', 'clean_up_lines', { text: 'b\na\nb', sort: 'asc', unique: true }], ['dir', 'search_directory', { query: 'github' }],
+      ['lorem', 'generate_lorem_ipsum', { kind: 'words', count: 7 }], ['time', 'convert_timestamp', { value: '1787313600' }],
+      ['tz', 'convert_time_zone', { dateTime: '2026-03-08T02:30', from: 'America/New_York', to: 'Asia/Tokyo' }],
+      ['calc', 'calculate', { expression: '1/0' }], ['json', 'format_json', { json: '{bad}' }]
+    ]) {
+      await go(slug);
+      const onPage = await call(name, input), onServer = await mcp('tools/call', { name, arguments: input });
+      if (onPage.error) assert.deepEqual([onServer.isError, onServer.content[0].text], [true, onPage.error], name);
+      else {
+        // The page adds what only a browser knows: the reader's own local time.
+        delete onPage.local;
+        assert.deepEqual(onServer.structuredContent, onPage, name + ' ' + JSON.stringify(input));
+      }
+    }
   });
   await check('directory filtering and theme persistence', async () => {
     await go('dir'); await fill('#q', 'github'); assert.ok((await text('main')).toLowerCase().includes('github')); await enabled('#copy-urls');

@@ -71,30 +71,13 @@
       E.tool(function () {
         "use strict";
 
-        var when = E.qs("#when");
-        var from = E.qs("#from");
-        var to = E.qs("#to");
-        var result = E.qs("#result");
-        var source = E.qs("#source");
-        var dest = E.qs("#dest");
-        var iso = E.qs("#iso");
-        var copy = E.qs("#copy");
-        var er = E.qs("#err");
-        var report = "";
-        var lastInstant = null, lastSource = "";
-        var occurrence = E.qs("#occurrence"), overlap = E.qs("#overlap"), errorTimer = null;
+        /* ── core ────────────────────────────────────────────────────
+           Pure: no DOM and no E. The site's MCP server (mcp-server.mjs)
+           runs this block on its own, so an agent that never opens the page
+           gets the same answers. AGENT_TOOLS is what both offer. */
 
         function pad(n) {
           return String(n).padStart(2, "0");
-        }
-
-        function clearOutput() {
-          result.textContent = "";
-          source.textContent = "";
-          dest.textContent = "";
-          iso.textContent = "";
-          report = "";
-          copy.disabled = true;
         }
 
         function partsAt(ms, zone) {
@@ -122,27 +105,36 @@
           return date.getTime();
         }
 
-        function epochFor(value, zone, preferred) {
+        /**
+         * Every instant at which a zone's clocks show a local date and time:
+         * none in a gap the clocks skip, two in an hour they repeat.
+         * @param {string} value YYYY-MM-DDTHH:MM.
+         * @param {string} zone IANA name.
+         * @returns {number[]} Epoch milliseconds, earliest first.
+         */
+        function candidates(value, zone) {
           var match = value.match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)$/);
           if (!match) throw new Error("enter a date and time");
 
           var want = wallEpoch(+match[1], +match[2], +match[3], +match[4], +match[5]);
-          var candidates = [];
+          var found = [];
           // Sample offsets on either side of a clock change, then verify the
           // complete wall time. This handles gaps and half-hour changes too.
           [-48, -24, 0, 24, 48].forEach(function (hours) {
             var probe = want + hours * 3600000, parts = partsAt(probe, zone);
             var offset = wallEpoch(parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second) - probe;
             var ms = want - offset, check = partsAt(ms, zone);
-            if (check.year === +match[1] && check.month === +match[2] && check.day === +match[3] && check.hour === +match[4] && check.minute === +match[5] && candidates.indexOf(ms) < 0) candidates.push(ms);
+            if (check.year === +match[1] && check.month === +match[2] && check.day === +match[3] && check.hour === +match[4] && check.minute === +match[5] && found.indexOf(ms) < 0) found.push(ms);
           });
-          candidates.sort(function (a, b) { return a - b; });
-          overlap.hidden = candidates.length < 2;
-          if (!candidates.length) {
-            throw new Error("that local time does not exist in the source zone");
-          }
-          if (candidates.indexOf(preferred) >= 0) occurrence.value = preferred === candidates[0] ? "earlier" : "later";
-          return occurrence.value === "later" ? candidates[candidates.length - 1] : candidates[0];
+          found.sort(function (a, b) { return a - b; });
+          if (!found.length) throw new Error("that local time does not exist in the source zone");
+          return found;
+        }
+
+        /* A zone's local date and time now, as the page's field holds it. */
+        function localNow(zone) {
+          var now = partsAt(Date.now(), zone);
+          return String(now.year).padStart(4, "0") + "-" + pad(now.month) + "-" + pad(now.day) + "T" + pad(now.hour) + ":" + pad(now.minute);
         }
 
         function format(ms, zone) {
@@ -162,6 +154,77 @@
           }
         }
 
+        /* Which fields hold no zone, in the page's words. */
+        function zoneProblem(fromZone, toZone) {
+          var bad = [];
+          if (!valid(fromZone)) bad.push("from");
+          if (!valid(toZone)) bad.push("to");
+          return bad.length ? bad.join(" and ") + ": use an IANA time zone such as America/Chicago" : "";
+        }
+
+        var AGENT_TOOLS = [{
+          name: "convert_time_zone",
+          title: "convert a time between zones",
+          description: "Say what a local date and time in one IANA time zone is in another, handling daylight " +
+            "saving: a time that never happens (the clock skipped it) is refused, and one that happens " +
+            "twice (the clock went back) uses the first unless told otherwise. Leave out dateTime for now.",
+          input: {
+            type: "object",
+            properties: {
+              dateTime: { type: "string", description: "Local date and time in the from zone, as YYYY-MM-DDTHH:MM." },
+              from: { type: "string", description: "IANA zone such as America/Chicago, or UTC." },
+              to: { type: "string", description: "IANA zone such as Asia/Tokyo." },
+              occurrence: { type: "string", enum: ["earlier", "later"], default: "earlier", description: "Which one, when the local time happens twice." }
+            },
+            required: ["from", "to"]
+          },
+          readOnly: true,
+          compute: function (args) {
+            var fromZone = String(args.from == null ? "" : args.from).trim(), toZone = String(args.to == null ? "" : args.to).trim();
+            var which = args.occurrence == null ? "earlier" : String(args.occurrence);
+            if (which !== "earlier" && which !== "later") throw new Error("occurrence must be earlier or later");
+            var problem = zoneProblem(fromZone, toZone);
+            if (problem) throw new Error(problem);
+            var value = args.dateTime == null || args.dateTime === "" ? localNow(fromZone) : String(args.dateTime).trim().slice(0, 16);
+            if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(value)) throw new Error("dateTime must look like 2026-11-01T01:30");
+            var list = candidates(value, fromZone), ms = which === "later" ? list[list.length - 1] : list[0];
+            return { from: format(ms, fromZone), to: format(ms, toZone), instant: new Date(ms).toISOString(), happensTwice: list.length > 1 };
+          }
+        }];
+
+        /* ── end core ──────────────────────────────────────────────── */
+
+        var when = E.qs("#when");
+        var from = E.qs("#from");
+        var to = E.qs("#to");
+        var result = E.qs("#result");
+        var source = E.qs("#source");
+        var dest = E.qs("#dest");
+        var iso = E.qs("#iso");
+        var copy = E.qs("#copy");
+        var er = E.qs("#err");
+        var report = "";
+        var lastInstant = null, lastSource = "";
+        var occurrence = E.qs("#occurrence"), overlap = E.qs("#overlap"), errorTimer = null;
+
+        function clearOutput() {
+          result.textContent = "";
+          source.textContent = "";
+          dest.textContent = "";
+          iso.textContent = "";
+          report = "";
+          copy.disabled = true;
+        }
+
+        /* The instant the page shows: the occurrence chosen, unless the same
+           local time was just shown, in which case the same instant stays. */
+        function epochFor(value, zone, preferred) {
+          var list = candidates(value, zone);
+          overlap.hidden = list.length < 2;
+          if (list.indexOf(preferred) >= 0) occurrence.value = preferred === list[0] ? "earlier" : "later";
+          return occurrence.value === "later" ? list[list.length - 1] : list[0];
+        }
+
         /* A zone name is mostly typed a letter at a time, so while typing an
            unknown name waits for a pause before it is called an error. */
         function run(eager) {
@@ -172,12 +235,12 @@
           from.removeAttribute("aria-invalid");
           to.removeAttribute("aria-invalid");
 
-          var bad = [from, to].filter(function (field) { return !valid(field.value.trim()); });
-          if (bad.length) {
+          var problem = zoneProblem(from.value.trim(), to.value.trim());
+          if (problem) {
+            var bad = [from, to].filter(function (field) { return !valid(field.value.trim()); });
             var show = function () {
               bad.forEach(function (field) { field.setAttribute("aria-invalid", "true"); });
-              er.textContent = (bad.length === 2 ? "from and to" : bad[0] === from ? "from" : "to") +
-                ": use an IANA time zone such as America/Chicago";
+              er.textContent = problem;
             };
             if (eager === false) errorTimer = setTimeout(show, 600); else show();
             return;
@@ -251,47 +314,18 @@
         });
         run();
 
-        /* For agents: the conversion the page does, on the page's fields. */
-        E.agentTool({
-          name: "convert_time_zone",
-          title: "convert a time between zones",
-          description: "Say what a local date and time in one IANA time zone is in another, handling daylight " +
-            "saving: a time that never happens (the clock skipped it) is refused, and one that happens " +
-            "twice (the clock went back) uses the first unless told otherwise. Leave out dateTime for now. " +
-            "The conversion is shown on the page.",
-          input: {
-            type: "object",
-            properties: {
-              dateTime: { type: "string", description: "Local date and time in the from zone, as YYYY-MM-DDTHH:MM." },
-              from: { type: "string", description: "IANA zone such as America/Chicago, or UTC." },
-              to: { type: "string", description: "IANA zone such as Asia/Tokyo." },
-              occurrence: { type: "string", enum: ["earlier", "later"], default: "earlier", description: "Which one, when the local time happens twice." }
-            },
-            required: ["from", "to"]
-          },
-          readOnly: true,
-          run: function (args) {
-            if (args.dateTime != null && args.dateTime !== "") {
-              var value = String(args.dateTime).trim().slice(0, 16);
-              if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(value)) throw new Error("dateTime must look like 2026-11-01T01:30");
-              when.value = value;
-            } else if (!when.value) {
-              when.value = new Date().toISOString().slice(0, 16);
-            }
-            var which = args.occurrence == null ? "earlier" : String(args.occurrence);
-            if (which !== "earlier" && which !== "later") throw new Error("occurrence must be earlier or later");
-            from.value = String(args.from == null ? "" : args.from);
-            to.value = String(args.to == null ? "" : args.to);
-            occurrence.value = which;
+        /* For agents in the browser: the core's tool, with the conversion in
+           the page's own fields. */
+        E.agentTools(AGENT_TOOLS, {
+          convert_time_zone: function (args) {
+            var answer = AGENT_TOOLS[0].compute(args);
+            from.value = String(args.from).trim();
+            to.value = String(args.to).trim();
+            when.value = args.dateTime == null || args.dateTime === "" ? localNow(from.value) : String(args.dateTime).trim().slice(0, 16);
+            occurrence.value = args.occurrence === "later" ? "later" : "earlier";
             lastSource = "";
             run();
-            if (er.textContent) throw new Error(er.textContent);
-            return {
-              from: source.textContent,
-              to: dest.textContent,
-              instant: iso.textContent,
-              happensTwice: !overlap.hidden
-            };
+            return answer;
           }
         });
       });

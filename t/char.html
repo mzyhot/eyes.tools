@@ -39,12 +39,11 @@
       E.tool(function () {
         "use strict";
 
-        var input = E.qs("#q");
-        var glyph = E.qs("#glyph");
-        var error = E.qs("#err");
-        var copy = E.qs("#copy");
-        var forms = E.qs("#forms");
-        var character = "";
+        /* ── core ────────────────────────────────────────────────────
+           Pure: no DOM and no E. The site's MCP server (mcp-server.mjs)
+           runs this block on its own, so an agent that never opens the page
+           gets the same answers. AGENT_TOOLS is what both offer. */
+
         var controlNames = [
           "NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL",
           "BS", "HT", "LF", "VT", "FF", "CR", "SO", "SI",
@@ -54,15 +53,8 @@
         var named = { TAB: 9, NEWLINE: 10, RETURN: 13, SPACE: 32, DEL: 127 };
         controlNames.forEach(function (name, index) { named[name] = index; });
 
-        function mode() {
-          var selected = E.qsa("input[name=mode]").filter(function (radio) {
-            return radio.checked;
-          })[0];
-          return selected ? selected.value : "unicode";
-        }
-
-        /* Every way to write the character down, one row each, each with its
-           own copy button. */
+        /* Every way to write the character down: name, the id of its row on
+           the page, and how to write it. */
         var FORMS = [
           ["decimal", "dec", function (cp) { return String(cp); }],
           ["code point", "hex", function (cp, hex) { return "U+" + hex.padStart(4, "0"); }],
@@ -75,22 +67,118 @@
           ["css", "css", function (cp, hex) { return "\\" + hex; }],
           ["url", "url", function (cp, hex, ch) { return encodeURIComponent(ch); }]
         ];
+
+        /* The named html entities people type most. The page swaps in the
+           browser's own parser, which knows all of them; elsewhere these do. */
+        var ENTITIES = {
+          amp: 38, lt: 60, gt: 62, quot: 34, apos: 39, nbsp: 160, copy: 169, reg: 174, trade: 8482,
+          hellip: 8230, mdash: 8212, ndash: 8211, lsquo: 8216, rsquo: 8217, ldquo: 8220, rdquo: 8221,
+          laquo: 171, raquo: 187, bull: 8226, middot: 183, deg: 176, plusmn: 177, times: 215, divide: 247,
+          euro: 8364, pound: 163, yen: 165, cent: 162, sect: 167, para: 182, larr: 8592, rarr: 8594,
+          uarr: 8593, darr: 8595, harr: 8596, hearts: 9829, check: 10003, shy: 173, zwj: 8205, zwnj: 8204
+        };
+        var decodeEntity = function (value) {
+          var name = value.slice(1, -1);
+          return Object.prototype.hasOwnProperty.call(ENTITIES, name) ? ENTITIES[name] : null;
+        };
+
+        /**
+         * Find the character a query names.
+         * @param {string} raw As typed.
+         * @param {boolean} ascii Refuse anything past 127.
+         * @returns {object|null} The character, how the page shows it, and
+         *   every form; null for an empty query.
+         * @throws {Error} With the message the page shows.
+         */
+        function lookUp(raw, ascii) {
+          var value = raw.trim(), codePoint = null;
+          if (!raw) return null;
+          if (!value && Array.from(raw).length === 1) value = raw;
+          if (!value) return null;
+          var upper = value.toUpperCase();
+          if (named[upper] != null) codePoint = named[upper];
+          else if (/^U\+[0-9a-f]+$/i.test(value)) codePoint = parseInt(value.slice(2), 16);
+          else if (/^0x[0-9a-f]+$/i.test(value)) codePoint = parseInt(value.slice(2), 16);
+          else if (/^&#x[0-9a-f]+;$/i.test(value)) codePoint = parseInt(value.slice(3, -1), 16);
+          else if (/^&#\d+;$/.test(value)) codePoint = parseInt(value.slice(2, -1), 10);
+          else if (/^&[a-z][a-z0-9]*;$/i.test(value)) {
+            codePoint = decodeEntity(value);
+            if (codePoint === null) throw new Error("unknown html entity " + value + "; give its number instead, such as &#169;");
+          }
+          else if (/^\d+$/.test(value)) codePoint = parseInt(value, 10);
+          else if (Array.from(value).length === 1) codePoint = value.codePointAt(0);
+          else throw new Error("enter one character, a code such as U+0041, or a known ascii name");
+
+          if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff ||
+              (codePoint >= 0xd800 && codePoint <= 0xdfff) || (ascii && codePoint > 127)) {
+            throw new Error(ascii ? "value is outside ascii (0–127)" : "not a valid unicode scalar value");
+          }
+          var character = String.fromCodePoint(codePoint), hex = codePoint.toString(16).toUpperCase(), forms = {};
+          FORMS.forEach(function (form) { forms[form[0]] = form[2](codePoint, hex, character); });
+          return {
+            character: character,
+            shownAs: codePoint < 32 ? controlNames[codePoint] : codePoint === 127 ? "DEL" : /^\s$/u.test(character) ? (codePoint === 32 ? "space" : "whitespace") : character,
+            forms: forms
+          };
+        }
+
+        var AGENT_TOOLS = [{
+          name: "look_up_character",
+          title: "look up a character",
+          description: "Find one character from the character itself, a decimal number, a U+ or 0x code, an " +
+            "html entity such as &copy; or &#169;, or an ascii control name such as LF, and give its " +
+            "decimal, code point, UTF-8 bytes, html, javascript, css and url forms.",
+          input: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "One character, or a code or name for one." },
+              set: { type: "string", enum: ["unicode", "ascii"], default: "unicode", description: "ascii refuses anything past 127." }
+            },
+            required: ["query"]
+          },
+          readOnly: true,
+          compute: function (args) {
+            var set = args.set == null ? "unicode" : String(args.set);
+            if (set !== "unicode" && set !== "ascii") throw new Error("set must be unicode or ascii");
+            var found = lookUp(String(args.query == null ? "" : args.query), set === "ascii");
+            if (!found) throw new Error("give a character, or a code or name for one");
+            return found;
+          }
+        }];
+
+        /* ── end core ──────────────────────────────────────────────── */
+
+        var input = E.qs("#q");
+        var glyph = E.qs("#glyph");
+        var error = E.qs("#err");
+        var copy = E.qs("#copy");
+        var forms = E.qs("#forms");
+        var character = "";
+
+        /* The browser's own html parser knows every named entity. Text set on
+           a detached textarea is never run or rendered, only unescaped. */
+        var decoder = document.createElement("textarea");
+        decodeEntity = function (value) {
+          decoder.innerHTML = value;
+          var decoded = decoder.value;
+          return decoded !== value && Array.from(decoded).length === 1 ? decoded.codePointAt(0) : null;
+        };
+
+        function mode() {
+          var selected = E.qsa("input[name=mode]").filter(function (radio) {
+            return radio.checked;
+          })[0];
+          return selected ? selected.value : "unicode";
+        }
+
+        /* One row per form, each with its own copy button. */
         var rows = FORMS.map(function (form) {
           var v = E.el("div", { class: "res__v", id: form[1] });
           var b = E.el("button", { class: "tbtn", type: "button", text: "copy", "aria-label": "copy the " + form[0] + " form", disabled: true });
           E.on(b, "click", function () { E.copy(v.textContent, b); });
           forms.appendChild(E.el("div", { class: "res" }, [E.el("div", { class: "res__k", text: form[0] }), v, b]));
-          return { fn: form[2], v: v, button: b };
+          return { name: form[0], v: v, button: b };
         });
-
-        /* A named html entity, decoded by the parser itself: text set on a
-           detached textarea is never run or rendered, only unescaped. */
-        var decoder = document.createElement("textarea");
-        function entity(value) {
-          decoder.innerHTML = value;
-          var decoded = decoder.value;
-          return decoded !== value && Array.from(decoded).length === 1 ? decoded.codePointAt(0) : null;
-        }
 
         function clearReadout() {
           glyph.textContent = "—";
@@ -100,46 +188,15 @@
         }
 
         function run() {
-          var raw = input.value, value = raw.trim();
-          var ascii = mode() === "ascii";
-          var codePoint = null;
           error.textContent = "";
           clearReadout();
-
-          if (!raw) return;
-          if (!value && Array.from(raw).length === 1) value = raw;
-          if (!value) return;
-          var upper = value.toUpperCase();
-          if (named[upper] != null) codePoint = named[upper];
-          else if (/^U\+[0-9a-f]+$/i.test(value)) codePoint = parseInt(value.slice(2), 16);
-          else if (/^0x[0-9a-f]+$/i.test(value)) codePoint = parseInt(value.slice(2), 16);
-          else if (/^&#x[0-9a-f]+;$/i.test(value)) codePoint = parseInt(value.slice(3, -1), 16);
-          else if (/^&#\d+;$/.test(value)) codePoint = parseInt(value.slice(2, -1), 10);
-          else if (/^&[a-z][a-z0-9]*;$/i.test(value) && entity(value) !== null) codePoint = entity(value);
-          else if (/^\d+$/.test(value)) codePoint = parseInt(value, 10);
-          else if (Array.from(value).length === 1) codePoint = value.codePointAt(0);
-          else {
-            error.textContent = "enter one character, a code such as U+0041, or a known ascii name";
-            return;
-          }
-
-          if (
-            !Number.isInteger(codePoint) ||
-            codePoint < 0 ||
-            codePoint > 0x10ffff ||
-            (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
-            (ascii && codePoint > 127)
-          ) {
-            error.textContent = ascii
-              ? "value is outside ascii (0–127)"
-              : "not a valid unicode scalar value";
-            return;
-          }
-
-          character = String.fromCodePoint(codePoint);
-          glyph.textContent = codePoint < 32 ? controlNames[codePoint] : codePoint === 127 ? "DEL" : /^\s$/u.test(character) ? (codePoint === 32 ? "space" : "whitespace") : character;
-          var hex = codePoint.toString(16).toUpperCase();
-          rows.forEach(function (row) { row.v.textContent = row.fn(codePoint, hex, character); row.button.disabled = false; });
+          var found;
+          try { found = lookUp(input.value, mode() === "ascii"); }
+          catch (e) { error.textContent = e.message; return; }
+          if (!found) return;
+          character = found.character;
+          glyph.textContent = found.shownAs;
+          rows.forEach(function (row) { row.v.textContent = found.forms[row.name]; row.button.disabled = false; });
           copy.disabled = false;
         }
 
@@ -151,34 +208,14 @@
         input.value = E.param("t") || "";
         run();
 
-        /* For agents: the lookup the page does, shown on the page. */
-        E.agentTool({
-          name: "look_up_character",
-          title: "look up a character",
-          description: "Find one character from the character itself, a decimal number, a U+ or 0x code, an " +
-            "html entity such as &copy; or &#169;, or an ascii control name such as LF, and give its " +
-            "decimal, code point, UTF-8 bytes, html, javascript, css and url forms. The character is " +
-            "shown on the page.",
-          input: {
-            type: "object",
-            properties: {
-              query: { type: "string", description: "One character, or a code or name for one." },
-              set: { type: "string", enum: ["unicode", "ascii"], default: "unicode", description: "ascii refuses anything past 127." }
-            },
-            required: ["query"]
-          },
-          readOnly: true,
-          run: function (args) {
-            var set = args.set == null ? "unicode" : String(args.set);
-            var radio = E.qs('input[name=mode][value="' + (set === "ascii" ? "ascii" : "unicode") + '"]');
-            if (set !== "unicode" && set !== "ascii") throw new Error("set must be unicode or ascii");
-            radio.checked = true;
-            input.value = String(args.query == null ? "" : args.query);
+        /* For agents in the browser: the core's tool, with the query in the
+           page's field. */
+        E.agentTools(AGENT_TOOLS, {
+          look_up_character: function (args) {
+            var result = AGENT_TOOLS[0].compute(args);
+            E.qs('input[name=mode][value="' + (args.set === "ascii" ? "ascii" : "unicode") + '"]').checked = true;
+            input.value = String(args.query);
             run();
-            if (error.textContent) throw new Error(error.textContent);
-            if (!character) throw new Error("give a character, or a code or name for one");
-            var result = { character: character, shownAs: glyph.textContent, forms: {} };
-            rows.forEach(function (row, at) { result.forms[FORMS[at][0]] = row.v.textContent; });
             return result;
           }
         });

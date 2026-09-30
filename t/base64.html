@@ -47,14 +47,18 @@
    block at a time. */
 E.tool(function () {
   "use strict";
-  var input = E.qs("#in"), output = E.qs("#out"), error = E.qs("#err"), fileInput = E.qs("#file"), uri = E.qs("#uri"), fileError = E.qs("#file-err"), fileSeq = 0, activeReader = null;
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
+
   var BLOCK = 8192;
   function bytes(value) { return new TextEncoder().encode(value); }
-  function encode(value) {
+  function encode(value, urlSafe) {
     var data = bytes(value), binary = "", i;
     for (i = 0; i < data.length; i += BLOCK) binary += String.fromCharCode.apply(null, data.subarray(i, i + BLOCK));
     var result = btoa(binary);
-    return E.qs("#url-safe").checked ? result.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") : result;
+    return urlSafe ? result.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") : result;
   }
   function decode(value) {
     var normalized = value.replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/"), binary, i;
@@ -64,6 +68,39 @@ E.tool(function () {
     try { return new TextDecoder("utf-8", { fatal: true }).decode(data); }
     catch (e) { throw new Error("valid base64, but the bytes are not utf-8 text"); }
   }
+  function text(value) { return String(value == null ? "" : value); }
+
+  var AGENT_TOOLS = [{
+    name: "base64_encode",
+    title: "encode text as base64",
+    description: "Encode text (as UTF-8) to base64, optionally the url-safe alphabet without padding.",
+    input: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The text to encode." },
+        urlSafe: { type: "boolean", description: "Use - and _ and drop the = padding.", default: false }
+      },
+      required: ["text"]
+    },
+    readOnly: true,
+    compute: function (args) { return { base64: encode(text(args.text), !!args.urlSafe) }; }
+  }, {
+    name: "base64_decode",
+    title: "decode base64 to text",
+    description: "Decode standard or url-safe base64 back to UTF-8 text. Refuses input that is not base64 " +
+      "or does not decode to UTF-8 text.",
+    input: {
+      type: "object",
+      properties: { base64: { type: "string", description: "The base64 to decode; spaces and line breaks are ignored." } },
+      required: ["base64"]
+    },
+    readOnly: true,
+    compute: function (args) { return { text: decode(text(args.base64)) }; }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
+  var input = E.qs("#in"), output = E.qs("#out"), error = E.qs("#err"), fileInput = E.qs("#file"), uri = E.qs("#uri"), fileError = E.qs("#file-err"), fileSeq = 0, activeReader = null;
   /* Which button produced the result, so the url-safe box can redo an encode
      rather than leave the other alphabet on screen. */
   var shown = null;
@@ -76,7 +113,7 @@ E.tool(function () {
       button.setAttribute("aria-pressed", String(id === direction));
     });
   }
-  function runEncode() { choose("enc"); try { error.textContent = ""; output.value = encode(input.value); } catch (e) { output.value = ""; error.textContent = "could not encode this text"; } }
+  function runEncode() { choose("enc"); try { error.textContent = ""; output.value = encode(input.value, E.qs("#url-safe").checked); } catch (e) { output.value = ""; error.textContent = "could not encode this text"; } }
   function runDecode() { choose("dec"); try { error.textContent = ""; output.value = decode(input.value); } catch (e) { output.value = ""; error.textContent = e.message; } }
   E.on(E.qs("#enc"), "click", runEncode);
   E.on(E.qs("#dec"), "click", runDecode);
@@ -103,45 +140,19 @@ E.tool(function () {
   var query = E.param("t");
   if (query) { input.value = query; E.qs("#enc").click(); }
 
-  /* For agents: both directions, through the page's own fields. */
-  E.agentTool({
-    name: "base64_encode",
-    title: "encode text as base64",
-    description: "Encode text (as UTF-8) to base64, optionally the url-safe alphabet without padding. " +
-      "The text and the result are shown on the page.",
-    input: {
-      type: "object",
-      properties: {
-        text: { type: "string", description: "The text to encode." },
-        urlSafe: { type: "boolean", description: "Use - and _ and drop the = padding.", default: false }
-      },
-      required: ["text"]
-    },
-    readOnly: true,
-    run: function (args) {
+  /* For agents in the browser: the core's tools, run through the page's own
+     fields so the visitor sees what was asked. */
+  E.agentTools(AGENT_TOOLS, {
+    base64_encode: function (args) {
       E.qs("#url-safe").checked = !!args.urlSafe;
-      input.value = String(args.text == null ? "" : args.text);
+      input.value = text(args.text);
       runEncode();
-      if (error.textContent) throw new Error(error.textContent);
-      return { base64: output.value };
-    }
-  });
-  E.agentTool({
-    name: "base64_decode",
-    title: "decode base64 to text",
-    description: "Decode standard or url-safe base64 back to UTF-8 text. Refuses input that is not base64 " +
-      "or does not decode to UTF-8 text. The input and the result are shown on the page.",
-    input: {
-      type: "object",
-      properties: { base64: { type: "string", description: "The base64 to decode; spaces and line breaks are ignored." } },
-      required: ["base64"]
+      return AGENT_TOOLS[0].compute(args);
     },
-    readOnly: true,
-    run: function (args) {
-      input.value = String(args.base64 == null ? "" : args.base64);
+    base64_decode: function (args) {
+      input.value = text(args.base64);
       runDecode();
-      if (error.textContent) throw new Error(error.textContent);
-      return { text: output.value };
+      return AGENT_TOOLS[1].compute(args);
     }
   });
 });

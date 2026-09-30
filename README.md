@@ -120,16 +120,35 @@ clears the filter there and returns to the index from any tool.
 
 ## Agents
 
-Every page offers its actions to AI agents in the browser through
-[WebMCP](https://github.com/webmachinelearning/webmcp): `find_tool` everywhere,
-and on each tool's page the tool itself — `convert_case`, `hash_text`,
-`check_contrast`, `convert_time_zone` and so on. An agent's call runs the page's
-own code on the page's own fields, so the visitor sees what it did, and the work
-stays in the browser as it does for a person. Tools that act on a file use the
-one the visitor chose; replacing what the visitor wrote is left to the visitor.
-Share offers agents nothing: a transfer needs a person on each device. A page
-registers its tools with `E.agentTool` in `s.js`, which does nothing where the
-browser lacks WebMCP.
+An agent can use the tools two ways.
+
+**Over MCP, with no browser.** `https://eyes.tools/mcp` is a
+[Model Context Protocol](https://modelcontextprotocol.io) server (Streamable
+HTTP, stateless, no sign-in): add it to an MCP client as a remote server, or
+send it JSON-RPC directly.
+
+```bash
+curl -s https://eyes.tools/mcp -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hash_text","arguments":{"text":"hello"}}}'
+```
+
+`tools/list` names them all: `hash_text`, `convert_case`, `calculate`,
+`check_contrast`, `convert_time_zone`, `generate_passwords`, `roll_dice`,
+`make_qr_code` and the rest. A call sends its input to the server, which uses it
+for the one answer and keeps nothing.
+
+**In the browser, through [WebMCP](https://github.com/webmachinelearning/webmcp).**
+Every page offers `find_tool`, and each tool's page offers the tool itself. An
+agent's call there runs on the page's own fields, so the visitor sees what it
+did, and the work stays in the browser as it does for a person. A few tools
+exist only there because they need what only the visitor has: the file they
+chose to hash, resize or read, and their scratchpad.
+
+Both are the same code. Each tool page keeps its logic in a block marked
+`core`, ending with the `AGENT_TOOLS` it offers; the page registers them with
+`E.agentTools` in `s.js` (a no-op where the browser lacks WebMCP), and
+`mcp-server.mjs` runs the same block on the server. Share offers agents
+nothing: a transfer needs a person on each device.
 
 ## Deploying
 
@@ -137,7 +156,7 @@ To get every feature, run the Node server behind a reverse proxy that
 terminates HTTPS; [deploy/README.md](deploy/README.md) covers the systemd
 service, proxy requirements, and release checks.
 
-Static hosts can serve the tools, but not share:
+Static hosts can serve the tools, but not share or the MCP server:
 
 - **Vercel** reads `vercel.json`: `npx vercel deploy --prod`.
 - **Cloudflare Pages** reads `_redirects`, `_routes.json`, `_headers` and `functions/`. Connect

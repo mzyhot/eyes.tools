@@ -36,6 +36,68 @@
       E.tool(function () {
         "use strict";
 
+        /* ── core ────────────────────────────────────────────────────
+           Pure: no DOM and no E. The site's MCP server (mcp-server.mjs)
+           runs this block on its own, so an agent that never opens the page
+           gets the same answers. AGENT_TOOLS is what both offer. */
+
+        /** An absolute URL's parts, its query parameters decoded. */
+        function parseUrl(value) {
+          var url;
+          try { url = new URL(value); } catch (e) { throw new Error("enter an absolute url, including https://"); }
+          var parameters = [];
+          url.searchParams.forEach(function (v, k) { parameters.push({ name: k, value: v }); });
+          return {
+            scheme: url.protocol.slice(0, -1), username: url.username, password: url.password,
+            host: url.hostname, port: url.port, path: url.pathname, query: url.search, fragment: url.hash,
+            parameters: parameters
+          };
+        }
+        function percentEncode(value, formEncoding) {
+          try {
+            return formEncoding ? new URLSearchParams([["value", value]]).toString().slice(6) : encodeURIComponent(value);
+          } catch (e) { throw new Error("text contains an invalid unicode character"); }
+        }
+        function percentDecode(value, formEncoding) {
+          try { return decodeURIComponent(formEncoding ? value.replace(/\+/g, " ") : value); }
+          catch (e) { throw new Error("invalid percent encoding"); }
+        }
+        function text(value) { return String(value == null ? "" : value); }
+
+        var AGENT_TOOLS = [{
+          name: "parse_url",
+          title: "take a url apart",
+          description: "Split an absolute URL into scheme, user, host, port, path, query, fragment and decoded query parameters.",
+          input: { type: "object", properties: { url: { type: "string", description: "An absolute URL, scheme included." } }, required: ["url"] },
+          readOnly: true,
+          compute: function (args) { return parseUrl(text(args.url)); }
+        }, {
+          name: "percent_encode",
+          title: "percent-encode text for a url",
+          description: "Percent-encode text so it can sit in a URL path segment or query value. With form " +
+            "encoding, spaces become + as in submitted forms.",
+          input: {
+            type: "object",
+            properties: { text: { type: "string" }, formEncoding: { type: "boolean", default: false } },
+            required: ["text"]
+          },
+          readOnly: true,
+          compute: function (args) { return { encoded: percentEncode(text(args.text), !!args.formEncoding) }; }
+        }, {
+          name: "percent_decode",
+          title: "decode percent-encoded text",
+          description: "Decode percent-encoded text from a URL. With form encoding, + is read as a space.",
+          input: {
+            type: "object",
+            properties: { text: { type: "string" }, formEncoding: { type: "boolean", default: false } },
+            required: ["text"]
+          },
+          readOnly: true,
+          compute: function (args) { return { decoded: percentDecode(text(args.text), !!args.formEncoding) }; }
+        }];
+
+        /* ── end core ──────────────────────────────────────────────── */
+
         var input = E.qs("#in");
         var output = E.qs("#out");
         var error = E.qs("#err");
@@ -57,35 +119,23 @@
           error.textContent = "";
           if (!input.value) return;
           try {
-            if (mode === "enc") {
-              var encoded = encodeURIComponent(input.value);
-              if (form.checked) encoded = new URLSearchParams([["value", input.value]]).toString().slice(6);
-              put(encoded);
-              return;
-            }
-            if (mode === "dec") {
-              put(decodeURIComponent(form.checked ? input.value.replace(/\+/g, " ") : input.value));
-              return;
-            }
-            var url = new URL(input.value);
-            var params = [];
-            url.searchParams.forEach(function (value, key) {
-              params.push(key + " = " + value);
-            });
+            if (mode === "enc") { put(percentEncode(input.value, form.checked)); return; }
+            if (mode === "dec") { put(percentDecode(input.value, form.checked)); return; }
+            var url = parseUrl(input.value);
             put([
-              "scheme  " + url.protocol.slice(0, -1)
+              "scheme  " + url.scheme
             ].concat(url.username ? ["user    " + url.username + (url.password ? ":" + url.password : "")] : [], [
-              "host    " + url.hostname
+              "host    " + url.host
             ], url.port ? ["port    " + url.port] : [], [
-              "path    " + url.pathname,
-              "query   " + (url.search || "—"),
-              "hash    " + (url.hash || "—"),
+              "path    " + url.path,
+              "query   " + (url.query || "—"),
+              "hash    " + (url.fragment || "—"),
               "",
               "parameters",
-              params.join("\n") || "—"
+              url.parameters.map(function (p) { return p.name + " = " + p.value; }).join("\n") || "—"
             ]).join("\n"));
           } catch (e) {
-            error.textContent = mode === "dec" ? "invalid percent encoding" : mode === "enc" ? "text contains an invalid unicode character" : "enter an absolute url, including https://";
+            error.textContent = e.message;
           }
         }
 
@@ -118,56 +168,17 @@
           E.qs("#parse").click();
         }
 
-        /* For agents: each action is the page's own button, pressed on the
-           agent's text, so the visitor sees the same result. */
-        function press(id, text, formEncoding) {
-          input.value = String(text == null ? "" : text);
+        /* For agents in the browser: each tool presses the page's own button
+           on the agent's text, so the visitor sees what was asked. */
+        function press(id, value, formEncoding) {
+          input.value = text(value);
           form.checked = !!formEncoding;
           E.qs("#" + id).click();
-          if (error.textContent) throw new Error(error.textContent);
         }
-        E.agentTool({
-          name: "parse_url",
-          title: "take a url apart",
-          description: "Split an absolute URL into scheme, user, host, port, path, query, fragment and decoded " +
-            "query parameters. The URL and its parts are shown on the page.",
-          input: { type: "object", properties: { url: { type: "string", description: "An absolute URL, scheme included." } }, required: ["url"] },
-          readOnly: true,
-          run: function (args) {
-            press("parse", args.url);
-            var url = new URL(input.value), parameters = [];
-            url.searchParams.forEach(function (value, key) { parameters.push({ name: key, value: value }); });
-            return {
-              scheme: url.protocol.slice(0, -1), username: url.username, password: url.password,
-              host: url.hostname, port: url.port, path: url.pathname, query: url.search, fragment: url.hash,
-              parameters: parameters
-            };
-          }
-        });
-        E.agentTool({
-          name: "percent_encode",
-          title: "percent-encode text for a url",
-          description: "Percent-encode text so it can sit in a URL path segment or query value. With form " +
-            "encoding, spaces become + as in submitted forms.",
-          input: {
-            type: "object",
-            properties: { text: { type: "string" }, formEncoding: { type: "boolean", default: false } },
-            required: ["text"]
-          },
-          readOnly: true,
-          run: function (args) { press("enc", args.text, args.formEncoding); return { encoded: output.textContent }; }
-        });
-        E.agentTool({
-          name: "percent_decode",
-          title: "decode percent-encoded text",
-          description: "Decode percent-encoded text from a URL. With form encoding, + is read as a space.",
-          input: {
-            type: "object",
-            properties: { text: { type: "string" }, formEncoding: { type: "boolean", default: false } },
-            required: ["text"]
-          },
-          readOnly: true,
-          run: function (args) { press("dec", args.text, args.formEncoding); return { decoded: output.textContent }; }
+        E.agentTools(AGENT_TOOLS, {
+          parse_url: function (args) { press("parse", args.url); return AGENT_TOOLS[0].compute(args); },
+          percent_encode: function (args) { press("enc", args.text, args.formEncoding); return AGENT_TOOLS[1].compute(args); },
+          percent_decode: function (args) { press("dec", args.text, args.formEncoding); return AGENT_TOOLS[2].compute(args); }
         });
       });
 </script>

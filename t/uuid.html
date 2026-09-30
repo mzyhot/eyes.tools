@@ -96,6 +96,11 @@
 E.tool(function () {
   "use strict";
 
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
+
   var HEX = "0123456789abcdef";
   var CROCK = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
   var DEFAULT_ALPHA = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
@@ -107,7 +112,7 @@ E.tool(function () {
   function rb(n) {
     var out = new Uint8Array(n), i = 0;
     while (i < n) {
-      if (!pool || poolAt >= pool.length) { pool = E.rand(4096); poolAt = 0; }
+      if (!pool || poolAt >= pool.length) { pool = crypto.getRandomValues(new Uint8Array(4096)); poolAt = 0; }
       var take = Math.min(n - i, pool.length - poolAt);
       out.set(pool.subarray(poolAt, poolAt + take), i);
       poolAt += take; i += take;
@@ -196,28 +201,14 @@ E.tool(function () {
     return s;
   }
 
-  /* ── page ────────────────────────────────────────────── */
+  /* ── batches ─────────────────────────────────────────── */
 
-  var out = E.qs("#out"), err = E.qs("#err"), stat = E.qs("#stat");
-  var copyButton = E.qs("#copy"), downloadButton = E.qs("#dl");
-  var nIn = E.qs("#n"), lenIn = E.qs("#len"), alphaIn = E.qs("#alpha");
-  var lenWrap = E.qs("#lenwrap"), alphaWrap = E.qs("#alphawrap"), alphaHint = E.qs("#alphahint");
-  var cbUpper = E.qs("#upper"), cbBraces = E.qs("#braces"), cbHyphens = E.qs("#hyphens");
-  var lines = [], rawLines = [];
-
-  alphaIn.value = DEFAULT_ALPHA;
-
-  function kind() {
-    var r = E.qsa("input[name=kind]").filter(function (x) { return x.checked; })[0];
-    return r ? r.value : "v4";
-  }
-
-  /* The field's whole number, or { bad: true } when it is empty, not a whole
-     number, or outside min…max. */
-  function whole(el, min, max) {
-    var raw = el.value.trim();
+  /* A typed whole number, or null when it is empty, not a whole number, or
+     outside min…max. */
+  function whole(raw, min, max) {
+    raw = String(raw == null ? "" : raw).trim();
     var v = /^[0-9]+$/.test(raw) ? parseInt(raw, 10) : NaN;
-    return v >= min && v <= max ? { v: v } : { bad: true };
+    return v >= min && v <= max ? v : null;
   }
 
   function uniqueChars(s) {
@@ -229,13 +220,97 @@ E.tool(function () {
     return list;
   }
 
-  function shape(id, k) {
+  /* uuids only: hyphens, case and braces are presentation, applied last. */
+  function shape(id, k, o) {
     if (k === "v4" || k === "v7") {
-      if (!cbHyphens.checked) id = id.replace(/-/g, "");
-      if (cbUpper.checked) id = id.toUpperCase();
-      if (cbBraces.checked) id = "{" + id + "}";
+      if (!o.hyphens) id = id.replace(/-/g, "");
+      if (o.uppercase) id = id.toUpperCase();
+      if (o.braces) id = "{" + id + "}";
     }
     return id;
+  }
+
+  /* A refusal that names the field it is about, so the page can mark it. */
+  function fieldError(field, message) {
+    var error = new Error(message);
+    error.field = field;
+    return error;
+  }
+
+  /**
+   * A batch of unshaped ids.
+   * @param {{kind: string, count: *, length: *, alphabet: string}} o Numbers as typed.
+   * @returns {{ids: string[], alphabet: number, bits: number}} alphabet and
+   *   bits describe a short id's alphabet; both are 0 for the other kinds.
+   * @throws {Error} With `field` set to "n", "len" or "alpha".
+   */
+  function generate(o) {
+    var k = o.kind, n = whole(o.count, 1, MAX_N), alpha = null, len = 0;
+    if (n === null) throw fieldError("n", "how many must be a whole number between 1 and " + MAX_N.toLocaleString());
+    if (k === "short") {
+      len = whole(o.length, 1, MAX_LEN);
+      if (len === null) throw fieldError("len", "length must be a whole number between 1 and " + MAX_LEN);
+      alpha = uniqueChars(String(o.alphabet == null ? "" : o.alphabet));
+      if (alpha.length < 2) throw fieldError("alpha", "the alphabet needs at least 2 different characters");
+    }
+    var gen = k === "v4" ? v4 : k === "v7" ? v7 : k === "ulid" ? ulid : function () { return shortId(alpha, len); };
+    var ids = new Array(n);
+    for (var i = 0; i < n; i++) ids[i] = gen();
+    return { ids: ids, alphabet: alpha ? alpha.length : 0, bits: alpha ? Math.log2(alpha.length) * len : 0 };
+  }
+
+  var KINDS = ["v4", "v7", "ulid", "short"];
+  var AGENT_TOOLS = [{
+    name: "generate_ids",
+    title: "make unique ids",
+    description: "Make a batch of ids from Web Crypto randomness: uuid v4 (random), uuid v7 (time-ordered), " +
+      "ulid (time-ordered, 26 characters), or short ids from an alphabet of your choosing.",
+    input: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: KINDS, default: "v4" },
+        count: { type: "integer", minimum: 1, maximum: MAX_N, default: 1 },
+        length: { type: "integer", minimum: 1, maximum: MAX_LEN, description: "Short ids only; 21 when left out." },
+        alphabet: { type: "string", description: "Short ids only; the characters to draw from." },
+        uppercase: { type: "boolean", default: false, description: "uuids only." },
+        braces: { type: "boolean", default: false, description: "uuids only: wrap in {}." },
+        hyphens: { type: "boolean", default: true, description: "uuids only." }
+      }
+    },
+    readOnly: true,
+    compute: function (args) {
+      var o = options(args);
+      return { ids: generate(o).ids.map(function (id) { return shape(id, o.kind, o); }) };
+    }
+  }];
+  /* An agent's arguments with the page's defaults filled in. */
+  function options(args) {
+    var k = args.kind == null ? "v4" : String(args.kind);
+    if (KINDS.indexOf(k) < 0) throw new Error("kind must be v4, v7, ulid or short");
+    return {
+      kind: k,
+      count: args.count == null ? 1 : args.count,
+      length: args.length == null ? 21 : args.length,
+      alphabet: args.alphabet == null ? DEFAULT_ALPHA : args.alphabet,
+      uppercase: !!args.uppercase, braces: !!args.braces, hyphens: args.hyphens !== false
+    };
+  }
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
+  var out = E.qs("#out"), err = E.qs("#err"), stat = E.qs("#stat");
+  var copyButton = E.qs("#copy"), downloadButton = E.qs("#dl");
+  var nIn = E.qs("#n"), lenIn = E.qs("#len"), alphaIn = E.qs("#alpha");
+  var lenWrap = E.qs("#lenwrap"), alphaWrap = E.qs("#alphawrap"), alphaHint = E.qs("#alphahint");
+  var cbUpper = E.qs("#upper"), cbBraces = E.qs("#braces"), cbHyphens = E.qs("#hyphens");
+  var FIELDS = { n: nIn, len: lenIn, alpha: alphaIn };
+  var lines = [], rawLines = [];
+
+  alphaIn.value = DEFAULT_ALPHA;
+
+  function kind() {
+    var r = E.qsa("input[name=kind]").filter(function (x) { return x.checked; })[0];
+    return r ? r.value : "v4";
   }
 
   function run() {
@@ -250,61 +325,30 @@ E.tool(function () {
 
     lenWrap.hidden = alphaWrap.hidden = (k !== "short");
     cbUpper.disabled = cbBraces.disabled = cbHyphens.disabled = !isUuid;
+    Object.keys(FIELDS).forEach(function (key) { FIELDS[key].removeAttribute("aria-invalid"); });
 
-    var n = whole(nIn, 1, MAX_N);
-    if (n.bad) {
-      nIn.setAttribute("aria-invalid", "true");
-      err.textContent = "how many must be a whole number between 1 and " + MAX_N.toLocaleString();
+    var batch;
+    try {
+      batch = generate({ kind: k, count: nIn.value, length: lenIn.value, alphabet: alphaIn.value });
+    } catch (error) {
+      if (error.field) FIELDS[error.field].setAttribute("aria-invalid", "true");
+      if (error.field === "alpha") alphaHint.textContent = "";
+      err.textContent = error.message || "could not generate ids in this browser";
       return;
     }
-    nIn.removeAttribute("aria-invalid");
-
-    var alpha = null, len = 0;
     if (k === "short") {
-      var l = whole(lenIn, 1, MAX_LEN);
-      if (l.bad) {
-        lenIn.setAttribute("aria-invalid", "true");
-        err.textContent = "length must be a whole number between 1 and " + MAX_LEN;
-        return;
-      }
-      lenIn.removeAttribute("aria-invalid");
-      len = l.v;
-      alpha = uniqueChars(alphaIn.value);
-      if (alpha.length < 2) {
-        alphaIn.setAttribute("aria-invalid", "true");
-        err.textContent = "the alphabet needs at least 2 different characters";
-        alphaHint.textContent = "";
-        return;
-      }
-      alphaIn.removeAttribute("aria-invalid");
-      var bits = Math.log2(alpha.length) * len;
-      alphaHint.textContent = alpha.length + " unique characters · " +
-        (Math.round(bits * 10) / 10) + " bits per id, assuming every character is drawn " +
+      alphaHint.textContent = batch.alphabet + " unique characters · " +
+        (Math.round(batch.bits * 10) / 10) + " bits per id, assuming every character is drawn " +
         "independently and uniformly";
     }
-
     err.textContent = "";
-
-    var gen = k === "v4" ? v4 : k === "v7" ? v7 : k === "ulid" ? ulid
-            : function () { return shortId(alpha, len); };
-
-    try {
-      rawLines = new Array(n.v);
-      for (var i = 0; i < n.v; i++) rawLines[i] = gen();
-    } catch (error) {
-      rawLines = [];
-      err.textContent = error && error.message
-        ? error.message
-        : "could not generate ids in this browser";
-      return;
-    }
-
+    rawLines = batch.ids;
     paint();
   }
 
   function paint() {
-    var k = kind();
-    lines = rawLines.map(function (id) { return shape(id, k); });
+    var k = kind(), o = { uppercase: cbUpper.checked, braces: cbBraces.checked, hyphens: cbHyphens.checked };
+    lines = rawLines.map(function (id) { return shape(id, k, o); });
     var text = lines.join("\n");
     out.textContent = text;
     copyButton.disabled = downloadButton.disabled = !lines.length;
@@ -341,37 +385,18 @@ E.tool(function () {
 
   run();
 
-  /* For agents: the page's own generator, with the batch on the page. */
-  E.agentTool({
-    name: "generate_ids",
-    title: "make unique ids",
-    description: "Make a batch of ids from Web Crypto randomness: uuid v4 (random), uuid v7 (time-ordered), " +
-      "ulid (time-ordered, 26 characters), or short ids from an alphabet of your choosing. The batch " +
-      "is shown on the page.",
-    input: {
-      type: "object",
-      properties: {
-        kind: { type: "string", enum: ["v4", "v7", "ulid", "short"], default: "v4" },
-        count: { type: "integer", minimum: 1, maximum: MAX_N, default: 1 },
-        length: { type: "integer", minimum: 1, maximum: MAX_LEN, description: "Short ids only; 21 when left out." },
-        alphabet: { type: "string", description: "Short ids only; the characters to draw from." },
-        uppercase: { type: "boolean", default: false, description: "uuids only." },
-        braces: { type: "boolean", default: false, description: "uuids only: wrap in {}." },
-        hyphens: { type: "boolean", default: true, description: "uuids only." }
-      }
-    },
-    readOnly: true,
-    run: function (args) {
-      var k = args.kind == null ? "v4" : String(args.kind);
-      var radio = E.qs('input[name=kind][value="' + k + '"]');
-      if (["v4", "v7", "ulid", "short"].indexOf(k) < 0 || !radio) throw new Error("kind must be v4, v7, ulid or short");
-      radio.checked = true;
-      nIn.value = String(args.count == null ? 1 : args.count);
-      if (args.length != null) lenIn.value = String(args.length);
-      if (args.alphabet != null) alphaIn.value = String(args.alphabet);
-      cbUpper.checked = !!args.uppercase;
-      cbBraces.checked = !!args.braces;
-      cbHyphens.checked = args.hyphens !== false;
+  /* For agents in the browser: the batch is made on the page, and the agent
+     gets exactly the ids the visitor sees. */
+  E.agentTools(AGENT_TOOLS, {
+    generate_ids: function (args) {
+      var o = options(args);
+      E.qs('input[name=kind][value="' + o.kind + '"]').checked = true;
+      nIn.value = String(o.count);
+      lenIn.value = String(o.length);
+      alphaIn.value = String(o.alphabet);
+      cbUpper.checked = o.uppercase;
+      cbBraces.checked = o.braces;
+      cbHyphens.checked = o.hyphens;
       run();
       if (err.textContent) throw new Error(err.textContent);
       return { ids: lines.slice() };

@@ -107,6 +107,9 @@ E.tool(function () {
   "use strict";
 
   /* ── core ── pure, no dom ─────────────────────────────────────────── */
+  /* The site's MCP server (mcp-server.mjs) runs this block on its own, so an
+     agent that never opens the page gets the same answers. AGENT_TOOLS is
+     what the page and the server both offer. */
 
   /* one pass over the string: code points, words, lines, utf-8 bytes.
      one loop keeps a megabyte paste cheap. */
@@ -184,6 +187,40 @@ E.tool(function () {
     }
     return { text: lines.join("\n"), before: before, after: lines.length };
   }
+
+  var ORDERS = ["keep", "asc", "desc", "reverse"];
+  var AGENT_TOOLS = [{
+    name: "clean_up_lines",
+    title: "sort and tidy lines",
+    description: "Tidy a list of lines: trim each, drop empty ones, remove duplicates, and sort (natural " +
+      "order, so item2 comes before item10) or reverse. On the scratchpad's page, the pad's own text is " +
+      "used when none is given, and the pad is left as it is.",
+    input: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "Lines to tidy." },
+        order: { type: "string", enum: ORDERS, default: "keep" },
+        dedupe: { type: "boolean", default: true },
+        trim: { type: "boolean", default: true },
+        removeEmpty: { type: "boolean", default: true },
+        ignoreCase: { type: "boolean", default: false, description: "For duplicates and sorting." }
+      }
+    },
+    readOnly: true,
+    compute: function (args) {
+      var order = args.order == null ? "keep" : String(args.order);
+      if (ORDERS.indexOf(order) < 0) throw new Error("order must be keep, asc, desc or reverse");
+      if (args.text == null) throw new Error("give the lines to tidy");
+      var result = processLines(String(args.text), {
+        order: order,
+        dedupe: args.dedupe !== false,
+        trim: args.trim !== false,
+        empty: args.removeEmpty !== false,
+        ignoreCase: !!args.ignoreCase
+      });
+      return { text: result.text, linesBefore: result.before, linesAfter: result.after };
+    }
+  }];
 
   /* ── end core ─────────────────────────────────────────────────────── */
 
@@ -606,35 +643,9 @@ E.tool(function () {
       return { characters: s.chars, lines: s.lines, saved: storeOK };
     }
   });
-  E.agentTool({
-    name: "clean_up_lines",
-    title: "sort and tidy lines",
-    description: "Tidy a list of lines: trim each, drop empty ones, remove duplicates, and sort (natural " +
-      "order, so item2 comes before item10) or reverse. Works on the given text, or on the scratchpad's " +
-      "when none is given, and returns the result without changing the pad.",
-    input: {
-      type: "object",
-      properties: {
-        text: { type: "string", description: "Lines to tidy; the scratchpad's text when left out." },
-        order: { type: "string", enum: ["keep", "asc", "desc", "reverse"], default: "keep" },
-        dedupe: { type: "boolean", default: true },
-        trim: { type: "boolean", default: true },
-        removeEmpty: { type: "boolean", default: true },
-        ignoreCase: { type: "boolean", default: false, description: "For duplicates and sorting." }
-      }
-    },
-    readOnly: true,
-    run: function (args) {
-      var order = args.order == null ? "keep" : String(args.order);
-      if (["keep", "asc", "desc", "reverse"].indexOf(order) < 0) throw new Error("order must be keep, asc, desc or reverse");
-      var result = processLines(args.text == null ? pad.value : String(args.text), {
-        order: order,
-        dedupe: args.dedupe !== false,
-        trim: args.trim !== false,
-        empty: args.removeEmpty !== false,
-        ignoreCase: !!args.ignoreCase
-      });
-      return { text: result.text, linesBefore: result.before, linesAfter: result.after };
+  E.agentTools(AGENT_TOOLS, {
+    clean_up_lines: function (args) {
+      return AGENT_TOOLS[0].compute(Object.assign({}, args, { text: args.text == null ? pad.value : args.text }));
     }
   });
 });

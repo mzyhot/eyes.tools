@@ -55,26 +55,25 @@
       E.tool(function () {
         "use strict";
 
+        /* ── core ────────────────────────────────────────────────────
+           Pure: no DOM and no E. The site's MCP server (mcp-server.mjs)
+           runs this block on its own, so an agent that never opens the page
+           gets the same answers. AGENT_TOOLS is what both offer. */
+
         var ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*-_=+";
         var WORDS = "amber anchor apple atlas birch black bloom brass brick cedar cloud coast coral crane dusk ember field flint frost glass grain grove harbor hazel ivory juniper lake linen maple moss night north oak ocean olive orbit paper pearl pine quartz rain reed river slate solar stone tide umber vale west willow wind".split(" ");
-        var output = E.qs("#out");
-        var error = E.qs("#err");
-        var copy = E.qs("#copy");
-        var lengthInput = E.qs("#len"), lengthLabel = E.qs("#len-label"), strength = E.qs("#strength");
-        var lengths = { password: "20", phrase: "12", pin: "6" };
-        var previousKind = "password", values = [];
+        var LENGTHS = { password: "20", phrase: "12", pin: "6" };
 
+        /* One symbol, uniformly: bytes past the last whole multiple of the
+           alphabet's size are drawn again rather than folded in. */
         function pick(alphabet) {
-          var limit = 256 - (256 % alphabet.length);
-          var value;
-          do {
-            value = E.rand(1)[0];
-          } while (value >= limit);
-          return alphabet[value % alphabet.length];
+          var limit = 256 - (256 % alphabet.length), byte = new Uint8Array(1);
+          do { crypto.getRandomValues(byte); } while (byte[0] >= limit);
+          return alphabet[byte[0] % alphabet.length];
         }
 
-        function whole(input, min, max, label) {
-          var raw = input.value.trim();
+        function whole(raw, min, max, label) {
+          raw = String(raw == null ? "" : raw).trim();
           if (!/^[0-9]+$/.test(raw)) throw new Error(label + " must be a whole number");
           var value = Number(raw);
           if (!Number.isSafeInteger(value) || value < min || value > max) {
@@ -82,6 +81,73 @@
           }
           return value;
         }
+
+        /**
+         * A batch of secrets.
+         * @param {"password"|"phrase"|"pin"} kind
+         * @param {*} lengthRaw Characters, or words for a phrase, as typed.
+         * @param {*} countRaw How many, as typed.
+         * @returns {{values: string[], strength: string}}
+         */
+        function makeValues(kind, lengthRaw, countRaw) {
+          var length = whole(lengthRaw, 4, 128, kind === "phrase" ? "word count" : "length");
+          var count = whole(countRaw, 1, 100, "how many"), values = [];
+          for (var index = 0; index < count; index += 1) {
+            if (kind === "phrase") {
+              var words = [];
+              for (var word = 0; word < length; word += 1) words.push(pick(WORDS));
+              values.push(words.join("-"));
+            } else {
+              var alphabet = kind === "pin" ? "0123456789" : ALPHABET;
+              var value = "";
+              for (var character = 0; character < length; character += 1) value += pick(alphabet);
+              values.push(value);
+            }
+          }
+          var choices = kind === "phrase" ? WORDS.length : kind === "pin" ? 10 : ALPHABET.length;
+          return {
+            values: values,
+            strength: Math.floor(length * Math.log2(choices)) + " bits of randomness per value" +
+              (kind === "phrase" ? " · " + WORDS.length + "-word list" : "")
+          };
+        }
+
+        /* The agent's names for the kinds, and the page's. */
+        var KINDS = { password: "password", passphrase: "phrase", pin: "pin" };
+        var AGENT_TOOLS = [{
+          name: "generate_passwords",
+          title: "make passwords",
+          description: "Make passwords (letters, digits and symbols, easily confused ones left out), " +
+            "passphrases (hyphen-joined words) or numeric pins, from Web Crypto randomness. Returns the " +
+            "values and their strength in bits.",
+          input: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["password", "passphrase", "pin"], default: "password" },
+              length: { type: "integer", minimum: 4, maximum: 128, description: "Characters, or words for a passphrase. 20, 12 and 6 when left out." },
+              count: { type: "integer", minimum: 1, maximum: 100, default: 1 }
+            }
+          },
+          readOnly: true,
+          compute: function (args) {
+            var kind = pageKind(args);
+            return makeValues(kind, args.length == null ? LENGTHS[kind] : args.length, args.count == null ? 1 : args.count);
+          }
+        }];
+        function pageKind(args) {
+          var wanted = args.kind == null ? "password" : String(args.kind);
+          if (!Object.prototype.hasOwnProperty.call(KINDS, wanted)) throw new Error("kind must be password, passphrase or pin");
+          return KINDS[wanted];
+        }
+
+        /* ── end core ──────────────────────────────────────────────── */
+
+        var output = E.qs("#out");
+        var error = E.qs("#err");
+        var copy = E.qs("#copy");
+        var lengthInput = E.qs("#len"), lengthLabel = E.qs("#len-label"), strength = E.qs("#strength");
+        var lengths = Object.assign({}, LENGTHS);
+        var previousKind = "password", values = [];
 
         function kind() {
           var selected = E.qsa("input[name=kind]").filter(function (input) {
@@ -98,23 +164,8 @@
           values = [];
 
           try {
-            var selectedKind = kind();
-            var length = whole(E.qs("#len"), 4, 128, selectedKind === "phrase" ? "word count" : "length");
-            var count = whole(E.qs("#n"), 1, 100, "how many");
-
-            for (var index = 0; index < count; index += 1) {
-              if (selectedKind === "phrase") {
-                var words = [];
-                for (var word = 0; word < length; word += 1) words.push(pick(WORDS));
-                values.push(words.join("-"));
-              } else {
-                var alphabet = selectedKind === "pin" ? "0123456789" : ALPHABET;
-                var value = "";
-                for (var character = 0; character < length; character += 1) value += pick(alphabet);
-                values.push(value);
-              }
-            }
-
+            var made = makeValues(kind(), E.qs("#len").value, E.qs("#n").value);
+            values = made.values;
             values.forEach(function (value, index) {
               var button = E.el("button", { class: "tbtn", type: "button", text: "copy", "aria-label": "copy value " + (index + 1) });
               E.on(button, "click", function () { E.copy(value, button); });
@@ -122,16 +173,13 @@
             });
             copy.textContent = values.length > 1 ? "copy all" : "copy";
             copy.disabled = values.length === 0;
-            var choices = selectedKind === "phrase" ? WORDS.length : selectedKind === "pin" ? 10 : ALPHABET.length;
-            strength.textContent = Math.floor(length * Math.log2(choices)) + " bits of randomness per value" +
-              (selectedKind === "phrase" ? " · " + WORDS.length + "-word list" : "");
+            strength.textContent = made.strength;
           } catch (generationError) {
             error.textContent = generationError && generationError.message
               ? generationError.message
               : "could not generate a value in this browser";
           }
         }
-
         E.qsa("input[name=kind]").forEach(function (input) {
           E.on(input, "change", function () {
             lengths[previousKind] = lengthInput.value;
@@ -147,26 +195,11 @@
         E.on(copy, "click", function () { E.copy(values.join("\n"), this); });
         run();
 
-        /* For agents: generated here from Web Crypto and shown on the page too. */
-        E.agentTool({
-          name: "generate_passwords",
-          title: "make passwords",
-          description: "Make passwords (letters, digits and symbols, easily confused ones left out), " +
-            "passphrases (hyphen-joined words) or numeric pins, using Web Crypto randomness in the " +
-            "browser. Returns the values and their strength in bits. The values are shown on the page.",
-          input: {
-            type: "object",
-            properties: {
-              kind: { type: "string", enum: ["password", "passphrase", "pin"], default: "password" },
-              length: { type: "integer", minimum: 4, maximum: 128, description: "Characters, or words for a passphrase. 20, 12 and 6 when left out." },
-              count: { type: "integer", minimum: 1, maximum: 100, default: 1 }
-            }
-          },
-          readOnly: true,
-          run: function (args) {
-            var wanted = args.kind == null ? "password" : String(args.kind);
-            var radio = E.qs('input[name=kind][value="' + (wanted === "passphrase" ? "phrase" : wanted) + '"]');
-            if (["password", "passphrase", "pin"].indexOf(wanted) < 0 || !radio) throw new Error("kind must be password, passphrase or pin");
+        /* For agents in the browser: the values are made on the page, and the
+           agent gets exactly the ones the visitor sees. */
+        E.agentTools(AGENT_TOOLS, {
+          generate_passwords: function (args) {
+            var wanted = pageKind(args), radio = E.qs('input[name=kind][value="' + wanted + '"]');
             if (!radio.checked) { radio.checked = true; radio.dispatchEvent(new Event("change")); }
             if (args.length != null) lengthInput.value = String(args.length);
             E.qs("#n").value = String(args.count == null ? 1 : args.count);

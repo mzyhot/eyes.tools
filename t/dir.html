@@ -69,6 +69,11 @@
 E.tool(function () {
   "use strict";
 
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
+
   /* ═══ data ══════════════════════════════════════════════
      One array. Add, remove or reorder freely — everything below
      is derived from it, including the host shown on each row.   */
@@ -275,12 +280,34 @@ E.tool(function () {
     return text ? text + "\n" : "";
   }
 
-  /* ═══ end pure ══════════════════════════════════════════ */
+  var TOTAL = count(DIR);
+  var AGENT_TOOLS = [{
+    name: "search_directory",
+    title: "find a website in the directory",
+    description: "Search a hand-picked directory of " + TOTAL + " long-lived websites (reference, archives, " +
+      "tools, learning, reading, maps and data, directories, the weird web) by name, description, " +
+      "address or group. Leave out the query to list them all.",
+    input: {
+      type: "object",
+      properties: { query: { type: "string", description: "Words that must all appear, such as \"public domain books\"." } }
+    },
+    readOnly: true,
+    compute: function (args) {
+      var sites = [];
+      match(DIR, args.query == null ? "" : String(args.query)).forEach(function (group) {
+        group.sites.forEach(function (site) {
+          sites.push({ name: site.name, url: site.url, description: site.desc, group: group.group });
+        });
+      });
+      return { sites: sites };
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
 
   var q = E.qs("#q"), outEl = E.qs("#out"), countEl = E.qs("#count"),
       emptyEl = E.qs("#empty"), errEl = E.qs("#err");
 
-  var TOTAL = count(DIR);
   var groups = [], nodes = [], flat = [], cursor = 0, showCursor = false;
 
   /* Only the row losing the highlight and the row gaining it are touched, so
@@ -408,28 +435,13 @@ E.tool(function () {
   q.value = E.param("q") || "";
   render();
 
-  /* For agents: the same filter, typed into the page's own field. */
-  E.agentTool({
-    name: "search_directory",
-    title: "find a website in the directory",
-    description: "Search a hand-picked directory of " + TOTAL + " long-lived websites (reference, archives, " +
-      "tools, learning, reading, maps and data, directories, the weird web) by name, description, " +
-      "address or group. Leave out the query to list them all. The matches are shown on the page.",
-    input: {
-      type: "object",
-      properties: { query: { type: "string", description: "Words that must all appear, such as \"public domain books\"." } }
-    },
-    readOnly: true,
-    run: function (args) {
+  /* For agents in the browser: the core's tool, with the query typed into
+     the page's own filter. */
+  E.agentTools(AGENT_TOOLS, {
+    search_directory: function (args) {
       q.value = String(args.query == null ? "" : args.query).slice(0, MAX_TERM);
       render();
-      var sites = [];
-      groups.forEach(function (group) {
-        group.sites.forEach(function (site) {
-          sites.push({ name: site.name, url: site.url, description: site.desc, group: group.group });
-        });
-      });
-      return { sites: sites };
+      return AGENT_TOOLS[0].compute(args);
     }
   });
 });

@@ -505,7 +505,7 @@ async function serveStatic(request, response, url) {
 /**
  * Route one request. Order matters: liveness, then the API modules, then the
  * method gate, then static files — the gate sits after the APIs because share
- * uses POST and the static tree does not.
+ * and the MCP server use POST and the static tree does not.
  */
 async function route(request, response, apis) {
   let url;
@@ -516,7 +516,9 @@ async function route(request, response, apis) {
     return sendBuffer(response, 200, "application/json", Buffer.from('{"status":"ok"}\n'), request.method);
   }
   for (const api of apis) {
-    if (url.pathname.startsWith(api.prefix)) return api.service.handle(request, response, url);
+    if (api.prefix.endsWith("/") ? url.pathname.startsWith(api.prefix) : url.pathname === api.prefix) {
+      return api.service.handle(request, response, url);
+    }
   }
   if (request.method !== "GET" && request.method !== "HEAD") {
     return sendText(response, 405, "method not allowed\n", request.method, { Allow: "GET, HEAD" });
@@ -538,6 +540,7 @@ async function route(request, response, apis) {
  *
  * @param {object} [options] Passed to every API module's factory.
  * @param {object} [options.shareOptions] Passed to createShareService.
+ * @param {object} [options.mcpOptions] Passed to createMcpService.
  * @returns {{server: import("node:http").Server, close: () => Promise<void>}}
  */
 export function createEyesServer(options = {}) {

@@ -40,6 +40,110 @@
 <script>
 E.tool(function () {
   "use strict";
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure but for R, the randomness sources the page's dependencies give it.
+     The site's MCP server (mcp-server.mjs) runs this block on its own, after
+     the same dependencies, so an agent that never opens the page gets the same
+     draw. AGENT_TOOLS is what the page and the server both offer. */
+
+  var SOURCES = ["csrng", "trng", "prng"];
+
+  function integer(raw, label) {
+    raw = String(raw).trim();
+    if (!/^-?\d+$/.test(raw)) throw new Error(label + " must be a whole number");
+    return BigInt(raw);
+  }
+
+  /**
+   * Check a request before anything is drawn for it.
+   * @returns {{min: bigint, span: bigint, count: number, unique: boolean}}
+   * @throws {Error} With the message the page shows.
+   */
+  function plan(min, max, count, unique) {
+    min = integer(min, "minimum");
+    max = integer(max, "maximum");
+    count = integer(count, "how many");
+    if (count < 1n || count > 100n) throw new Error("how many must be between 1 and 100");
+    if (max < min) throw new Error("maximum must be at least minimum");
+    var span = max - min + 1n;
+    if (span > (1n << 53n)) throw new Error("range is too large");
+    if (unique && count > span) throw new Error("the range has fewer numbers than requested");
+    return { min: min, span: span, count: Number(count), unique: !!unique };
+  }
+
+  /**
+   * Draw a planned request's numbers from one source.
+   * @returns {Promise<{values: string[], draw: object}>} The numbers, as
+   *   decimal strings since they may pass 2^53, and the draw R.source made.
+   */
+  function pick(request, source) {
+    return R.source(source, R.byteCount(request.span, request.count)).then(function (draw) {
+      var values = [], at = 0, moved = new Map();
+      for (var i = 0; i < request.count; i++) {
+        var remaining = request.unique ? request.span - BigInt(i) : request.span;
+        var x = R.uniform(draw.bytes, remaining, at);
+        at = x.offset;
+        /* Without repeats, a partial Fisher–Yates over the range: the slot
+           drawn takes the value of the slot at the end, which leaves. */
+        var value = request.unique && moved.has(x.value) ? moved.get(x.value) : x.value;
+        if (request.unique) {
+          var last = remaining - 1n;
+          moved.set(x.value, moved.has(last) ? moved.get(last) : last);
+        }
+        values.push(String(request.min + value));
+      }
+      return { values: values, draw: draw };
+    });
+  }
+
+  /* What an agent is handed: numbers as numbers where they fit, and for a
+     drand draw, what it takes to check it. */
+  function answer(picked, source) {
+    var result = {
+      numbers: picked.values.map(function (value) { return Number.isSafeInteger(Number(value)) ? Number(value) : value; }),
+      source: source,
+      verified: !!picked.draw.verified
+    };
+    if (picked.draw.verified) { result.round = picked.draw.round; result.chainHash = picked.draw.chainHash; }
+    return result;
+  }
+
+  function sourceOf(args) {
+    var source = args.source == null ? "csrng" : String(args.source);
+    if (SOURCES.indexOf(source) < 0) throw new Error("source must be csrng, trng or prng");
+    return source;
+  }
+
+  var AGENT_TOOLS = [{
+    name: "random_numbers",
+    title: "pick random numbers",
+    description: "Pick up to 100 whole numbers between a minimum and a maximum, inclusive, optionally " +
+      "without repeats. The source is csrng (Web Crypto, fit for secrets; the default), trng (a public " +
+      "drand beacon whose signature is verified, so anyone can check the round later; needs the network) " +
+      "or prng (Math.random, not for security).",
+    input: {
+      type: "object",
+      properties: {
+        min: { type: "integer", default: 1 },
+        max: { type: "integer", default: 100 },
+        count: { type: "integer", minimum: 1, maximum: 100, default: 1 },
+        unique: { type: "boolean", default: false, description: "Never pick the same number twice." },
+        source: { type: "string", enum: SOURCES, default: "csrng" }
+      }
+    },
+    readOnly: true,
+    network: true,
+    compute: function (args) {
+      var source = sourceOf(args);
+      var request = plan(args.min == null ? 1 : args.min, args.max == null ? 100 : args.max,
+        args.count == null ? 1 : args.count, !!args.unique);
+      return pick(request, source).then(function (picked) { return answer(picked, source); });
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
   var o = E.qs("#out"), er = E.qs("#err"), btn = E.qs("#draw"), proof = E.qs("#proof"), round = E.qs("#round"), chain = E.qs("#chain");
   var copy = E.qs("#copy"), requestSeq = 0;
   var notes = {
@@ -52,106 +156,64 @@ E.tool(function () {
     return selected ? selected.value : "csrng";
   }
   function clearProof() { proof.hidden = true; round.textContent = ""; chain.textContent = ""; }
+  /* A new source starts afresh: a draw still on its way from drand is
+     dropped rather than shown under a different source's name. */
   function note() {
     requestSeq++;
     E.qs("#source-note").textContent = notes[mode()];
     o.textContent = er.textContent = "";
     copy.disabled = true;
     clearProof();
+    btn.disabled = false;
+    delete btn.dataset.state;
   }
-  function integer(id, label) {
-    var raw = E.qs(id).value.trim();
-    if (!/^-?\d+$/.test(raw)) throw new Error(label + " must be a whole number");
-    return BigInt(raw);
-  }
+  /* Draw what the fields ask for, showing it on the page. Resolves to the
+     draw, or rejects with the message the page shows. */
   function draw() {
-    var seq = ++requestSeq;
+    var seq = ++requestSeq, source = mode(), request;
     o.textContent = "";
     er.textContent = "";
     copy.disabled = true;
     clearProof();
-    var min = integer("#min", "minimum"), max = integer("#max", "maximum");
-    var count = integer("#count", "how many");
-    if (count < 1n || count > 100n) throw new Error("how many must be between 1 and 100");
-    var n = Number(count), unique = E.qs("#unique").checked;
-    if (max < min) throw new Error("maximum must be at least minimum");
-    var span = max - min + 1n;
-    if (span > (1n << 53n)) throw new Error("range is too large");
-    if (unique && count > span) throw new Error("the range has fewer numbers than requested");
+    try { request = plan(E.qs("#min").value, E.qs("#max").value, E.qs("#count").value, E.qs("#unique").checked); }
+    catch (e) { er.textContent = e.message; return Promise.reject(e); }
     btn.disabled = true;
     btn.dataset.state = "loading";
-    return R.source(mode(), R.byteCount(span, n)).then(function (r) {
-      if (seq !== requestSeq) return;
-      var vals = [], at = 0, moved = new Map();
-      for (var i = 0; i < n; i++) {
-        var remaining = unique ? span - BigInt(i) : span;
-        var x = R.uniform(r.bytes, remaining, at);
-        at = x.offset;
-        var value = unique && moved.has(x.value) ? moved.get(x.value) : x.value;
-        if (unique) {
-          var last = remaining - 1n;
-          moved.set(x.value, moved.has(last) ? moved.get(last) : last);
-        }
-        vals.push(String(min + value));
-      }
-      o.textContent = vals.join("\n");
+    return pick(request, source).then(function (picked) {
+      if (seq !== requestSeq) throw new Error("a newer draw replaced this one");
+      o.textContent = picked.values.join("\n");
       copy.disabled = false;
-      proof.hidden = !r.verified;
-      if (r.verified) { round.textContent = r.round; chain.textContent = r.chainHash; }
+      proof.hidden = !picked.draw.verified;
+      if (picked.draw.verified) { round.textContent = picked.draw.round; chain.textContent = picked.draw.chainHash; }
       E.flash(btn, "generated");
-    }).catch(function (e) {
-      if (seq !== requestSeq) return;
-      er.textContent = e.message || "randomness source failed";
+      return answer(picked, source);
+    }, function (e) {
+      var message = (e && e.message) || "randomness source failed";
+      if (seq === requestSeq) er.textContent = message;
+      throw new Error(message);
     }).finally(function () {
+      if (seq !== requestSeq) return;
       btn.disabled = false;
       delete btn.dataset.state;
     });
   }
   E.qsa("input[name=src]").forEach(function (x) { E.on(x, "change", note); });
-  E.on(btn, "click", function () { try { draw(); } catch (e) { er.textContent = e.message || "invalid range"; } });
+  E.on(btn, "click", function () { draw().catch(function () {}); });
   E.on(E.qs("#copy"), "click", function () { E.copy(o.textContent, this); });
   note();
 
-  /* For agents: the page's own draw, so the visitor sees the numbers. */
-  E.agentTool({
-    name: "random_numbers",
-    title: "pick random numbers",
-    description: "Pick up to 100 whole numbers between a minimum and a maximum, inclusive, optionally " +
-      "without repeats. The source is csrng (the browser's Web Crypto, fit for secrets; the default), " +
-      "trng (a public drand beacon, verified, needs the network) or prng (Math.random, not for security). " +
-      "The numbers are shown on the page.",
-    input: {
-      type: "object",
-      properties: {
-        min: { type: "integer", default: 1 },
-        max: { type: "integer", default: 100 },
-        count: { type: "integer", minimum: 1, maximum: 100, default: 1 },
-        unique: { type: "boolean", default: false, description: "Never pick the same number twice." },
-        source: { type: "string", enum: ["csrng", "trng", "prng"], default: "csrng" }
-      }
-    },
-    readOnly: true,
-    run: function (args) {
-      var source = args.source == null ? "csrng" : String(args.source);
-      var radio = E.qs('input[name=src][value="' + source + '"]');
-      if (["csrng", "trng", "prng"].indexOf(source) < 0 || !radio) throw new Error("source must be csrng, trng or prng");
-      radio.checked = true;
+  /* For agents in the browser: the core's tool as a draw on the page, so the
+     visitor sees the numbers the agent was given. */
+  E.agentTools(AGENT_TOOLS, {
+    random_numbers: function (args) {
+      var source = sourceOf(args);
+      E.qs('input[name=src][value="' + source + '"]').checked = true;
       note();
       E.qs("#min").value = String(args.min == null ? 1 : args.min);
       E.qs("#max").value = String(args.max == null ? 100 : args.max);
       E.qs("#count").value = String(args.count == null ? 1 : args.count);
       E.qs("#unique").checked = !!args.unique;
-      var pending;
-      try { pending = draw(); } catch (e) { er.textContent = e.message || "invalid range"; throw e; }
-      return pending.then(function () {
-        if (er.textContent) throw new Error(er.textContent);
-        var numbers = o.textContent.split("\n").map(function (value) {
-          return Number.isSafeInteger(Number(value)) ? Number(value) : value;
-        });
-        var result = { numbers: numbers, source: source };
-        if (!proof.hidden) { result.round = Number(round.textContent); result.chainHash = chain.textContent; }
-        return result;
-      });
+      return draw();
     }
   });
 });

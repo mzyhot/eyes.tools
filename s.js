@@ -543,11 +543,12 @@
    * Offer one of this page's actions to AI agents through WebMCP.
    *
    * `run` receives the agent's input and returns, or resolves to, a result
-   * that survives JSON. Throwing is how a tool refuses: the message goes back
-   * as `{ error }`, in the same quiet, specific words the page shows a person,
-   * because a rejected call reaches the agent with no reason attached. A tool
-   * that works on what is on the page does it through the page's own fields,
-   * so the visitor sees what the agent did.
+   * that survives JSON. An input missing a property the schema requires is
+   * refused before `run` sees it. Throwing is how a tool refuses: the message
+   * goes back as `{ error }`, in the same quiet, specific words the page shows
+   * a person, because a rejected call reaches the agent with no reason
+   * attached. A tool that works on what is on the page does it through the
+   * page's own fields, so the visitor sees what the agent did.
    * @param {Object} tool
    * @param {string} tool.name Unique on the page: letters, digits, `_`, `-`, `.`.
    * @param {string} tool.title A short label a browser may show the visitor.
@@ -555,11 +556,18 @@
    * @param {Object} [tool.input] JSON Schema for the input object.
    * @param {boolean} [tool.readOnly] Set when it changes nothing beyond the page's
    *   own fields, so an agent may call it without asking.
-   * @param {Function} tool.run `(input, signal)` → result or a promise of one.
+   * @param {boolean} [tool.network] Set when it may reach beyond the site, as a
+   *   drand draw does; the MCP server tells agents so.
+   * @param {Function} [tool.run] `(input, signal)` → result or a promise of one.
+   * @param {Function} [tool.compute] The same, from a page's core, used when
+   *   there is no `run`.
+   * @param {Function} [run] Overrides both: a core tool's page-side run, which
+   *   usually fills the page's fields and then returns `tool.compute(input)`.
    */
-  E.agentTool = function (tool) {
+  E.agentTool = function (tool, run) {
     var context = modelContext();
-    if (!context || !tool || typeof tool.run !== "function") return;
+    run = run || (tool && (tool.run || tool.compute));
+    if (!context || !tool || typeof run !== "function") return;
     var definition = {
       name: tool.name,
       title: tool.title,
@@ -568,7 +576,10 @@
       annotations: { readOnlyHint: !!tool.readOnly },
       execute: function (input, options) {
         return Promise.resolve().then(function () {
-          return tool.run(input || {}, options && options.signal);
+          input = input || {};
+          var absent = ((tool.input && tool.input.required) || []).filter(function (key) { return input[key] == null; })[0];
+          if (absent) throw new Error(absent + " is required");
+          return run(input, options && options.signal);
         }).catch(function (error) {
           return { error: (error && error.message) || String(error) };
         });
@@ -581,6 +592,15 @@
     } catch (error) {
       if (window.console && console.warn) console.warn("agent tool " + tool.name + " was not offered:", error);
     }
+  };
+
+  /**
+   * Offer a page's core tools, each through its page-side run when it has one.
+   * @param {Object[]} list The core's AGENT_TOOLS.
+   * @param {Object<string, Function>} [runs] Tool name → page-side run.
+   */
+  E.agentTools = function (list, runs) {
+    (list || []).forEach(function (tool) { E.agentTool(tool, runs && runs[tool.name]); });
   };
 
   /* Every page, the index and the not-found page included, can point an agent

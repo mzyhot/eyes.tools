@@ -117,6 +117,11 @@
 E.tool(function () {
   "use strict";
 
+  /* ── core ──────────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
+
   /* ══ md5 ═══════════════════════════════════════════════════════════════
      crypto.subtle has no md5, and md5 is still what most checksum lists
      publish, so it is implemented here. RFC 1321, incremental so a file can
@@ -273,7 +278,7 @@ E.tool(function () {
     return true;
   }
 
-  /* ══ wiring ════════════════════════════════════════════════════════════ */
+  /* ══ digests ═══════════════════════════════════════════════════════════ */
 
   var ALGOS = [
     { key: "md5",    label: "md5",     sub: null,       len: 16 },
@@ -287,6 +292,87 @@ E.tool(function () {
 
   var subtle = (window.crypto && window.crypto.subtle) || null;
   var enc = new TextEncoder();
+
+  /**
+   * One digest as text.
+   * @param {Uint8Array} bytes
+   * @param {"hex"|"base64"} encoding
+   * @param {boolean} uppercase Uppercase hex; base64 has no case to choose.
+   */
+  function formatDigest(bytes, encoding, uppercase) {
+    if (encoding === "base64") return b64(bytes);
+    var h = hex(bytes);
+    return uppercase ? h.toUpperCase() : h;
+  }
+  /* Algorithm label → digest, for each digest a store holds. */
+  function formatDigests(store, encoding, uppercase) {
+    var out = {};
+    ALGOS.forEach(function (a) { if (store[a.key]) out[a.label] = formatDigest(store[a.key], encoding, uppercase); });
+    return out;
+  }
+
+  /* run every sha over one buffer at once */
+  function shas(bytes) {
+    if (!subtle) return Promise.reject(new Error("nosubtle"));
+    var want = ALGOS.filter(function (a) { return a.sub; });
+    return Promise.all(want.map(function (a) {
+      return subtle.digest(a.sub, bytes);
+    })).then(function (list) {
+      var out = {};
+      list.forEach(function (ab, i) { out[want[i].key] = new Uint8Array(ab); });
+      return out;
+    });
+  }
+
+  function subtleMsg(e) {
+    if (e && e.message === "nosubtle") {
+      return "crypto.subtle is unavailable in this context — sha digests need https, localhost or file://. md5 above is still exact.";
+    }
+    return "crypto.subtle refused the digest — " + ((e && e.name) || "unknown error") + ".";
+  }
+
+  var TEXT_CAP = 64 * 1024 * 1024;
+
+  /**
+   * Every digest of a text's UTF-8 bytes.
+   * @returns {Promise<Object<string, string>>} Algorithm label → digest.
+   * @throws {Error} For text over TEXT_CAP.
+   */
+  function hashText(text, encoding, uppercase) {
+    var bytes = enc.encode(text);
+    if (bytes.length > TEXT_CAP) throw new Error("the text is over the " + TEXT_CAP / 1048576 + " MB limit");
+    var store = { md5: new MD5().update(bytes).digest() };
+    return shas(bytes).then(function (out) {
+      for (var k in out) store[k] = out[k];
+      return formatDigests(store, encoding, uppercase);
+    }, function (e) { throw new Error(subtleMsg(e)); });
+  }
+
+  var AGENT_TOOLS = [{
+    name: "hash_text",
+    title: "hash text",
+    description: "Compute the md5, sha-1, sha-256, sha-384 and sha-512 digests of a text's UTF-8 bytes, " +
+      "in hex or base64. md5 is fine for spotting accidental corruption but broken for security.",
+    input: {
+      type: "object",
+      properties: {
+        text: { type: "string" },
+        encoding: { type: "string", enum: ["hex", "base64"], default: "hex" },
+        uppercase: { type: "boolean", default: false, description: "Uppercase hex." }
+      },
+      required: ["text"]
+    },
+    readOnly: true,
+    compute: function (args) {
+      var encoding = args.encoding == null ? "hex" : String(args.encoding);
+      if (encoding !== "hex" && encoding !== "base64") throw new Error("encoding must be hex or base64");
+      return hashText(String(args.text == null ? "" : args.text), encoding, !!args.uppercase);
+    }
+  }];
+
+  /* ── end core ──────────────────────────────────────────────────────── */
+
+  /* ══ wiring ════════════════════════════════════════════════════════════ */
 
   var input = E.qs("#in"), tout = E.qs("#tout"), terr = E.qs("#terr"), tmeta = E.qs("#tmeta");
   var fileIn = E.qs("#file"), drop = E.qs("#drop"), fout = E.qs("#fout"), ferr = E.qs("#ferr");
@@ -303,10 +389,7 @@ E.tool(function () {
   }
 
   function fmt(bytes) {
-    if (!bytes) return "";
-    if (encMode() === "b64") return b64(bytes);
-    var h = hex(bytes);
-    return ucBox.checked ? h.toUpperCase() : h;
+    return bytes ? formatDigest(bytes, encMode() === "b64" ? "base64" : "hex", ucBox.checked) : "";
   }
 
   function rows(host) {
@@ -335,29 +418,7 @@ E.tool(function () {
     compare();
   }
 
-  /* run every sha over one buffer at once */
-  function shas(bytes) {
-    if (!subtle) return Promise.reject(new Error("nosubtle"));
-    var want = ALGOS.filter(function (a) { return a.sub; });
-    return Promise.all(want.map(function (a) {
-      return subtle.digest(a.sub, bytes);
-    })).then(function (list) {
-      var out = {};
-      list.forEach(function (ab, i) { out[want[i].key] = new Uint8Array(ab); });
-      return out;
-    });
-  }
-
-  function subtleMsg(e) {
-    if (e && e.message === "nosubtle") {
-      return "crypto.subtle is unavailable in this context — sha digests need https, localhost or file://. md5 above is still exact.";
-    }
-    return "crypto.subtle refused the digest — " + ((e && e.name) || "unknown error") + ".";
-  }
-
   /* ── text ─────────────────────────────────────────────── */
-
-  var TEXT_CAP = 64 * 1024 * 1024;
 
   function doText() {
     var s = input.value, seq = ++textSeq;
@@ -638,38 +699,17 @@ E.tool(function () {
     ucBox.disabled = mode === "b64";
   }
   function digests(store) {
-    var out = {};
-    ALGOS.forEach(function (a) { if (store[a.key]) out[a.label] = fmt(store[a.key]); });
-    return out;
+    return formatDigests(store, encMode() === "b64" ? "base64" : "hex", ucBox.checked);
   }
 
-  E.agentTool({
-    name: "hash_text",
-    title: "hash text",
-    description: "Compute the md5, sha-1, sha-256, sha-384 and sha-512 digests of a text's UTF-8 bytes, " +
-      "in hex or base64. md5 is fine for spotting accidental corruption but broken for security. The " +
-      "text and digests are shown on the page.",
-    input: {
-      type: "object",
-      properties: {
-        text: { type: "string" },
-        encoding: { type: "string", enum: ["hex", "base64"], default: "hex" },
-        uppercase: { type: "boolean", default: false, description: "Uppercase hex." }
-      },
-      required: ["text"]
-    },
-    readOnly: true,
-    run: function (args) {
+  /* The core's tool, with the text and digests shown on the page too. */
+  E.agentTools(AGENT_TOOLS, {
+    hash_text: function (args) {
+      var result = AGENT_TOOLS[0].compute(args);
       setEncoding(args.encoding, args.uppercase);
       input.value = String(args.text == null ? "" : args.text);
       doText();
-      var bytes = enc.encode(input.value);
-      if (bytes.length > TEXT_CAP) throw new Error(terr.textContent || "text is too long to hash here");
-      var store = { md5: new MD5().update(bytes).digest() };
-      return shas(bytes).then(function (out) {
-        for (var k in out) store[k] = out[k];
-        return digests(store);
-      }, function (e) { throw new Error(subtleMsg(e)); });
+      return result;
     }
   });
 

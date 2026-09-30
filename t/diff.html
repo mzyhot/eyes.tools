@@ -61,7 +61,12 @@
    earlier bound refused outright, now diff. */
 E.tool(function () {
   "use strict";
-  var a = E.qs("#a"), b = E.qs("#b"), o = E.qs("#out"), er = E.qs("#err"), copy = E.qs("#copy");
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
+
   var MAX_CELLS = 2000000, MAX_LINES = 5000;
   function lines(value) { return value ? value.split(/\r\n|\r|\n/) : []; }
 
@@ -87,23 +92,27 @@ E.tool(function () {
     return { left: lx, right: ly };
   }
 
-  function run() {
-    var x = lines(a.value), y = lines(b.value), n = x.length, m = y.length;
-    var ignoreSpace = E.qs("#ignore-space").checked;
+  /**
+   * The line diff of two texts.
+   * @param {string} before
+   * @param {string} after
+   * @param {boolean} ignoreSpace Compare lines with their ends trimmed.
+   * @returns {{lines: Array<[string, string]>, added: number, removed: number}}
+   *   Each line is its kind ("same", "added" or "removed") and its text,
+   *   prefix included.
+   * @throws {Error} Past the size limits.
+   */
+  function diffLines(before, after, ignoreSpace) {
+    var x = lines(before), y = lines(after), n = x.length, m = y.length;
     /* Comparison keys. With the option on they are the trimmed lines; the
        output always shows the untrimmed originals. */
     var left = ignoreSpace ? x.map(function (line) { return line.trim(); }) : x;
     var right = ignoreSpace ? y.map(function (line) { return line.trim(); }) : y;
-    er.textContent = "";
-    o.textContent = "";
-    E.qs("#summary").textContent = "";
-    copy.disabled = true;
     if (n > MAX_LINES || m > MAX_LINES) {
-      er.textContent = "keep each side under " + MAX_LINES.toLocaleString() + " lines for a line diff";
-      copy.disabled = true;
-      return;
+      throw new Error("keep each side under " + MAX_LINES.toLocaleString() + " lines for a line diff");
     }
-    if (!n && !m) return;
+    var result = [], added = 0, removed = 0, k;
+    if (!n && !m) return { lines: result, added: 0, removed: 0 };
 
     var keys = intern(left, right), kx = keys.left, ky = keys.right;
 
@@ -113,12 +122,9 @@ E.tool(function () {
 
     var coreN = n - head, coreM = m - head;
     if ((coreN + 1) * (coreM + 1) > MAX_CELLS) {
-      er.textContent = "too many lines after the first change to compare at once; try a smaller section";
-      copy.disabled = true;
-      return;
+      throw new Error("too many lines after the first change to compare at once; try a smaller section");
     }
 
-    var result = [], added = 0, removed = 0, k;
     for (k = 0; k < head; k++) result.push(["same", "  " + y[k]]);
 
     if (coreN || coreM) {
@@ -149,31 +155,14 @@ E.tool(function () {
         else { result.push(["removed", "- " + x[head + i++]]); removed++; }
       }
     }
-
-    /* One span per line, built off-document and appended once. The newlines
-       live in the text, so copying the listing still gives a plain diff. */
-    var listing = document.createDocumentFragment();
-    result.forEach(function (line, at) {
-      listing.appendChild(E.el("span", { class: line[0], text: at ? "\n" + line[1] : line[1] }));
-    });
-    o.appendChild(listing);
-    E.qs("#summary").textContent = added || removed ? added + " added · " + removed + " removed" : ignoreSpace ? "no changes beyond surrounding whitespace" : "no changes";
-    copy.disabled = false;
+    return { lines: result, added: added, removed: removed };
   }
-  E.on(a, "input", E.debounce(run));
-  E.on(b, "input", E.debounce(run));
-  E.on(E.qs("#ignore-space"), "change", run);
-  E.on(E.qs("#swap"), "click", function () { var value = a.value; a.value = b.value; b.value = value; run(); });
-  E.on(copy, "click", function () { E.copy(o.textContent, this); });
-  run();
 
-  /* For agents: the same listing, with both texts shown on the page. */
-  E.agentTool({
+  var AGENT_TOOLS = [{
     name: "diff_text",
     title: "compare two texts line by line",
     description: "Compare two texts line by line and return a unified listing: two spaces before a line " +
-      "both share, + before a line only in after, - before a line only in before. Up to 5,000 lines " +
-      "a side. Both texts and the listing are shown on the page.",
+      "both share, + before a line only in after, - before a line only in before. Up to 5,000 lines a side.",
     input: {
       type: "object",
       properties: {
@@ -184,17 +173,53 @@ E.tool(function () {
       required: ["before", "after"]
     },
     readOnly: true,
-    run: function (args) {
-      a.value = String(args.before == null ? "" : args.before);
-      b.value = String(args.after == null ? "" : args.after);
+    compute: function (args) {
+      var d = diffLines(String(args.before == null ? "" : args.before), String(args.after == null ? "" : args.after), !!args.ignoreSurroundingSpaces);
+      return { added: d.added, removed: d.removed, diff: d.lines.map(function (line) { return line[1]; }).join("\n") };
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
+  var a = E.qs("#a"), b = E.qs("#b"), o = E.qs("#out"), er = E.qs("#err"), copy = E.qs("#copy");
+
+  function run() {
+    var ignoreSpace = E.qs("#ignore-space").checked, d;
+    er.textContent = "";
+    o.textContent = "";
+    E.qs("#summary").textContent = "";
+    copy.disabled = true;
+    try { d = diffLines(a.value, b.value, ignoreSpace); }
+    catch (e) { er.textContent = e.message; return; }
+    if (!d.lines.length) return;
+
+    /* One span per line, built off-document and appended once. The newlines
+       live in the text, so copying the listing still gives a plain diff. */
+    var listing = document.createDocumentFragment();
+    d.lines.forEach(function (line, at) {
+      listing.appendChild(E.el("span", { class: line[0], text: at ? "\n" + line[1] : line[1] }));
+    });
+    o.appendChild(listing);
+    E.qs("#summary").textContent = d.added || d.removed ? d.added + " added · " + d.removed + " removed" : ignoreSpace ? "no changes beyond surrounding whitespace" : "no changes";
+    copy.disabled = false;
+  }
+  E.on(a, "input", E.debounce(run));
+  E.on(b, "input", E.debounce(run));
+  E.on(E.qs("#ignore-space"), "change", run);
+  E.on(E.qs("#swap"), "click", function () { var value = a.value; a.value = b.value; b.value = value; run(); });
+  E.on(copy, "click", function () { E.copy(o.textContent, this); });
+  run();
+
+  /* For agents in the browser: the core's tool, with both texts in the
+     page's fields. */
+  E.agentTools(AGENT_TOOLS, {
+    diff_text: function (args) {
+      var result = AGENT_TOOLS[0].compute(args);
+      a.value = String(args.before);
+      b.value = String(args.after);
       E.qs("#ignore-space").checked = !!args.ignoreSurroundingSpaces;
       run();
-      if (er.textContent) throw new Error(er.textContent);
-      return {
-        added: E.qsa(".added", o).length,
-        removed: E.qsa(".removed", o).length,
-        diff: o.textContent
-      };
+      return result;
     }
   });
 });

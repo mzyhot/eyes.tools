@@ -37,6 +37,69 @@
 <script>
 E.tool(function () {
   "use strict";
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure but for R, the randomness sources the page's dependencies give it.
+     The site's MCP server (mcp-server.mjs) runs this block on its own, after
+     the same dependencies, so an agent that never opens the page gets the same
+     flip. AGENT_TOOLS is what the page and the server both offer. */
+
+  var SOURCES = ["csrng", "trng", "prng"];
+
+  function flipCount(raw) {
+    raw = String(raw).trim();
+    var n = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 1 || n > 100) {
+      throw new Error("flips must be a whole number between 1 and 100");
+    }
+    return n;
+  }
+
+  /**
+   * Flip n coins from one source, a bit of the draw each.
+   * @returns {Promise<object>} The flips and their tally, and for a drand
+   *   draw, what it takes to check it.
+   */
+  function flipCoins(n, source) {
+    return R.source(source, R.byteCount(2, n)).then(function (draw) {
+      var flips = [];
+      for (var i = 0; i < n; i++) flips.push((draw.bytes[i >> 3] >> (i & 7) & 1) ? "heads" : "tails");
+      var heads = flips.filter(function (value) { return value === "heads"; }).length;
+      var result = { flips: flips, heads: heads, tails: n - heads, source: source, verified: !!draw.verified };
+      if (draw.verified) { result.round = draw.round; result.chainHash = draw.chainHash; }
+      return result;
+    });
+  }
+
+  function sourceOf(args) {
+    var source = args.source == null ? "csrng" : String(args.source);
+    if (SOURCES.indexOf(source) < 0) throw new Error("source must be csrng, trng or prng");
+    return source;
+  }
+
+  var AGENT_TOOLS = [{
+    name: "flip_coins",
+    title: "flip coins",
+    description: "Flip up to 100 coins. The source is csrng (Web Crypto; the default), trng (a public " +
+      "drand beacon whose signature is verified, so anyone can check the round later; needs the " +
+      "network) or prng (Math.random, predictable).",
+    input: {
+      type: "object",
+      properties: {
+        count: { type: "integer", minimum: 1, maximum: 100, default: 1 },
+        source: { type: "string", enum: SOURCES, default: "csrng" }
+      }
+    },
+    readOnly: true,
+    network: true,
+    compute: function (args) {
+      var source = sourceOf(args);
+      return flipCoins(flipCount(args.count == null ? 1 : args.count), source);
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
   var b = E.qs("#flip"), er = E.qs("#err"), first = E.qs("#first"), all = E.qs("#all"), proof = E.qs("#proof");
   var counts = E.qs("#counts"), copy = E.qs("#copy"), report = "", flipSeq = 0;
   /* The three sources rng offers, described the same way. */
@@ -72,32 +135,25 @@ E.tool(function () {
   /* Flip as many coins as the field asks, drawing the result on the page.
      Resolves to the flips, or rejects with the message the page shows. */
   function flip() {
-    var raw = E.qs("#n").value.trim(), n = Number(raw), seq = ++flipSeq, source = mode();
+    var n, seq = ++flipSeq, source = mode();
     clear();
-    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 1 || n > 100) {
-      er.textContent = "flips must be a whole number between 1 and 100";
-      return Promise.reject(new Error(er.textContent));
-    }
+    try { n = flipCount(E.qs("#n").value); }
+    catch (e) { er.textContent = e.message; return Promise.reject(e); }
     b.disabled = true;
     b.dataset.state = "loading";
-    return R.source(source, R.byteCount(2, n)).then(function (r) {
+    return flipCoins(n, source).then(function (result) {
       if (seq !== flipSeq) throw new Error("a newer flip replaced this one");
-      var vals = [];
-      for (var i = 0; i < n; i++) vals.push((r.bytes[i >> 3] >> (i & 7) & 1) ? "heads" : "tails");
-      first.textContent = vals[0];
-      all.textContent = vals.join(" · ");
-      var heads = vals.filter(function (value) { return value === "heads"; }).length;
-      counts.textContent = heads + " heads · " + (n - heads) + " tails";
-      report = vals.join("\n") + "\n\n" + counts.textContent;
+      first.textContent = result.flips[0];
+      all.textContent = result.flips.join(" · ");
+      counts.textContent = result.heads + " heads · " + result.tails + " tails";
+      report = result.flips.join("\n") + "\n\n" + counts.textContent;
       copy.disabled = false;
-      proof.hidden = !r.verified;
-      if (r.verified) {
-        E.qs("#round").textContent = r.round;
-        E.qs("#chain").textContent = r.chainHash;
+      proof.hidden = !result.verified;
+      if (result.verified) {
+        E.qs("#round").textContent = result.round;
+        E.qs("#chain").textContent = result.chainHash;
       }
       E.flash(b, "flipped");
-      var result = { flips: vals, heads: heads, tails: n - heads, source: source, verified: !!r.verified };
-      if (r.verified) { result.round = r.round; result.chainHash = r.chainHash; }
       return result;
     }, function (e) {
       var message = (e && e.message) || "the randomness source failed";
@@ -113,26 +169,12 @@ E.tool(function () {
   E.on(b, "click", function () { flip().catch(function () {}); });
   note();
 
-  /* For agents: a flip on the page, from the source the agent names. */
-  E.agentTool({
-    name: "flip_coins",
-    title: "flip coins",
-    description: "Flip up to 100 coins. The source is csrng (the browser's Web Crypto; the default), trng " +
-      "(a public drand beacon whose signature the page verifies, so anyone can check the round later; " +
-      "needs the network) or prng (Math.random, predictable). The flips are shown on the page.",
-    input: {
-      type: "object",
-      properties: {
-        count: { type: "integer", minimum: 1, maximum: 100, default: 1 },
-        source: { type: "string", enum: ["csrng", "trng", "prng"], default: "csrng" }
-      }
-    },
-    readOnly: true,
-    run: function (args) {
-      var source = args.source == null ? "csrng" : String(args.source);
-      var radio = E.qs('input[name=src][value="' + source + '"]');
-      if (["csrng", "trng", "prng"].indexOf(source) < 0 || !radio) throw new Error("source must be csrng, trng or prng");
-      radio.checked = true;
+  /* For agents in the browser: the core's tool as a flip on the page, so the
+     visitor sees the flips the agent was given. */
+  E.agentTools(AGENT_TOOLS, {
+    flip_coins: function (args) {
+      var source = sourceOf(args);
+      E.qs('input[name=src][value="' + source + '"]').checked = true;
       note();
       E.qs("#n").value = String(args.count == null ? 1 : args.count);
       return flip();

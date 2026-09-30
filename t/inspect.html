@@ -62,13 +62,11 @@
       E.tool(function () {
         "use strict";
 
-        var input = E.qs("#in");
-        var output = E.qs("#out");
-        var error = E.qs("#err");
-        var copy = E.qs("#copy");
-        var download = E.qs("#download");
-        var summary = E.qs("#summary");
-        var report = "";
+        /* ── core ────────────────────────────────────────────────────
+           Pure: no DOM and no E. The site's MCP server (mcp-server.mjs)
+           runs this block on its own, so an agent that never opens the page
+           gets the same answers. AGENT_TOOLS is what both offer. */
+
         var MAX_ROWS = 10000;
         var names = [
           "NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL",
@@ -76,13 +74,6 @@
           "DLE", "DC1", "DC2", "DC3", "DC4", "NAK", "SYN", "ETB",
           "CAN", "EM", "SUB", "ESC", "FS", "GS", "RS", "US"
         ];
-
-        function mode() {
-          var selected = E.qsa("input[name=mode]").filter(function (radio) {
-            return radio.checked;
-          })[0];
-          return selected ? selected.value : "unicode";
-        }
 
         /* Characters that render as nothing, or as something indistinguishable
            from a space. Naming them is the whole point of the tool, so the table
@@ -121,14 +112,6 @@
           return out;
         }
 
-        function row(host, character, code, value) {
-          host.appendChild(E.el("div", { class: "inspect-row" }, [
-            E.el("span", { text: character }),
-            E.el("span", { text: code }),
-            E.el("span", { text: value })
-          ]));
-        }
-
         function firstCharacters(value, limit) {
           var rows = [];
           var offset = 0;
@@ -141,57 +124,100 @@
           return { rows: rows, truncated: offset < value.length };
         }
 
+        /**
+         * The table for a text: one [character, code, detail] row per
+         * character, for its first MAX_ROWS characters.
+         * @returns {{rows: string[][], truncated: boolean, nonAscii: boolean}}
+         */
+        function inspect(value, ascii) {
+          var scan = firstCharacters(value, MAX_ROWS), nonAscii = false;
+          var rows = scan.rows.map(function (character) {
+            var codePoint = character.codePointAt(0);
+            if (ascii && codePoint > 127) nonAscii = true;
+            var code = ascii
+              ? (codePoint < 128 ? String(codePoint) : "outside ascii")
+              : "U+" + codePoint.toString(16).toUpperCase().padStart(4, "0");
+            var label = ascii && codePoint < 32 ? names[codePoint] : ascii && codePoint === 127 ? "DEL" : utf8(character);
+            return [shown(character), code, label];
+          });
+          return { rows: rows, truncated: scan.truncated, nonAscii: nonAscii };
+        }
+        function columns(ascii) {
+          return ascii ? ["character", "ascii decimal", "name or utf-8 bytes"] : ["character", "code point", "utf-8 bytes"];
+        }
+
+        var AGENT_ROWS = 2000;
+        var AGENT_TOOLS = [{
+          name: "inspect_text",
+          title: "list the characters in text",
+          description: "List every character in a text with its code point and UTF-8 bytes, naming the ones " +
+            "that are invisible or look like a space (zero-width, no-break, direction marks, control " +
+            "characters). With the ascii set, codes are ascii decimals and anything past 127 is marked.",
+          input: {
+            type: "object",
+            properties: {
+              text: { type: "string" },
+              set: { type: "string", enum: ["unicode", "ascii"], default: "unicode" }
+            },
+            required: ["text"]
+          },
+          readOnly: true,
+          compute: function (args) {
+            var set = args.set == null ? "unicode" : String(args.set);
+            if (set !== "unicode" && set !== "ascii") throw new Error("set must be unicode or ascii");
+            var table = inspect(String(args.text == null ? "" : args.text), set === "ascii");
+            var result = { columns: columns(set === "ascii"), rows: table.rows.slice(0, AGENT_ROWS) };
+            if (table.truncated || table.rows.length > AGENT_ROWS) result.truncated = true;
+            if (table.nonAscii) result.note = "non-ascii characters are marked outside ascii";
+            return result;
+          }
+        }];
+
+        /* ── end core ──────────────────────────────────────────────── */
+
+        var input = E.qs("#in");
+        var output = E.qs("#out");
+        var error = E.qs("#err");
+        var copy = E.qs("#copy");
+        var download = E.qs("#download");
+        var summary = E.qs("#summary");
+        var report = "";
+
+        function mode() {
+          var selected = E.qsa("input[name=mode]").filter(function (radio) {
+            return radio.checked;
+          })[0];
+          return selected ? selected.value : "unicode";
+        }
+
+        function row(host, cells, head) {
+          host.appendChild(E.el("div", head ? { class: "inspect-row inspect-head", "aria-hidden": "true" } : { class: "inspect-row" },
+            cells.map(function (cell) { return E.el("span", { text: cell }); })));
+        }
+
         function run() {
-          var scan = firstCharacters(input.value, MAX_ROWS);
-          var rows = scan.rows;
-          var ascii = mode() === "ascii";
-          var lines = [];
+          var ascii = mode() === "ascii", table = inspect(input.value, ascii), rows = table.rows;
           output.textContent = "";
           error.textContent = "";
-          report = "";
           copy.disabled = rows.length === 0;
           download.disabled = rows.length === 0;
-
           summary.textContent = rows.length
-            ? (scan.truncated ? "first " : "") + rows.length.toLocaleString() + (rows.length === 1 ? " character" : " characters")
+            ? (table.truncated ? "first " : "") + rows.length.toLocaleString() + (rows.length === 1 ? " character" : " characters")
             : "characters";
-          if (scan.truncated) {
-            error.textContent = "showing the first " + MAX_ROWS.toLocaleString() +
-              " characters to keep the page responsive";
+          if (table.truncated) {
+            error.textContent = "showing the first " + MAX_ROWS.toLocaleString() + " characters to keep the page responsive";
+          }
+          if (table.nonAscii) {
+            error.textContent += (error.textContent ? " · " : "") + "non-ascii characters are marked outside ascii";
           }
 
           /* Rows are assembled off-document and appended once. Ten thousand
              live appends would lay the page out ten thousand times. */
           var frag = document.createDocumentFragment();
-          var warnedNonAscii = false;
-          if (rows.length) {
-            frag.appendChild(E.el("div", { class: "inspect-row inspect-head", "aria-hidden": "true" }, [
-              E.el("span", { text: "character" }),
-              E.el("span", { text: ascii ? "ascii decimal" : "code point" }),
-              E.el("span", { text: ascii ? "name / utf-8 bytes" : "utf-8 bytes" })
-            ]));
-          }
-          rows.forEach(function (character) {
-            var codePoint = character.codePointAt(0);
-            var bytes = utf8(character);
-            var code = ascii
-              ? (codePoint < 128 ? String(codePoint) : "outside ascii")
-              : "U+" + codePoint.toString(16).toUpperCase().padStart(4, "0");
-            var label = ascii && codePoint < 32
-              ? names[codePoint]
-              : ascii && codePoint === 127
-                ? "DEL"
-                : bytes;
-            if (ascii && codePoint > 127 && !warnedNonAscii) {
-              warnedNonAscii = true;
-              error.textContent += (error.textContent ? " · " : "") + "non-ascii characters are marked outside ascii";
-            }
-            var glyph = shown(character);
-            row(frag, glyph, code, label);
-            lines.push(glyph + "\t" + code + "\t" + label);
-          });
+          if (rows.length) row(frag, columns(ascii).map(function (c) { return c === "name or utf-8 bytes" ? "name / utf-8 bytes" : c; }), true);
+          rows.forEach(function (cells) { row(frag, cells); });
           output.appendChild(frag);
-          report = lines.join("\n");
+          report = rows.map(function (cells) { return cells.join("\t"); }).join("\n");
         }
 
         E.on(input, "input", run);
@@ -208,37 +234,14 @@
         if (query) input.value = query;
         run();
 
-        /* For agents: the page's table as rows, with the text on the page. */
-        var AGENT_ROWS = 2000;
-        E.agentTool({
-          name: "inspect_text",
-          title: "list the characters in text",
-          description: "List every character in a text with its code point and UTF-8 bytes, naming the ones " +
-            "that are invisible or look like a space (zero-width, no-break, direction marks, control " +
-            "characters). With the ascii set, codes are ascii decimals and anything past 127 is marked. " +
-            "The text and the table are shown on the page.",
-          input: {
-            type: "object",
-            properties: {
-              text: { type: "string" },
-              set: { type: "string", enum: ["unicode", "ascii"], default: "unicode" }
-            },
-            required: ["text"]
-          },
-          readOnly: true,
-          run: function (args) {
-            var set = args.set == null ? "unicode" : String(args.set);
-            if (set !== "unicode" && set !== "ascii") throw new Error("set must be unicode or ascii");
-            E.qs('input[name=mode][value="' + set + '"]').checked = true;
-            input.value = String(args.text == null ? "" : args.text);
+        /* For agents in the browser: the core's tool, with the text in the
+           page's field. */
+        E.agentTools(AGENT_TOOLS, {
+          inspect_text: function (args) {
+            var result = AGENT_TOOLS[0].compute(args);
+            E.qs('input[name=mode][value="' + (args.set === "ascii" ? "ascii" : "unicode") + '"]').checked = true;
+            input.value = String(args.text);
             run();
-            var rows = report ? report.split("\n").map(function (line) { return line.split("\t"); }) : [];
-            var result = {
-              columns: set === "ascii" ? ["character", "ascii decimal", "name or utf-8 bytes"] : ["character", "code point", "utf-8 bytes"],
-              rows: rows.slice(0, AGENT_ROWS)
-            };
-            if (rows.length > AGENT_ROWS || error.textContent.indexOf("showing the first") === 0) result.truncated = true;
-            if (error.textContent) result.note = error.textContent;
             return result;
           }
         });

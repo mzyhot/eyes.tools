@@ -29,6 +29,12 @@
 <script>
 E.tool(function () {
   "use strict";
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
+
   var sentences = [
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
     "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
@@ -36,40 +42,75 @@ E.tool(function () {
     "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
     "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
   ];
+  var UNITS = ["paragraphs", "sentences", "words"], LENGTHS = ["short", "medium", "long"];
+  function most(kind) { return kind === "words" ? 10000 : kind === "sentences" ? 1000 : 100; }
+  /**
+   * Placeholder text.
+   * @param {string} raw How many, as typed.
+   * @param {"paragraphs"|"sentences"|"words"} kind
+   * @param {"short"|"medium"|"long"} size Sentences per paragraph.
+   * @returns {string}
+   */
+  function lorem(raw, kind, size) {
+    var n = Number(raw), max = most(kind), parts = [], i;
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 1 || n > max) {
+      throw new Error("enter a whole number from 1 to " + max.toLocaleString());
+    }
+    if (kind === "words") {
+      var words = sentences.join(" ").split(/\s+/);
+      for (i = 0; i < n; i++) parts.push(words[i % words.length]);
+      return parts.join(" ").replace(/[,.]$/, "") + ".";
+    }
+    if (kind === "sentences") {
+      for (i = 0; i < n; i++) parts.push(sentences[i % sentences.length]);
+      return parts.join(" ");
+    }
+    /* Each paragraph starts one sentence further on, so no two neighbours
+       read the same; the first still opens with "Lorem ipsum". */
+    var count = size === "short" ? 2 : size === "long" ? 5 : 3;
+    for (i = 0; i < n; i++) {
+      var paragraph = [];
+      for (var j = 0; j < count; j++) paragraph.push(sentences[(i + j) % sentences.length]);
+      parts.push(paragraph.join(" "));
+    }
+    return parts.join("\n\n");
+  }
+
+  var AGENT_TOOLS = [{
+    name: "generate_lorem_ipsum",
+    title: "make placeholder text",
+    description: "Make lorem ipsum placeholder text: a number of paragraphs (short, medium or long), sentences or words.",
+    input: {
+      type: "object",
+      properties: {
+        count: { type: "integer", minimum: 1, maximum: 10000, default: 3, description: "How many paragraphs, sentences or words; at most 100, 1,000 and 10,000." },
+        unit: { type: "string", enum: UNITS, default: "paragraphs" },
+        paragraphLength: { type: "string", enum: LENGTHS, default: "medium" }
+      }
+    },
+    readOnly: true,
+    compute: function (args) {
+      var kind = args.unit == null ? "paragraphs" : String(args.unit), size = args.paragraphLength == null ? "medium" : String(args.paragraphLength);
+      if (UNITS.indexOf(kind) < 0) throw new Error("unit must be paragraphs, sentences or words");
+      if (LENGTHS.indexOf(size) < 0) throw new Error("paragraph length must be short, medium or long");
+      return { text: lorem(String(args.count == null ? 3 : args.count), kind, size) };
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
   var out = E.qs("#out"), quantity = E.qs("#n"), unit = E.qs("#unit"), length = E.qs("#len");
   function run() {
-    var raw = quantity.value.trim(), n = Number(raw), kind = unit.value;
-    var max = kind === "words" ? 10000 : kind === "sentences" ? 1000 : 100;
-    quantity.max = max;
+    var raw = quantity.value.trim(), kind = unit.value;
+    quantity.max = most(kind);
     length.disabled = kind !== "paragraphs";
     out.textContent = "";
     E.qs("#err").textContent = "";
     E.qs("#copy").disabled = true;
     E.qs("#dl").disabled = true;
     if (!raw) return;
-    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 1 || n > max) {
-      E.qs("#err").textContent = "enter a whole number from 1 to " + max.toLocaleString();
-      return;
-    }
-    var parts = [], i;
-    if (kind === "words") {
-      var words = sentences.join(" ").split(/\s+/);
-      for (i = 0; i < n; i++) parts.push(words[i % words.length]);
-      out.textContent = parts.join(" ").replace(/[,.]$/, "") + ".";
-    } else if (kind === "sentences") {
-      for (i = 0; i < n; i++) parts.push(sentences[i % sentences.length]);
-      out.textContent = parts.join(" ");
-    } else {
-      /* Each paragraph starts one sentence further on, so no two neighbours
-         read the same; the first still opens with "Lorem ipsum". */
-      var count = length.value === "short" ? 2 : length.value === "long" ? 5 : 3;
-      for (i = 0; i < n; i++) {
-        var paragraph = [];
-        for (var j = 0; j < count; j++) paragraph.push(sentences[(i + j) % sentences.length]);
-        parts.push(paragraph.join(" "));
-      }
-      out.textContent = parts.join("\n\n");
-    }
+    try { out.textContent = lorem(raw, kind, length.value); }
+    catch (e) { E.qs("#err").textContent = e.message; return; }
     E.qs("#copy").disabled = false;
     E.qs("#dl").disabled = false;
   }
@@ -80,31 +121,15 @@ E.tool(function () {
   E.on(E.qs("#dl"), "click", function () { E.download(out.textContent, "lorem.txt", "text/plain;charset=utf-8"); E.flash(this, "downloaded"); });
   run();
 
-  /* For agents: the page's own settings, so the visitor sees the same text. */
-  E.agentTool({
-    name: "generate_lorem_ipsum",
-    title: "make placeholder text",
-    description: "Make lorem ipsum placeholder text: a number of paragraphs (short, medium or long), " +
-      "sentences or words. The text is shown on the page.",
-    input: {
-      type: "object",
-      properties: {
-        count: { type: "integer", minimum: 1, maximum: 10000, default: 3, description: "How many paragraphs, sentences or words; at most 100, 1,000 and 10,000." },
-        unit: { type: "string", enum: ["paragraphs", "sentences", "words"], default: "paragraphs" },
-        paragraphLength: { type: "string", enum: ["short", "medium", "long"], default: "medium" }
-      }
-    },
-    readOnly: true,
-    run: function (args) {
-      var kind = args.unit == null ? "paragraphs" : String(args.unit), size = args.paragraphLength == null ? "medium" : String(args.paragraphLength);
-      if (["paragraphs", "sentences", "words"].indexOf(kind) < 0) throw new Error("unit must be paragraphs, sentences or words");
-      if (["short", "medium", "long"].indexOf(size) < 0) throw new Error("paragraph length must be short, medium or long");
-      unit.value = kind;
-      length.value = size;
+  /* For agents in the browser: the core's tool, set in the page's own fields. */
+  E.agentTools(AGENT_TOOLS, {
+    generate_lorem_ipsum: function (args) {
+      var result = AGENT_TOOLS[0].compute(args);
+      unit.value = args.unit == null ? "paragraphs" : String(args.unit);
+      length.value = args.paragraphLength == null ? "medium" : String(args.paragraphLength);
       quantity.value = String(args.count == null ? 3 : args.count);
       run();
-      if (E.qs("#err").textContent) throw new Error(E.qs("#err").textContent);
-      return { text: out.textContent };
+      return result;
     }
   });
 });

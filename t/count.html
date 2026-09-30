@@ -22,22 +22,52 @@
 <script>
 E.tool(function () {
   "use strict";
-  var input = E.qs("#in"), stats = E.qsa("#stats dd");
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
+
   var segmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
   var wordSegmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "word" }) : null;
-  if (!segmenter) E.qs("#characters-label").textContent = "characters (code points)";
   /* Runs of text ended by . ! or ? and a space, plus any unfinished last
      sentence, so a draft that has not reached its full stop still counts. */
   function sentences(s) {
     return s.split(/[.!?]+(?:\s+|$)/).filter(function (part) { return /[\p{L}\p{N}]/u.test(part); }).length;
   }
-  function run() {
-    var s = input.value, points = Array.from(s), characters = segmenter ? Array.from(segmenter.segment(s), function (part) { return part.segment; }) : points;
+  /* The readout, in the page's order. */
+  function countText(s) {
+    var points = Array.from(s), characters = segmenter ? Array.from(segmenter.segment(s), function (part) { return part.segment; }) : points;
     var words = wordSegmenter ? Array.from(wordSegmenter.segment(s)).filter(function (part) { return part.isWordLike; }).length : (s.trim() ? s.trim().split(/\s+/u).length : 0);
-    var withoutSpaces = characters.filter(function (c) { return !/^\s+$/u.test(c); }).length;
-    var values = [words, characters.length, withoutSpaces, points.length, new TextEncoder().encode(s).length, s ? s.split(/\r\n|\r|\n/).length : 0,
-      sentences(s), words ? Math.max(1, Math.ceil(words / 200)) + " min" : "0 min"];
-    values.forEach(function (value, index) { stats[index].textContent = value; });
+    return {
+      words: words,
+      characters: characters.length,
+      charactersWithoutSpaces: characters.filter(function (c) { return !/^\s+$/u.test(c); }).length,
+      codePoints: points.length,
+      utf8Bytes: new TextEncoder().encode(s).length,
+      lines: s ? s.split(/\r\n|\r|\n/).length : 0,
+      sentences: sentences(s),
+      readingTime: words ? Math.max(1, Math.ceil(words / 200)) + " min" : "0 min"
+    };
+  }
+
+  var AGENT_TOOLS = [{
+    name: "count_text",
+    title: "count words and characters",
+    description: "Count words, characters (as a person sees them), characters without spaces, Unicode code " +
+      "points, UTF-8 bytes, lines and sentences in a text, and estimate its reading time at 200 words a minute.",
+    input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    readOnly: true,
+    compute: function (args) { return countText(String(args.text == null ? "" : args.text)); }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
+  var input = E.qs("#in"), stats = E.qsa("#stats dd");
+  if (!segmenter) E.qs("#characters-label").textContent = "characters (code points)";
+  function run() {
+    var counts = countText(input.value);
+    Object.keys(counts).forEach(function (key, index) { stats[index].textContent = counts[key]; });
   }
   E.on(input, "input", run);
   E.on(E.qs("#copy"), "click", function () {
@@ -48,25 +78,12 @@ E.tool(function () {
   if (query) input.value = query;
   run();
 
-  /* For agents: the same readout, with the text shown on the page. */
-  var KEYS = ["words", "characters", "charactersWithoutSpaces", "codePoints", "utf8Bytes", "lines", "sentences", "readingTime"];
-  E.agentTool({
-    name: "count_text",
-    title: "count words and characters",
-    description: "Count words, characters (as a person sees them), characters without spaces, Unicode code " +
-      "points, UTF-8 bytes, lines and sentences in a text, and estimate its reading time at 200 words a " +
-      "minute. The text is shown on the page.",
-    input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
-    readOnly: true,
-    run: function (args) {
+  /* For agents in the browser: the core's tool, with the text in the page's field. */
+  E.agentTools(AGENT_TOOLS, {
+    count_text: function (args) {
       input.value = String(args.text == null ? "" : args.text);
       run();
-      var result = {};
-      stats.forEach(function (value, index) {
-        var text = value.textContent;
-        result[KEYS[index]] = /^\d+$/.test(text) ? Number(text) : text;
-      });
-      return result;
+      return AGENT_TOOLS[0].compute(args);
     }
   });
 });

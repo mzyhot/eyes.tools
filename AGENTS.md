@@ -13,6 +13,10 @@
   `node scripts/static-routes.mjs`.
 - `api-modules.mjs` lists the APIs the Node server mounts; the router matches a
   prefix and knows nothing else about them.
+- `mcp-server.mjs` answers agents at `/mcp` by running the block each tool page
+  marks `core`, so that block must use no DOM and no `E`, only the page's
+  `deps`. Tools that need the visitor's own file or scratchpad stay outside it
+  and are offered on the page alone.
 - `dev-server.mjs` is both the local and self-hosted production server.
   `share-server.mjs` provides only discovery and WebRTC signaling; shared file
   contents must never pass through it.

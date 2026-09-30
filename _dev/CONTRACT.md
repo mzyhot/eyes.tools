@@ -92,14 +92,21 @@ The site's one job is: **the visitor leaves holding a result.**
   one visible file field, as if chosen there, and fires `change`. A page that
   handles drops itself calls `preventDefault()` on `dragover` and `drop`, and
   the shared handler leaves them alone.
-- **Agents use the tool too.** Offer the tool's actions to AI agents in the
-  browser with `E.agentTool` (WebMCP) wherever the input can be written as
-  JSON. The action runs through the page's own fields and code, so the visitor
-  sees what the agent did and the agent gets the same answer, and the same
-  error, a person would. A tool reads a file only once the visitor has chosen
-  it, and never sends one anywhere. Leave anything that sends data off the
-  device, or discards what the visitor wrote, to the visitor; share offers
-  agents nothing, since a transfer needs a person at each end.
+- **Agents use the tool too.** Wherever the input can be written as JSON, put
+  the tool's logic in a block marked `/* ── core` … `/* ── end core` at the top
+  of the script: no DOM and no `E`, only the page's `deps`, ending with
+  `var AGENT_TOOLS = [...]` (name, title, description, input as JSON Schema,
+  readOnly, network if it can leave the site, and compute(input) returning, or
+  resolving to, the answer). The page offers them in the browser with
+  `E.agentTools` (WebMCP), usually through a run that fills the page's own
+  fields first, so the visitor sees what the agent did; `mcp-server.mjs` runs
+  the same block for agents at `/mcp`. Either way the agent gets the same
+  answer, and the same error, a person would. A tool that needs what only the
+  visitor has, such as the file they chose, stays out of the core and uses
+  `E.agentTool`; it reads a file only once the visitor has chosen it, and never
+  sends one anywhere. Leave anything that sends data off the device, or
+  discards what the visitor wrote, to the visitor; share offers agents
+  nothing, since a transfer needs a person at each end.
 
 ## 4. Voice
 
@@ -169,11 +176,13 @@ E.base                       prefix that reaches a published root file
 E.home                       the index's address from this page
 E.toolHref(slug)             another tool's address from this page
 E.theme.toggle()             already wired to [data-theme-toggle]
-E.agentTool(tool)            offer an action to AI agents via WebMCP: name,
+E.agentTool(tool[, run])     offer an action to AI agents via WebMCP: name,
                              title, description, input (JSON Schema),
                              readOnly, run(input, signal). Throw to refuse;
                              the message reaches the agent as { error }.
                              Does nothing where the browser has no WebMCP.
+E.agentTools(list, runs)     offer a core's AGENT_TOOLS, each through
+                             runs[name] if given, else its own compute
 ```
 
 Never hardcode a path to another page or to a root file: `file://` and the web
@@ -221,8 +230,8 @@ Must render with no horizontal scroll at **320 / 375 / 414 / 768 px**.
 - [ ] Produces a correct result for a normal input, an empty input, a huge input,
       and a deliberately malformed input.
 - [ ] Every result can be copied or downloaded.
-- [ ] Its actions are offered to agents with `E.agentTool`, where the input can
-      be written as JSON.
+- [ ] Its actions are offered to agents from a `core` block's `AGENT_TOOLS`,
+      where the input can be written as JSON, so `/mcp` offers them too.
 - [ ] Keyboard-only operation works end to end; focus is always visible.
 - [ ] No horizontal scroll at 320px.
 - [ ] Light and dark both look deliberate.

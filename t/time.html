@@ -32,6 +32,65 @@
 <script>
 E.tool(function () {
   "use strict";
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
+
+  /**
+   * Read a date or a unix timestamp.
+   * @param {string} raw As typed.
+   * @param {"auto"|"seconds"|"milliseconds"} unit How to read a bare number.
+   * @returns {{date: Date, readAs: string|null}} readAs names the unit a bare
+   *   number was taken in, and is null for a date.
+   */
+  function readTime(raw, unit) {
+    var numeric = /^[+-]?\d+(?:\.\d+)?$/.test(raw);
+    var calendar = /^(\d{4})-(\d{2})-(\d{2})(?:T|\s|$)/.exec(raw);
+    if (calendar) {
+      var check = new Date(0);
+      check.setUTCFullYear(+calendar[1], +calendar[2] - 1, +calendar[3]);
+      if (check.getUTCFullYear() !== +calendar[1] || check.getUTCMonth() !== +calendar[2] - 1 || check.getUTCDate() !== +calendar[3]) {
+        throw new Error("that calendar date does not exist");
+      }
+    }
+    var selected = unit;
+    if (numeric && selected === "auto") selected = Math.abs(Number(raw)) < 1e11 ? "seconds" : "milliseconds";
+    var date = numeric ? new Date(Number(raw) * (selected === "seconds" ? 1000 : 1)) : new Date(raw);
+    if (!Number.isFinite(date.getTime())) throw new Error("date not understood or outside the supported range");
+    return { date: date, readAs: numeric ? selected : null };
+  }
+  /* Every form but local time, which is whoever is reading's own. */
+  function forms(date) {
+    return { utc: date.toUTCString(), iso8601: date.toISOString(), unixSeconds: Math.floor(date.getTime() / 1000), unixMilliseconds: date.getTime() };
+  }
+
+  var AGENT_TOOLS = [{
+    name: "convert_timestamp",
+    title: "read a date or unix timestamp",
+    description: "Turn a unix timestamp (seconds or milliseconds) or a date such as 2026-08-21T12:00:00Z " +
+      "into UTC, ISO 8601 and both unix forms. Leave value out for the current moment.",
+    input: {
+      type: "object",
+      properties: {
+        value: { type: "string", description: "A date, or a unix timestamp in seconds or milliseconds." },
+        unit: { type: "string", enum: ["auto", "seconds", "milliseconds"], default: "auto", description: "How to read a bare number; auto picks by size." }
+      }
+    },
+    readOnly: true,
+    compute: function (args) {
+      var unit = args.unit == null ? "auto" : String(args.unit);
+      if (["auto", "seconds", "milliseconds"].indexOf(unit) < 0) throw new Error("unit must be auto, seconds or milliseconds");
+      var raw = args.value == null || args.value === "" ? new Date().toISOString() : String(args.value).trim();
+      var read = readTime(raw, unit), result = forms(read.date);
+      if (read.readAs) result.readAs = read.readAs;
+      return result;
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
   var input = E.qs("#in"), values = E.qsa("#out dd"), error = E.qs("#err");
   var unit = E.qs("#unit"), interpreted = E.qs("#interpreted"), copy = E.qs("#copy"), report = "";
   var labels = ["local", "utc", "iso 8601", "unix seconds", "unix milliseconds"];
@@ -42,26 +101,12 @@ E.tool(function () {
     error.textContent = interpreted.textContent = report = "";
     copy.disabled = true;
     if (!raw) return;
-
-    var numeric = /^[+-]?\d+(?:\.\d+)?$/.test(raw);
-    var calendar = /^(\d{4})-(\d{2})-(\d{2})(?:T|\s|$)/.exec(raw);
-    if (calendar) {
-      var check = new Date(0);
-      check.setUTCFullYear(+calendar[1], +calendar[2] - 1, +calendar[3]);
-      if (check.getUTCFullYear() !== +calendar[1] || check.getUTCMonth() !== +calendar[2] - 1 || check.getUTCDate() !== +calendar[3]) {
-        error.textContent = "that calendar date does not exist";
-        return;
-      }
-    }
-    var selected = unit.value;
-    if (numeric && selected === "auto") selected = Math.abs(Number(raw)) < 1e11 ? "seconds" : "milliseconds";
-    var date = numeric ? new Date(Number(raw) * (selected === "seconds" ? 1000 : 1)) : new Date(raw);
-    if (!Number.isFinite(date.getTime())) {
-      error.textContent = "date not understood or outside the supported range";
-      return;
-    }
-    if (numeric) interpreted.textContent = "read as " + selected + (unit.value === "auto" ? " · choose a unit to override" : "");
-    var results = [date.toLocaleString(), date.toUTCString(), date.toISOString(), Math.floor(date.getTime() / 1000), date.getTime()];
+    var read;
+    try { read = readTime(raw, unit.value); }
+    catch (e) { error.textContent = e.message; return; }
+    if (read.readAs) interpreted.textContent = "read as " + read.readAs + (unit.value === "auto" ? " · choose a unit to override" : "");
+    var f = forms(read.date);
+    var results = [read.date.toLocaleString(), f.utc, f.iso8601, f.unixSeconds, f.unixMilliseconds];
     results.forEach(function (value, index) { values[index].textContent = value; });
     report = results.map(function (value, index) { return labels[index] + "  " + value; }).join("\n");
     copy.disabled = false;
@@ -75,35 +120,15 @@ E.tool(function () {
   if (queryUnit === "seconds" || queryUnit === "milliseconds") unit.value = queryUnit;
   run();
 
-  /* For agents: the page's own reading of a date or timestamp. */
-  var KEYS = ["local", "utc", "iso8601", "unixSeconds", "unixMilliseconds"];
-  E.agentTool({
-    name: "convert_timestamp",
-    title: "read a date or unix timestamp",
-    description: "Turn a unix timestamp (seconds or milliseconds) or a date such as 2026-08-21T12:00:00Z " +
-      "into local time, UTC, ISO 8601 and both unix forms. Local time is the visitor's browser's. Leave " +
-      "value out for the current moment. The result is shown on the page.",
-    input: {
-      type: "object",
-      properties: {
-        value: { type: "string", description: "A date, or a unix timestamp in seconds or milliseconds." },
-        unit: { type: "string", enum: ["auto", "seconds", "milliseconds"], default: "auto", description: "How to read a bare number; auto picks by size." }
-      }
-    },
-    readOnly: true,
-    run: function (args) {
-      var chosen = args.unit == null ? "auto" : String(args.unit);
-      if (["auto", "seconds", "milliseconds"].indexOf(chosen) < 0) throw new Error("unit must be auto, seconds or milliseconds");
-      unit.value = chosen;
-      input.value = args.value == null || args.value === "" ? new Date().toISOString() : String(args.value);
+  /* For agents in the browser: the core's tool on the page's own fields; here
+     the reader is the visitor, so their local time comes back too. */
+  E.agentTools(AGENT_TOOLS, {
+    convert_timestamp: function (args) {
+      var result = AGENT_TOOLS[0].compute(args);
+      unit.value = args.unit == null ? "auto" : String(args.unit);
+      input.value = args.value == null || args.value === "" ? result.iso8601 : String(args.value);
       run();
-      if (error.textContent) throw new Error(error.textContent);
-      var result = {};
-      values.forEach(function (value, index) {
-        result[KEYS[index]] = index > 2 ? Number(value.textContent) : value.textContent;
-      });
-      if (interpreted.textContent) result.readAs = interpreted.textContent.split(" · ")[0].replace(/^read as /, "");
-      return result;
+      return Object.assign({ local: new Date(result.unixMilliseconds).toLocaleString() }, result);
     }
   });
 });

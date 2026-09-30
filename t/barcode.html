@@ -48,6 +48,11 @@
       E.tool(function () {
         "use strict";
 
+        /* ── core ────────────────────────────────────────────────────
+           Pure: no DOM and no E. The site's MCP server (mcp-server.mjs)
+           runs this block on its own, so an agent that never opens the page
+           gets the same answers. AGENT_TOOLS is what both offer. */
+
         var LEFT = [
           "0001101", "0011001", "0010011", "0111101", "0100011",
           "0110001", "0101111", "0111011", "0110111", "0001011"
@@ -64,6 +69,93 @@
           "LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG",
           "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"
         ];
+
+        function check(value) {
+          var sum = 0;
+          for (var index = 0; index < 12; index += 1) {
+            sum += +value[index] * (index % 2 ? 3 : 1);
+          }
+          return String((10 - sum % 10) % 10);
+        }
+
+        /**
+         * The thirteen digits a typed number stands for.
+         * @returns {string} "" for empty input.
+         * @throws {Error} With the message the page shows.
+         */
+        function ean13(raw) {
+          var value = String(raw).trim().replace(/[\s-]/g, "");
+          if (!value) return "";
+          if (!/^\d+$/.test(value)) throw new Error("use digits, spaces or hyphens only");
+          if (value.length === 12) value += check(value);
+          if (value.length !== 13 || check(value) !== value[12]) throw new Error("enter 12 digits, or 13 with a valid check digit");
+          return value;
+        }
+
+        /* Two units per module. EAN-13 asks for a quiet zone of 11 modules
+           before the start guard and 7 after the end guard, so the 95 bars
+           begin 22 units in and the 226-unit symbol ends 14 units after them. */
+        var WIDTH = 226, HEIGHT = 106, SCALE = 2, LEFT_EDGE = 11 * SCALE;
+
+        /**
+         * Where everything goes: one bar per dark module, guard bars reaching
+         * lower, and the digits the way EAN-13 lays them out — the first in the
+         * quiet zone before the start guard, then six under each half, spread
+         * to fill the space between the guards.
+         */
+        function layout(value) {
+          var bits = "101", parity = PARITY[+value[0]], index, bars = [];
+          for (index = 1; index <= 6; index += 1) bits += (parity[index - 1] === "L" ? LEFT : LEFT_G)[+value[index]];
+          bits += "01010";
+          for (index = 7; index < 13; index += 1) bits += RIGHT[+value[index]];
+          bits += "101";
+          for (index = 0; index < bits.length; index += 1) {
+            if (bits[index] !== "1") continue;
+            bars.push({ x: LEFT_EDGE + index * SCALE, height: index < 3 || (index >= 45 && index < 50) || index >= 92 ? 82 : 74 });
+          }
+          return {
+            bars: bars,
+            digits: [
+              { text: value[0], x: LEFT_EDGE - 3, anchor: "end", length: 0 },
+              { text: value.slice(1, 7), x: LEFT_EDGE + 3 * SCALE + 3, anchor: "start", length: 42 * SCALE - 6 },
+              { text: value.slice(7), x: LEFT_EDGE + 50 * SCALE + 3, anchor: "start", length: 42 * SCALE - 6 }
+            ]
+          };
+        }
+
+        /* The barcode as a standalone svg, in the given colors and face. */
+        function svgMarkup(value, ink, paper, font) {
+          var parts = layout(value);
+          return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + WIDTH + " " + HEIGHT + '" role="img" aria-label="ean-13 barcode for ' + value + '">' +
+            '<rect width="' + WIDTH + '" height="' + HEIGHT + '" fill="' + paper + '"/>' +
+            parts.bars.map(function (bar) { return '<rect x="' + bar.x + '" y="8" height="' + bar.height + '" width="' + SCALE + '" fill="' + ink + '"/>'; }).join("") +
+            parts.digits.map(function (digit) {
+              return '<text x="' + digit.x + '" y="98" text-anchor="' + digit.anchor + '"' + (digit.length ? ' textLength="' + digit.length + '"' : "") +
+                ' font-family="' + font + '" font-size="14" fill="' + ink + '">' + digit.text + "</text>";
+            }).join("") + "</svg>";
+        }
+
+        var AGENT_TOOLS = [{
+          name: "make_ean13_barcode",
+          title: "make an ean-13 barcode",
+          description: "Make an EAN-13 retail barcode from 12 digits (the check digit is added) or 13 (the " +
+            "check digit is verified). For a 12-digit UPC-A code, put a 0 in front. Returns the number and " +
+            "the barcode as svg markup.",
+          input: {
+            type: "object",
+            properties: { digits: { type: "string", description: "12 or 13 digits; spaces and hyphens are ignored." } },
+            required: ["digits"]
+          },
+          readOnly: true,
+          compute: function (args) {
+            var value = ean13(args.digits == null ? "" : args.digits);
+            if (!value) throw new Error("give 12 or 13 digits");
+            return { number: value, svg: svgMarkup(value, "#000000", "#ffffff", "monospace") };
+          }
+        }];
+
+        /* ── end core ──────────────────────────────────────────────── */
+
         var input = E.qs("#in");
         var svg = E.qs("#svg");
         var error = E.qs("#err");
@@ -81,14 +173,6 @@
           return "#" + [d[0], d[1], d[2]].map(function (v) { return (v < 16 ? "0" : "") + v.toString(16); }).join("");
         }
 
-        function check(value) {
-          var sum = 0;
-          for (var index = 0; index < 12; index += 1) {
-            sum += +value[index] * (index % 2 ? 3 : 1);
-          }
-          return String((10 - sum % 10) % 10);
-        }
-
         function clear() {
           number = "";
           svg.textContent = "";
@@ -99,17 +183,12 @@
         }
 
         function run() {
-          var value = input.value.trim().replace(/[\s-]/g, "");
+          var value;
           clear();
           error.textContent = "";
+          try { value = ean13(input.value); }
+          catch (e) { error.textContent = e.message; return; }
           if (!value) return;
-          if (!/^\d+$/.test(value)) { error.textContent = "use digits, spaces or hyphens only"; return; }
-
-          if (value.length === 12) value += check(value);
-          if (value.length !== 13 || check(value) !== value[12]) {
-            error.textContent = "enter 12 digits, or 13 with a valid check digit";
-            return;
-          }
 
           number = value;
           svg.setAttribute("aria-label", "ean-13 barcode for " + value);
@@ -117,63 +196,37 @@
           copy.disabled = false;
           png.disabled = false;
 
-          var bits = "101";
-          var parity = PARITY[+value[0]];
-          for (var index = 1; index <= 6; index += 1) {
-            bits += (parity[index - 1] === "L" ? LEFT : LEFT_G)[+value[index]];
-          }
-          bits += "01010";
-          for (index = 7; index < 13; index += 1) bits += RIGHT[+value[index]];
-          bits += "101";
-
-          var namespace = "http://www.w3.org/2000/svg";
-          /* Two units per module. EAN-13 asks for a quiet zone of 11 modules
-             before the start guard and 7 after the end guard, so the 95 bars
-             begin 22 units in and the 226-unit symbol ends 14 units after them. */
-          var scale = 2, left = 11 * scale;
           /* Scannable codes use the theme-independent QR tokens, read here so the
              exported svg carries literal values. */
+          var namespace = "http://www.w3.org/2000/svg", parts = layout(value);
           var style = getComputedStyle(document.documentElement);
           var paper = hexColor(style.getPropertyValue("--color-qr-paper").trim());
           var ink = hexColor(style.getPropertyValue("--color-qr-ink").trim());
+          var font = style.getPropertyValue("--font-mono").trim();
           var background = document.createElementNS(namespace, "rect");
-          background.setAttribute("width", "226");
-          background.setAttribute("height", "106");
+          background.setAttribute("width", String(WIDTH));
+          background.setAttribute("height", String(HEIGHT));
           background.setAttribute("fill", paper);
           svg.appendChild(background);
-
-          for (index = 0; index < bits.length; index += 1) {
-            if (bits[index] !== "1") continue;
-            var bar = document.createElementNS(namespace, "rect");
-            bar.setAttribute("x", String(left + index * scale));
-            bar.setAttribute("y", "8");
-            bar.setAttribute(
-              "height",
-              index < 3 || (index >= 45 && index < 50) || index >= 92 ? "82" : "74"
-            );
-            bar.setAttribute("width", String(scale));
-            bar.setAttribute("fill", ink);
-            svg.appendChild(bar);
-          }
-
-          /* The printed digits sit the way EAN-13 lays them out: the first in the
-             quiet zone before the start guard, then six under each half of the
-             symbol, spread to fill the space between the guards. */
-          var font = style.getPropertyValue("--font-mono").trim();
-          [
-            [value[0], left - 3, "end", 0],
-            [value.slice(1, 7), left + 3 * scale + 3, "start", 42 * scale - 6],
-            [value.slice(7), left + 50 * scale + 3, "start", 42 * scale - 6]
-          ].forEach(function (part) {
+          parts.bars.forEach(function (bar) {
+            var rect = document.createElementNS(namespace, "rect");
+            rect.setAttribute("x", String(bar.x));
+            rect.setAttribute("y", "8");
+            rect.setAttribute("height", String(bar.height));
+            rect.setAttribute("width", String(SCALE));
+            rect.setAttribute("fill", ink);
+            svg.appendChild(rect);
+          });
+          parts.digits.forEach(function (digit) {
             var label = document.createElementNS(namespace, "text");
-            label.setAttribute("x", String(part[1]));
+            label.setAttribute("x", String(digit.x));
             label.setAttribute("y", "98");
-            label.setAttribute("text-anchor", part[2]);
-            if (part[3]) label.setAttribute("textLength", String(part[3]));
+            label.setAttribute("text-anchor", digit.anchor);
+            if (digit.length) label.setAttribute("textLength", String(digit.length));
             label.setAttribute("font-family", font);
             label.setAttribute("font-size", "14");
             label.setAttribute("fill", ink);
-            label.textContent = part[0];
+            label.textContent = digit.text;
             svg.appendChild(label);
           });
         }
@@ -202,25 +255,14 @@
         var query = E.param("t"); if (query !== null) input.value = query;
         run();
 
-        /* For agents: the barcode is drawn on the page and handed back as svg. */
-        E.agentTool({
-          name: "make_ean13_barcode",
-          title: "make an ean-13 barcode",
-          description: "Make an EAN-13 retail barcode from 12 digits (the check digit is added) or 13 (the " +
-            "check digit is verified). For a 12-digit UPC-A code, put a 0 in front. It is drawn on the " +
-            "page, ready to download as svg or png, and returned as svg markup.",
-          input: {
-            type: "object",
-            properties: { digits: { type: "string", description: "12 or 13 digits; spaces and hyphens are ignored." } },
-            required: ["digits"]
-          },
-          readOnly: true,
-          run: function (args) {
-            input.value = String(args.digits == null ? "" : args.digits);
+        /* For agents in the browser: the barcode is drawn on the page too, and
+           the agent gets the core's standalone svg, as it would from /mcp. */
+        E.agentTools(AGENT_TOOLS, {
+          make_ean13_barcode: function (args) {
+            var answer = AGENT_TOOLS[0].compute(args);
+            input.value = String(args.digits);
             run();
-            if (error.textContent) throw new Error(error.textContent);
-            if (!number) throw new Error("give 12 or 13 digits");
-            return { number: number, svg: new XMLSerializer().serializeToString(svg) };
+            return answer;
           }
         });
       });

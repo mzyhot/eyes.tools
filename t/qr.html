@@ -35,6 +35,68 @@
 <script>
 E.tool(function () {
   "use strict";
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure but for the encoder, which wants an element to draw into and gets
+     a throwaway one. The site's MCP server (mcp-server.mjs) runs this block
+     on its own, so an agent that never opens the page gets the same code.
+     AGENT_TOOLS is what the page and the server both offer. */
+
+  var LEVELS = { low: "L", medium: "M", quartile: "Q", high: "H" }, SIZES = [192, 256, 384, 512];
+
+  /** The code's module grid, or an error in the page's words. */
+  function qrModel(text, level) {
+    try {
+      return new QRCode(document.createElement("div"), { text: text, width: 256, height: 256, correctLevel: QRCode.CorrectLevel[level] })._oQRCode;
+    } catch (e) { throw new Error("input is too long for this error-correction level"); }
+  }
+
+  /* The code sits inside a border one module wide, so it scales with the code.
+     The whole image, border included, is the selected size; each edge is
+     rounded to a whole pixel so modules stay crisp. */
+  function qrSquares(model, size) {
+    var count = model.getModuleCount(), span = count + 2, squares = [];
+    var edge = function (k) { return Math.round(k * size / span); };
+    for (var row = 0; row < count; row++) for (var col = 0; col < count; col++) {
+      if (!model.isDark(row, col)) continue;
+      var left = edge(col + 1), top = edge(row + 1);
+      squares.push([left, top, edge(col + 2) - left, edge(row + 2) - top]);
+    }
+    return squares;
+  }
+
+  function qrSvg(squares, size, ink, paper) {
+    var path = squares.map(function (q) { return "M" + q[0] + " " + q[1] + "h" + q[2] + "v" + q[3] + "h-" + q[2] + "z"; }).join("");
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="' + paper + '"/><path d="' + path + '" fill="' + ink + '"/></svg>';
+  }
+
+  var AGENT_TOOLS = [{
+    name: "make_qr_code",
+    title: "make a qr code",
+    description: "Make a QR code for text or a link, returned as svg markup. Higher error correction " +
+      "survives more damage but holds less text.",
+    input: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The text or link to encode." },
+        size: { type: "integer", enum: SIZES, default: 256, description: "Pixels a side." },
+        errorCorrection: { type: "string", enum: ["low", "medium", "quartile", "high"], default: "medium" }
+      },
+      required: ["text"]
+    },
+    readOnly: true,
+    compute: function (args) {
+      var size = args.size == null ? 256 : Number(args.size), level = args.errorCorrection == null ? "medium" : String(args.errorCorrection);
+      var text = String(args.text == null ? "" : args.text);
+      if (SIZES.indexOf(size) < 0) throw new Error("size must be 192, 256, 384 or 512");
+      if (!Object.prototype.hasOwnProperty.call(LEVELS, level)) throw new Error("error correction must be low, medium, quartile or high");
+      if (!text) throw new Error("give some text to encode");
+      return { svg: qrSvg(qrSquares(qrModel(text, LEVELS[level]), size), size, "#000000", "#ffffff") };
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
   var input = E.qs("#in"), host = E.qs("#qr"), error = E.qs("#err"), download = E.qs("#dl"), svgButton = E.qs("#dl-svg"), svgText = "", result = null;
   /* Resolve a colour token to #rrggbb by painting one pixel. The tokens are
      oklch, which many programs that open a downloaded svg cannot read. */
@@ -50,30 +112,18 @@ E.tool(function () {
     download.disabled = true;
     svgButton.disabled = true; svgText = ""; result = null;
     if (!input.value) return;
-    var size = +E.qs("#size").value, model;
+    var size = +E.qs("#size").value, squares;
+    try { squares = qrSquares(qrModel(input.value, E.qs("#level").value), size); }
+    catch (e) { error.textContent = e.message; return; }
     try {
-      model = new QRCode(document.createElement("div"), { text: input.value, width: size, height: size,
-        correctLevel: QRCode.CorrectLevel[E.qs("#level").value] })._oQRCode;
-    } catch (e) { error.textContent = "input is too long for this error-correction level"; return; }
-    try {
-      /* The code sits inside a border one module wide, so it scales with the
-         code. The whole image, border included, is the selected size; each
-         edge is rounded to a whole pixel so modules stay crisp. */
-      var count = model.getModuleCount(), span = count + 2;
       var style = getComputedStyle(document.documentElement), ink = hexColor(style.getPropertyValue("--color-qr-ink").trim()), paper = hexColor(style.getPropertyValue("--color-qr-paper").trim());
-      var canvas = document.createElement("canvas"), path = [];
+      var canvas = document.createElement("canvas");
       canvas.width = canvas.height = size;
       var context = canvas.getContext("2d");
       if (!context) throw new Error("canvas");
-      var edge = function (k) { return Math.round(k * size / span); };
       context.fillStyle = paper; context.fillRect(0, 0, size, size); context.fillStyle = ink;
-      for (var row = 0; row < count; row++) for (var col = 0; col < count; col++) {
-        if (!model.isDark(row, col)) continue;
-        var left = edge(col + 1), top = edge(row + 1), width = edge(col + 2) - left, height = edge(row + 2) - top;
-        path.push("M" + left + " " + top + "h" + width + "v" + height + "h-" + width + "z");
-        context.fillRect(left, top, width, height);
-      }
-      svgText = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="' + E.esc(paper) + '"/><path d="' + path.join("") + '" fill="' + E.esc(ink) + '"/></svg>';
+      squares.forEach(function (q) { context.fillRect(q[0], q[1], q[2], q[3]); });
+      svgText = qrSvg(squares, size, E.esc(ink), E.esc(paper));
       result = canvas; host.appendChild(canvas); download.disabled = false; svgButton.disabled = false;
     } catch (e) { error.textContent = "this browser could not draw the code"; }
   }
@@ -96,35 +146,16 @@ E.tool(function () {
   if (query) input.value = query;
   run();
 
-  /* For agents: the code is drawn on the page, where it can be scanned or
-     saved, and handed back as svg. */
-  var LEVELS = { low: "L", medium: "M", quartile: "Q", high: "H" };
-  E.agentTool({
-    name: "make_qr_code",
-    title: "make a qr code",
-    description: "Make a QR code for text or a link. It is drawn on the page, ready to scan or download " +
-      "as png or svg, and returned as svg markup. Higher error correction survives more damage but " +
-      "holds less text.",
-    input: {
-      type: "object",
-      properties: {
-        text: { type: "string", description: "The text or link to encode." },
-        size: { type: "integer", enum: [192, 256, 384, 512], default: 256, description: "Pixels a side." },
-        errorCorrection: { type: "string", enum: ["low", "medium", "quartile", "high"], default: "medium" }
-      },
-      required: ["text"]
-    },
-    readOnly: true,
-    run: function (args) {
-      var size = String(args.size == null ? 256 : args.size), level = args.errorCorrection == null ? "medium" : String(args.errorCorrection);
-      if (!Array.prototype.some.call(E.qs("#size").options, function (o) { return o.value === size; })) throw new Error("size must be 192, 256, 384 or 512");
-      if (!LEVELS.hasOwnProperty(level)) throw new Error("error correction must be low, medium, quartile or high");
-      E.qs("#size").value = size;
-      E.qs("#level").value = LEVELS[level];
-      input.value = String(args.text == null ? "" : args.text);
+  /* For agents in the browser: the code is drawn on the page, where it can
+     be scanned or saved, and the agent gets the same svg the page offers. */
+  E.agentTools(AGENT_TOOLS, {
+    make_qr_code: function (args) {
+      AGENT_TOOLS[0].compute(args);
+      E.qs("#size").value = String(args.size == null ? 256 : args.size);
+      E.qs("#level").value = LEVELS[args.errorCorrection == null ? "medium" : String(args.errorCorrection)];
+      input.value = String(args.text);
       run();
       if (error.textContent) throw new Error(error.textContent);
-      if (!svgText) throw new Error("give some text to encode");
       return { svg: svgText };
     }
   });

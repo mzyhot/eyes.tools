@@ -33,7 +33,10 @@
 E.tool(function () {
   "use strict";
 
-  var input = E.qs("#in"), out = E.qs("#out");
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
 
   /* split any convention into lowercase word tokens */
   function words(s) {
@@ -63,6 +66,35 @@ E.tool(function () {
     ["upper",    function (w, raw) { return raw.toUpperCase(); }]
   ];
 
+  /* Every form of one text, keyed by form name. */
+  function convert(raw) {
+    var w = words(raw), out = {};
+    FORMS.forEach(function (f) { out[f[0]] = raw.trim() ? f[1](w, raw) : ""; });
+    return out;
+  }
+
+  var AGENT_TOOLS = [{
+    name: "convert_case",
+    title: "change the case of text",
+    description: "Rewrite text or an identifier in every common case at once: camel, pascal, snake, kebab, " +
+      "constant, dot, path, title, sentence, lower and upper.",
+    input: {
+      type: "object",
+      properties: { text: { type: "string", description: "The text or identifier to rewrite." } },
+      required: ["text"]
+    },
+    readOnly: true,
+    compute: function (args) {
+      var text = String(args.text == null ? "" : args.text);
+      if (!text.trim()) throw new Error("give some text to convert");
+      return convert(text);
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
+  var input = E.qs("#in"), out = E.qs("#out");
+
   var rows = FORMS.map(function (f) {
     var v = E.el("div", { class: "res__v" });
     var b = E.el("button", { class: "tbtn", type: "button", text: "copy", "aria-label": "copy " + f[0] + " case" });
@@ -71,13 +103,12 @@ E.tool(function () {
       E.el("div", { class: "res__k", text: f[0] }), v, b
     ]);
     out.appendChild(row);
-    return { fn: f[1], v: v, button: b };
+    return { v: v, button: b };
   });
 
   function run() {
-    var raw = input.value;
-    var w = words(raw);
-    rows.forEach(function (r) { r.v.textContent = raw.trim() ? r.fn(w, raw) : ""; r.button.disabled = !r.v.textContent; });
+    var forms = convert(input.value);
+    rows.forEach(function (r, at) { r.v.textContent = forms[FORMS[at][0]]; r.button.disabled = !r.v.textContent; });
   }
 
   E.on(input, "input", run);
@@ -103,25 +134,13 @@ E.tool(function () {
   input.value = E.param("t") || "";
   run();
 
-  /* For agents: the same eleven forms, with the text shown on the page. */
-  E.agentTool({
-    name: "convert_case",
-    title: "change the case of text",
-    description: "Rewrite text or an identifier in every common case at once: camel, pascal, snake, kebab, " +
-      "constant, dot, path, title, sentence, lower and upper. The text is also shown on the page.",
-    input: {
-      type: "object",
-      properties: { text: { type: "string", description: "The text or identifier to rewrite." } },
-      required: ["text"]
-    },
-    readOnly: true,
-    run: function (args) {
+  /* For agents in the browser: the core's tool, with the text put in the
+     page's field so the visitor sees what was asked. */
+  E.agentTools(AGENT_TOOLS, {
+    convert_case: function (args) {
       input.value = String(args.text == null ? "" : args.text);
       run();
-      if (!input.value.trim()) throw new Error("give some text to convert");
-      var forms = {};
-      rows.forEach(function (r, at) { forms[FORMS[at][0]] = r.v.textContent; });
-      return forms;
+      return AGENT_TOOLS[0].compute(args);
     }
   });
 });

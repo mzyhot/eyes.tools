@@ -31,7 +31,7 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
       }
     }
   }
-  for (const path of ['/dev-server.mjs', '/share-server.mjs', '/public-files.mjs', '/README.md', '/tests/server.test.mjs', '/.git/config', '/.env', '/package.json', '/s.js.bak', '/%2e%2e%2fetc/passwd', '/%ZZ', '/t/%2e%2e%2fshare-server.mjs']) {
+  for (const path of ['/dev-server.mjs', '/share-server.mjs', '/mcp-server.mjs', '/public-files.mjs', '/README.md', '/tests/server.test.mjs', '/.git/config', '/.env', '/package.json', '/s.js.bak', '/%2e%2e%2fetc/passwd', '/%ZZ', '/t/%2e%2e%2fshare-server.mjs']) {
     const res = await get(path);
     assert.equal(res.status, 404, path);
     // The not-found page has no inline script, so the base policy covers it.

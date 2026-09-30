@@ -39,6 +39,78 @@
 <script>
 E.tool(function () {
   "use strict";
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure but for R, the randomness sources the page's dependencies give it.
+     The site's MCP server (mcp-server.mjs) runs this block on its own, after
+     the same dependencies, so an agent that never opens the page gets the same
+     roll. AGENT_TOOLS is what the page and the server both offer. */
+
+  var SOURCES = ["csrng", "trng", "prng"];
+
+  function whole(raw, min, max, label) {
+    raw = String(raw).trim();
+    var value = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new Error(label + " must be a whole number between " + min + " and " + max);
+    }
+    return value;
+  }
+
+  /**
+   * Roll dice from one source.
+   * @param {number} n How many dice, 1…100.
+   * @param {number} s Sides each, 2…1,000,000.
+   * @returns {Promise<object>} The rolls and their total, and for a drand
+   *   draw, what it takes to check it.
+   */
+  function rollDice(n, s, source) {
+    return R.source(source, R.byteCount(BigInt(s), n)).then(function (draw) {
+      var rolls = [], at = 0, total = 0;
+      for (var i = 0; i < n; i++) {
+        var x = R.uniform(draw.bytes, BigInt(s), at);
+        at = x.offset;
+        rolls.push(Number(x.value) + 1);
+        total += rolls[i];
+      }
+      var result = { rolls: rolls, total: total, source: source, verified: !!draw.verified };
+      if (draw.verified) { result.round = draw.round; result.chainHash = draw.chainHash; }
+      return result;
+    });
+  }
+
+  function sourceOf(args) {
+    var source = args.source == null ? "csrng" : String(args.source);
+    if (SOURCES.indexOf(source) < 0) throw new Error("source must be csrng, trng or prng");
+    return source;
+  }
+
+  var AGENT_TOOLS = [{
+    name: "roll_dice",
+    title: "roll dice",
+    description: "Roll up to 100 dice of 2 to 1,000,000 sides. The source is csrng (Web Crypto; the " +
+      "default), trng (a public drand beacon whose signature is verified, so anyone can check the round " +
+      "later; needs the network) or prng (Math.random, predictable).",
+    input: {
+      type: "object",
+      properties: {
+        dice: { type: "integer", minimum: 1, maximum: 100, default: 1 },
+        sides: { type: "integer", minimum: 2, maximum: 1000000, default: 6 },
+        source: { type: "string", enum: SOURCES, default: "csrng" }
+      }
+    },
+    readOnly: true,
+    network: true,
+    compute: function (args) {
+      var source = sourceOf(args);
+      var n = whole(args.dice == null ? 1 : args.dice, 1, 100, "dice");
+      var s = whole(args.sides == null ? 6 : args.sides, 2, 1000000, "sides");
+      return rollDice(n, s, source);
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
   var b = E.qs("#roll"), er = E.qs("#err"), totalEl = E.qs("#total"), rollsEl = E.qs("#rolls"), proof = E.qs("#proof");
   var copy = E.qs("#copy"), report = "", rollSeq = 0;
   /* The three sources rng offers, described the same way. */
@@ -50,13 +122,6 @@ E.tool(function () {
   function mode() {
     var selected = E.qsa("input[name=src]").filter(function (x) { return x.checked; })[0];
     return selected ? selected.value : "csrng";
-  }
-  function whole(id, min, max, label) {
-    var raw = E.qs(id).value.trim(), value = Number(raw);
-    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < min || value > max) {
-      throw new Error(label + " must be a whole number between " + min + " and " + max);
-    }
-    return value;
   }
   function clear() {
     er.textContent = "";
@@ -84,33 +149,23 @@ E.tool(function () {
     var n, s, seq = ++rollSeq, source = mode();
     clear();
     try {
-      n = whole("#dice", 1, 100, "dice");
-      s = whole("#sides", 2, 1000000, "sides");
+      n = whole(E.qs("#dice").value, 1, 100, "dice");
+      s = whole(E.qs("#sides").value, 2, 1000000, "sides");
     } catch (e) { er.textContent = e.message; return Promise.reject(e); }
     b.disabled = true;
     b.dataset.state = "loading";
-    return R.source(source, R.byteCount(BigInt(s), n)).then(function (r) {
+    return rollDice(n, s, source).then(function (result) {
       if (seq !== rollSeq) throw new Error("a newer roll replaced this one");
-      var vals = [], at = 0, total = 0;
-      for (var i = 0; i < n; i++) {
-        var x = R.uniform(r.bytes, BigInt(s), at);
-        at = x.offset;
-        var v = Number(x.value) + 1;
-        vals.push(v);
-        total += v;
-      }
-      totalEl.textContent = total;
-      rollsEl.textContent = vals.join(" + ");
-      report = n + "d" + s + ": " + vals.join(" + ") + " = " + total;
+      totalEl.textContent = result.total;
+      rollsEl.textContent = result.rolls.join(" + ");
+      report = n + "d" + s + ": " + result.rolls.join(" + ") + " = " + result.total;
       copy.disabled = false;
-      proof.hidden = !r.verified;
-      if (r.verified) {
-        E.qs("#round").textContent = r.round;
-        E.qs("#chain").textContent = r.chainHash;
+      proof.hidden = !result.verified;
+      if (result.verified) {
+        E.qs("#round").textContent = result.round;
+        E.qs("#chain").textContent = result.chainHash;
       }
       E.flash(b, "rolled");
-      var result = { rolls: vals, total: total, source: source, verified: !!r.verified };
-      if (r.verified) { result.round = r.round; result.chainHash = r.chainHash; }
       return result;
     }, function (e) {
       var message = (e && e.message) || "the randomness source failed";
@@ -126,28 +181,12 @@ E.tool(function () {
   E.on(b, "click", function () { roll().catch(function () {}); });
   note();
 
-  /* For agents: a roll on the page, from the source the agent names. */
-  E.agentTool({
-    name: "roll_dice",
-    title: "roll dice",
-    description: "Roll up to 100 dice of 2 to 1,000,000 sides. The source is csrng (the browser's Web " +
-      "Crypto; the default), trng (a public drand beacon whose signature the page verifies, so anyone " +
-      "can check the round later; needs the network) or prng (Math.random, predictable). The roll is " +
-      "shown on the page.",
-    input: {
-      type: "object",
-      properties: {
-        dice: { type: "integer", minimum: 1, maximum: 100, default: 1 },
-        sides: { type: "integer", minimum: 2, maximum: 1000000, default: 6 },
-        source: { type: "string", enum: ["csrng", "trng", "prng"], default: "csrng" }
-      }
-    },
-    readOnly: true,
-    run: function (args) {
-      var source = args.source == null ? "csrng" : String(args.source);
-      var radio = E.qs('input[name=src][value="' + source + '"]');
-      if (["csrng", "trng", "prng"].indexOf(source) < 0 || !radio) throw new Error("source must be csrng, trng or prng");
-      radio.checked = true;
+  /* For agents in the browser: the core's tool as a roll on the page, so the
+     visitor sees the roll the agent was given. */
+  E.agentTools(AGENT_TOOLS, {
+    roll_dice: function (args) {
+      var source = sourceOf(args);
+      E.qs('input[name=src][value="' + source + '"]').checked = true;
       note();
       E.qs("#dice").value = String(args.dice == null ? 1 : args.dice);
       E.qs("#sides").value = String(args.sides == null ? 6 : args.sides);

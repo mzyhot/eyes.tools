@@ -96,15 +96,21 @@ default, lets it through with no rule opening `/api/share/*`.
 - `/api/share/events` is an unbuffered `text/event-stream` response with caching
   disabled. Heartbeats arrive every 15 seconds; the browser reconnects after
   45 seconds without data. Avoid a proxy read timeout below that interval.
-- Exclude `/api/*` from CDN and proxy caching. A join request should return JSON,
+- Exclude `/api/*` and `/mcp` from CDN and proxy caching. A join request should return JSON,
   never an HTML page or a cached response.
 - Do not transform HTML/JavaScript or inject inline scripts at the edge: inline
   scripts use CSP hashes calculated from the original HTML. An added
   same-origin script tag leaves those hashes intact, so Cloudflare's WebMCP
   bridge (`/.webmcp/bridge.js`, injected when WebMCP is on under Agent
   Readiness) runs under the policy as it is, beside the tools each page
-  registers itself. Its Site MCP server pack reads tools from `/mcp`, which
-  this server does not provide, so that pack finds nothing to offer.
+  registers itself. Its Site MCP server pack reads tools from `/mcp`, the
+  site's own MCP server, and offers them to agents in the browser too.
+- `/mcp` stays on the website's origin: `POST` JSON in, JSON out, never
+  cached. Agents call it from their own servers, with no browser or cookies and
+  often with an AI user agent, so a bot check must let `POST /mcp` through;
+  with Anubis, allow the path `^/mcp$` ahead of any rule denying AI user agents.
+  Browser pages on other sites are refused unless listed in
+  `MCP_ALLOWED_ORIGINS`, which works as `SHARE_ALLOWED_ORIGINS` does.
 - WebRTC sends files directly or through your optional TURN relay. The HTTP proxy
   carries only signaling, not file data. TURN is needed for some NAT/firewall
   combinations; see [Sharing](https://github.com/mzyhot/eyes.tools/wiki/Sharing#stun-and-turn)
@@ -138,6 +144,8 @@ sudo systemctl status eyes --no-pager
 sudo journalctl -u eyes -n 50 --no-pager
 curl --fail http://127.0.0.1:8777/healthz
 curl --head http://127.0.0.1:8777/share
+curl --fail -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' http://127.0.0.1:8777/mcp
 ```
 
 Then visit your public HTTPS site in two browsers and verify:
