@@ -61,7 +61,7 @@
           <dt>instant</dt>
           <dd id="iso"></dd>
         </dl>
-        <button class="btn -ghost" id="copy" type="button" disabled>copy</button>
+        <div class="row mt-4"><button class="btn -ghost" id="copy" type="button" disabled>copy</button></div>
       </section>
     </main>
 
@@ -82,7 +82,7 @@
         var er = E.qs("#err");
         var report = "";
         var lastInstant = null, lastSource = "";
-        var occurrence = E.qs("#occurrence"), overlap = E.qs("#overlap");
+        var occurrence = E.qs("#occurrence"), overlap = E.qs("#overlap"), errorTimer = null;
 
         function pad(n) {
           return String(n).padStart(2, "0");
@@ -162,21 +162,33 @@
           }
         }
 
-        function run() {
+        /* A zone name is mostly typed a letter at a time, so while typing an
+           unknown name waits for a pause before it is called an error. */
+        function run(eager) {
+          clearTimeout(errorTimer);
           er.textContent = "";
           clearOutput();
           overlap.hidden = true;
+          from.removeAttribute("aria-invalid");
+          to.removeAttribute("aria-invalid");
 
-          if (!valid(from.value) || !valid(to.value)) {
-            er.textContent = "use an IANA time zone such as America/Chicago";
+          var bad = [from, to].filter(function (field) { return !valid(field.value.trim()); });
+          if (bad.length) {
+            var show = function () {
+              bad.forEach(function (field) { field.setAttribute("aria-invalid", "true"); });
+              er.textContent = (bad.length === 2 ? "from and to" : bad[0] === from ? "from" : "to") +
+                ": use an IANA time zone such as America/Chicago";
+            };
+            if (eager === false) errorTimer = setTimeout(show, 600); else show();
             return;
           }
 
           try {
-            var sourceKey = when.value + "\n" + from.value;
-            var ms = epochFor(when.value, from.value, sourceKey === lastSource ? lastInstant : null);
-            var a = format(ms, from.value);
-            var b = format(ms, to.value);
+            var fromZone = from.value.trim(), toZone = to.value.trim();
+            var sourceKey = when.value + "\n" + fromZone;
+            var ms = epochFor(when.value, fromZone, sourceKey === lastSource ? lastInstant : null);
+            var a = format(ms, fromZone);
+            var b = format(ms, toZone);
             var instant = new Date(ms).toISOString();
 
             result.textContent = b;
@@ -214,10 +226,12 @@
         when.value = now.toISOString().slice(0, 16);
         to.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-        [when, from, to].forEach(function (input) { E.on(input, "input", E.debounce(run, 160)); });
+        var typed = E.debounce(function () { run(false); }, 160);
+        [when, from, to].forEach(function (input) { E.on(input, "input", typed); });
         E.on(occurrence, "change", function () { lastSource = ""; run(); });
-        E.on(E.qs("#convert"), "click", run);
+        E.on(E.qs("#convert"), "click", function () { run(); });
         E.on(E.qs("#swap"), "click", function () {
+          from.value = from.value.trim(); to.value = to.value.trim();
           if (!valid(from.value) || !valid(to.value)) { run(); return; }
           var next, instant;
           try {

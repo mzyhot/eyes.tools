@@ -163,8 +163,11 @@ E.tool(function () {
   }
   /* Calculator UI */
   var input = E.qs("#expression"), output = E.qs("#result"), error = E.qs("#error"), copy = E.qs("#copy");
-  var convertResult = E.qs("#convert-result"), calculation = null;
-  function runCalculation() {
+  var convertResult = E.qs("#convert-result"), calculation = null, errorTimer = null;
+  /* While the visitor is typing, an expression is usually unfinished rather
+     than wrong, so its error waits for a pause; Enter or clear shows it now. */
+  function runCalculation(eager) {
+    clearTimeout(errorTimer);
     output.textContent = "";
     error.textContent = "";
     input.removeAttribute("aria-invalid");
@@ -177,15 +180,18 @@ E.tool(function () {
         copy.disabled = false; convertResult.disabled = false;
       }
     } catch (e) {
-      error.textContent = e.message;
-      input.setAttribute("aria-invalid", "true");
+      var show = function () {
+        error.textContent = e.message;
+        input.setAttribute("aria-invalid", "true");
+      };
+      if (eager) show(); else errorTimer = setTimeout(show, 600);
     }
   }
-  var update = E.debounce(runCalculation, 120);
-  E.on(input, "input", function () { copy.disabled = true; convertResult.disabled = true; calculation = null; output.textContent = ""; update(); });
-  E.on(input, "keydown", function (e) { if (e.key === "Enter") runCalculation(); });
+  var update = E.debounce(function () { runCalculation(false); }, 120);
+  E.on(input, "input", function () { copy.disabled = true; convertResult.disabled = true; calculation = null; update(); });
+  E.on(input, "keydown", function (e) { if (e.key === "Enter") runCalculation(true); });
   E.on(copy, "click", function () { E.copy(output.textContent, this); });
-  E.on(E.qs("#clear"), "click", function () { input.value = ""; runCalculation(); input.focus(); });
+  E.on(E.qs("#clear"), "click", function () { input.value = ""; runCalculation(true); input.focus(); });
 
   /* Unit conversion UI */
   var quantity = E.qs("#quantity"), unitInput = E.qs("#value"), from = E.qs("#from"), to = E.qs("#to");
@@ -245,7 +251,7 @@ E.tool(function () {
     unitInput.focus();
   });
   input.value = E.param("t") || "";
-  runCalculation();
+  runCalculation(true);
   choose();
   setMode(E.param("mode") === "units" ? "units" : "calculate");
 });
