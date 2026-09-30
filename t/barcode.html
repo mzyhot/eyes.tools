@@ -26,13 +26,13 @@
         <label class="lbl" for="in">ean-13 digits</label>
         <input class="field" id="in" type="text" inputmode="numeric" maxlength="32"
                value="590123412345" autocomplete="off" spellcheck="false">
-        <p class="hint">enter 12 digits; the check digit is added. a valid 13th digit is accepted.</p>
+        <p class="hint">enter 12 digits and the check digit is added, or all 13 if you have them. for a 12-digit upc-a code, put a 0 in front.</p>
         <p class="err" id="err" role="alert"></p>
       </section>
 
       <section>
         <figure class="figure">
-          <svg id="svg" viewBox="0 0 226 112" role="img" aria-label="generated barcode"></svg>
+          <svg id="svg" viewBox="0 0 226 106" role="img" aria-label="generated barcode"></svg>
         </figure>
         <div class="row mt-2">
           <button class="btn" id="dl" type="button" disabled>download svg</button>
@@ -92,6 +92,7 @@
         function clear() {
           number = "";
           svg.textContent = "";
+          svg.setAttribute("aria-label", "generated barcode");
           download.disabled = true;
           copy.disabled = true;
           png.disabled = true;
@@ -111,6 +112,7 @@
           }
 
           number = value;
+          svg.setAttribute("aria-label", "ean-13 barcode for " + value);
           download.disabled = false;
           copy.disabled = false;
           png.disabled = false;
@@ -136,7 +138,7 @@
           var ink = hexColor(style.getPropertyValue("--color-qr-ink").trim());
           var background = document.createElementNS(namespace, "rect");
           background.setAttribute("width", "226");
-          background.setAttribute("height", "112");
+          background.setAttribute("height", "106");
           background.setAttribute("fill", paper);
           svg.appendChild(background);
 
@@ -154,15 +156,26 @@
             svg.appendChild(bar);
           }
 
-          var label = document.createElementNS(namespace, "text");
-          label.setAttribute("x", String(left + 95 * scale / 2));
-          label.setAttribute("y", "106");
-          label.setAttribute("text-anchor", "middle");
-          label.setAttribute("font-family", style.getPropertyValue("--font-mono").trim());
-          label.setAttribute("font-size", "14");
-          label.setAttribute("fill", ink);
-          label.textContent = value;
-          svg.appendChild(label);
+          /* The printed digits sit the way EAN-13 lays them out: the first in the
+             quiet zone before the start guard, then six under each half of the
+             symbol, spread to fill the space between the guards. */
+          var font = style.getPropertyValue("--font-mono").trim();
+          [
+            [value[0], left - 3, "end", 0],
+            [value.slice(1, 7), left + 3 * scale + 3, "start", 42 * scale - 6],
+            [value.slice(7), left + 50 * scale + 3, "start", 42 * scale - 6]
+          ].forEach(function (part) {
+            var label = document.createElementNS(namespace, "text");
+            label.setAttribute("x", String(part[1]));
+            label.setAttribute("y", "98");
+            label.setAttribute("text-anchor", part[2]);
+            if (part[3]) label.setAttribute("textLength", String(part[3]));
+            label.setAttribute("font-family", font);
+            label.setAttribute("font-size", "14");
+            label.setAttribute("fill", ink);
+            label.textContent = part[0];
+            svg.appendChild(label);
+          });
         }
 
         E.on(input, "input", run);
@@ -178,7 +191,7 @@
           var button = this, currentNumber = number, image = new Image(), url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
           button.disabled = true;
           image.onload = function () {
-            var canvas = document.createElement("canvas"); canvas.width = 904; canvas.height = 448;
+            var canvas = document.createElement("canvas"); canvas.width = 904; canvas.height = 424;
             canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
             URL.revokeObjectURL(url);
             canvas.toBlob(function (blob) { button.disabled = !number; if (!blob) { error.textContent = "the browser could not create a png"; return; } E.download(blob, "ean-13-" + currentNumber + ".png", "image/png"); E.flash(button, "downloaded"); }, "image/png");
