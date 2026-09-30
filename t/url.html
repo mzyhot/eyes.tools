@@ -15,12 +15,12 @@
       <section>
         <label class="lbl" for="in">text or url</label>
         <textarea class="field" id="in" spellcheck="false"></textarea>
+        <label class="check mt-2"><input type="checkbox" id="form"><span>form encoding (+ for spaces)</span></label>
         <div class="row mt-2">
           <button class="btn" id="parse" type="button">parse</button>
           <button class="btn -ghost" id="enc" type="button">encode</button>
           <button class="btn -ghost" id="dec" type="button">decode</button>
         </div>
-        <label class="check mt-2"><input type="checkbox" id="form"><span>form encoding (+ for spaces)</span></label>
         <p class="err" id="err" role="alert"></p>
       </section>
 
@@ -73,15 +73,17 @@
               params.push(key + " = " + value);
             });
             put([
-              "scheme  " + url.protocol.slice(0, -1),
-              "host    " + url.host,
+              "scheme  " + url.protocol.slice(0, -1)
+            ].concat(url.username ? ["user    " + url.username + (url.password ? ":" + url.password : "")] : [], [
+              "host    " + url.hostname
+            ], url.port ? ["port    " + url.port] : [], [
               "path    " + url.pathname,
               "query   " + (url.search || "—"),
               "hash    " + (url.hash || "—"),
               "",
               "parameters",
               params.join("\n") || "—"
-            ].join("\n"));
+            ]).join("\n"));
           } catch (e) {
             error.textContent = mode === "dec" ? "invalid percent encoding" : mode === "enc" ? "text contains an invalid unicode character" : "enter an absolute url, including https://";
           }

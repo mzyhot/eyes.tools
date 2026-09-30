@@ -25,6 +25,7 @@
     <label class="lbl" for="file">file to data uri</label>
     <input class="field" id="file" type="file" aria-describedby="file-hint">
     <p class="hint" id="file-hint">the file stays in this tab and is never uploaded.</p>
+    <p class="err" id="file-err" role="alert"></p>
     <label class="lbl mt-4" for="uri">data uri</label>
     <textarea class="field" id="uri" readonly aria-live="polite"></textarea>
     <button class="btn -ghost mt-2" type="button" data-copy="#uri">copy data uri</button>
@@ -46,7 +47,7 @@
    block at a time. */
 E.tool(function () {
   "use strict";
-  var input = E.qs("#in"), output = E.qs("#out"), error = E.qs("#err"), fileInput = E.qs("#file"), uri = E.qs("#uri"), fileSeq = 0, activeReader = null;
+  var input = E.qs("#in"), output = E.qs("#out"), error = E.qs("#err"), fileInput = E.qs("#file"), uri = E.qs("#uri"), fileError = E.qs("#file-err"), fileSeq = 0, activeReader = null;
   var BLOCK = 8192;
   function bytes(value) { return new TextEncoder().encode(value); }
   function encode(value) {
@@ -56,31 +57,48 @@ E.tool(function () {
     return E.qs("#url-safe").checked ? result.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") : result;
   }
   function decode(value) {
-    var normalized = value.replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/");
-    var binary = atob(normalized), data = new Uint8Array(binary.length), i;
+    var normalized = value.replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/"), binary, i;
+    try { binary = atob(normalized); } catch (e) { throw new Error("not valid base64"); }
+    var data = new Uint8Array(binary.length);
     for (i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
-    return new TextDecoder("utf-8", { fatal: true }).decode(data);
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(data); }
+    catch (e) { throw new Error("valid base64, but the bytes are not utf-8 text"); }
   }
   /* Which button produced the result, so the url-safe box can redo an encode
      rather than leave the other alphabet on screen. */
   var shown = null;
-  function runEncode() { shown = "enc"; try { error.textContent = ""; output.value = encode(input.value); } catch (e) { output.value = ""; error.textContent = "could not encode this text"; } }
-  function runDecode() { shown = "dec"; try { error.textContent = ""; output.value = decode(input.value); } catch (e) { output.value = ""; error.textContent = "invalid base64 or utf-8"; } }
+  /* The chosen direction wears the primary style, as json's and url's do. */
+  function choose(direction) {
+    shown = direction;
+    ["enc", "dec"].forEach(function (id) {
+      var button = E.qs("#" + id);
+      button.classList.toggle("-ghost", id !== direction);
+      button.setAttribute("aria-pressed", String(id === direction));
+    });
+  }
+  function runEncode() { choose("enc"); try { error.textContent = ""; output.value = encode(input.value); } catch (e) { output.value = ""; error.textContent = "could not encode this text"; } }
+  function runDecode() { choose("dec"); try { error.textContent = ""; output.value = decode(input.value); } catch (e) { output.value = ""; error.textContent = e.message; } }
   E.on(E.qs("#enc"), "click", runEncode);
   E.on(E.qs("#dec"), "click", runDecode);
+  /* Once a direction is chosen the result follows the input, so an edit never
+     leaves a stale answer on screen. */
+  E.on(input, "input", E.debounce(function () {
+    if (shown === "enc") runEncode();
+    else if (shown === "dec") runDecode();
+  }));
   E.on(E.qs("#url-safe"), "change", function () { if (shown === "enc") runEncode(); });
   E.on(fileInput, "change", function () {
     var file = this.files && this.files[0], seq = ++fileSeq;
     if (activeReader && activeReader.readyState === 1) activeReader.abort();
     uri.value = "";
-    error.textContent = "";
+    fileError.textContent = "";
     if (!file) return;
-    if (file.size > 16 * 1024 * 1024) { error.textContent = "data uri files are limited to 16 MB to keep this tab responsive"; return; }
+    if (file.size > 16 * 1024 * 1024) { fileError.textContent = "data uri files are limited to 16 MB to keep this tab responsive"; return; }
     var reader = activeReader = new FileReader();
     reader.onload = function () { if (seq === fileSeq) uri.value = String(reader.result || ""); };
-    reader.onerror = function () { if (seq === fileSeq) error.textContent = "could not read that file"; };
-    reader.onabort = function () { if (seq === fileSeq) error.textContent = "file read cancelled"; };
-    try { reader.readAsDataURL(file); } catch (e) { error.textContent = "could not read that file"; }
+    reader.onerror = function () { if (seq === fileSeq) fileError.textContent = "could not read that file"; };
+    reader.onabort = function () { if (seq === fileSeq) fileError.textContent = "file read cancelled"; };
+    try { reader.readAsDataURL(file); } catch (e) { fileError.textContent = "could not read that file"; }
   });
   var query = E.param("t");
   if (query) { input.value = query; E.qs("#enc").click(); }

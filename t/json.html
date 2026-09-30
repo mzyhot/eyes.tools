@@ -6,7 +6,6 @@
 <link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
-<style>.status-ok{color:var(--color-dim)}</style>
 <script src="../site.js"></script>
 <script src="../theme.js"></script>
 </head>
@@ -16,9 +15,10 @@
   <section>
     <label class="lbl" for="in">json</label>
     <textarea class="field" id="in"></textarea>
-    <div class="grid2 mt-2"><div><label class="lbl" for="indent">indent</label><select class="field" id="indent"><option value="2">2 spaces</option><option value="4">4 spaces</option><option value="tab">tabs</option></select></div></div>
+    <div class="grid2 mt-4"><div><label class="lbl" for="indent">indent</label><select class="field" id="indent"><option value="2">2 spaces</option><option value="4">4 spaces</option><option value="tab">tabs</option></select></div></div>
     <div class="row mt-2"><button class="btn" id="fmt" type="button">format</button><button class="btn -ghost" id="min" type="button">minify</button><button class="btn -ghost" id="esc" type="button">escape</button><button class="btn -ghost" id="unesc" type="button">unescape</button><button class="btn -ghost" type="button" data-copy="#out">copy</button></div>
     <p class="err" id="err" role="alert"></p>
+    <p class="hint" id="status" role="status"></p>
   </section>
   <section><label class="lbl" for="out">result</label><textarea class="field" id="out" readonly aria-live="polite"></textarea></section>
 </main>
@@ -28,10 +28,14 @@
 <script>
 E.tool(function () {
   "use strict";
-  var input = E.qs("#in"), output = E.qs("#out"), error = E.qs("#err");
+  var input = E.qs("#in"), output = E.qs("#out"), error = E.qs("#err"), status = E.qs("#status");
   var mode = "format";
   var actions = [["#fmt", "format"], ["#min", "minify"], ["#esc", "escape"], ["#unesc", "unescape"]];
-  function clearStatus() { error.classList.remove("status-ok"); }
+  /* Engine messages open with a capital ("Unexpected token…"); the site's
+     errors are lowercase. A leading acronym such as JSON is left alone. */
+  function quiet(message) {
+    return /^[A-Z][a-z]/.test(message) ? message.charAt(0).toLowerCase() + message.slice(1) : message;
+  }
   function formatJSON(source, indent) {
     // Validate without serializing the parsed values: JSON.stringify would
     // silently round large integers, normalize exponents, and lose duplicate keys.
@@ -65,7 +69,7 @@ E.tool(function () {
       button.classList.toggle("-ghost", !selected);
       button.setAttribute("aria-pressed", String(selected));
     });
-    if (!input.value.trim() && mode !== "escape") { output.value = ""; clearStatus(); error.textContent = ""; return; }
+    if (!input.value.trim() && mode !== "escape") { output.value = ""; status.textContent = error.textContent = ""; return; }
     try {
       if (input.value.length > 2 * 1024 * 1024) throw new Error("keep json input under 2 million characters");
       if (mode === "escape") {
@@ -80,12 +84,12 @@ E.tool(function () {
           output.value = formatJSON(input.value, mode === "minify" ? "" : indent === "tab" ? "\t" : " ".repeat(+indent));
         }
       }
-      error.classList.add("status-ok");
-      error.textContent = mode === "unescape" ? "decoded string" : mode === "escape" ? "escaped as a json string" : "valid json";
+      error.textContent = "";
+      status.textContent = mode === "unescape" ? "decoded string" : mode === "escape" ? "escaped as a json string" : "valid json";
     } catch (e) {
       output.value = "";
-      clearStatus();
-      error.textContent = e.message || "invalid json";
+      status.textContent = "";
+      error.textContent = quiet(e.message || "invalid json");
     }
   }
   actions.forEach(function (action) {
