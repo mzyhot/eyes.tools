@@ -14,7 +14,7 @@
 
 <main class="stack-6">
   <section><label class="lbl" for="file">audio file</label><input class="field" id="file" type="file" accept="audio/*,.wav,.wave,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.webm"><p class="hint">typically wav, mp3, m4a/aac, flac, ogg/opus/vorbis, and webm · codec support depends on your browser</p><p class="err" id="err" role="alert"></p></section>
-  <section><figure class="figure"><canvas id="canvas" width="960" height="480" role="img" aria-label="audio spectrogram"></canvas></figure><div class="row mt-2"><button class="btn" id="dl" type="button" disabled>download png</button><span class="hint" id="meta" aria-live="polite"></span></div></section>
+  <section><figure class="figure" id="frame" hidden><canvas id="canvas" width="960" height="480" role="img" aria-label="audio spectrogram"></canvas></figure><div class="row mt-2"><button class="btn" id="dl" type="button" disabled>download png</button><span class="hint" id="meta" aria-live="polite"></span></div></section>
 </main>
 
 <script src="../tools.js"></script>
@@ -42,7 +42,7 @@
        calls each preceded by a globalAlpha and fillStyle change. */
 E.tool(function () {
   "use strict";
-  var c = E.qs("#canvas"), ctx = c.getContext("2d"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl"), activeContext = null, filename = "spectrogram", loadSeq = 0, N = 1024, MAX_FILE = 150 * 1024 * 1024;
+  var c = E.qs("#canvas"), figure = E.qs("#frame"), ctx = c.getContext("2d"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl"), activeContext = null, filename = "spectrogram", loadSeq = 0, N = 1024, MAX_FILE = 150 * 1024 * 1024;
   var HALF = N / 2;
 
   /* ── precomputed transform tables ─────────────────────────────────────
@@ -128,6 +128,7 @@ E.tool(function () {
     error.textContent = "";
     meta.textContent = "";
     download.disabled = true;
+    figure.hidden = true;
     if (!ctx) return;
     var paper = getComputedStyle(document.documentElement).getPropertyValue("--color-paper").trim();
     ctx.globalAlpha = 1;
@@ -194,6 +195,7 @@ E.tool(function () {
     }
     ctx.globalAlpha = 1;
     ctx.putImageData(image, 0, 0);
+    figure.hidden = false;
 
     meta.textContent = "time → 0–" + (length / rate).toFixed(2) + " s · frequency ↑ 0–" + Math.round(rate / 2).toLocaleString() + " hz · " + channelCount + " channel" + (channelCount === 1 ? "" : "s");
     c.setAttribute("aria-label", "audio spectrogram: time from 0 to " + (length / rate).toFixed(2) + " seconds, left to right, and frequency from 0 to " + Math.round(rate / 2).toLocaleString() + " hertz, bottom to top. brighter pixels are stronger frequencies.");

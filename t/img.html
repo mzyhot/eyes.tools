@@ -15,7 +15,7 @@
 <main class="stack-6">
 <section><label class="lbl" for="file">image</label><input class="field" id="file" type="file" accept="image/*,.jpg,.jpeg,.jfif,.png,.apng,.gif,.webp,.avif,.svg,.bmp,.ico"><p class="hint">typically jpeg, png, apng, gif, webp, avif, svg, bmp, and ico · support depends on your browser · animation becomes one frame</p></section>
 <section class="stack"><div class="grid2"><div><label class="lbl" for="w">width</label><input class="field" id="w" type="number" min="1" max="12000" step="1"></div><div><label class="lbl" for="h">height</label><input class="field" id="h" type="number" min="1" max="12000" step="1"></div></div><div class="row"><label class="check"><input id="lock" type="checkbox" checked><span>keep proportions</span></label><span class="row__spacer"></span><button class="tbtn" id="original" type="button" disabled>original size</button></div></section><section class="grid2"><div><label class="lbl" for="fmt">format</label><select class="field" id="fmt"><option value="image/png">png</option><option value="image/jpeg">jpeg</option><option value="image/webp" selected>webp</option></select></div><div><label class="lbl" for="q">quality</label><input id="q" type="range" min="1" max="100" value="82"><p class="hint"><span id="qv">82</span>%</p></div></section>
-<p class="err" id="err" role="alert"></p><figure class="figure"><canvas id="preview" role="img" aria-label="resized image preview"></canvas></figure><div class="row"><button class="btn" id="dl" type="button" disabled>download</button><span class="hint" id="meta" aria-live="polite"></span></div>
+<p class="err" id="err" role="alert"></p><figure class="figure" id="frame" hidden><canvas id="preview" role="img" aria-label="resized image preview"></canvas></figure><div class="row"><button class="btn" id="dl" type="button" disabled>download</button><span class="hint" id="meta" aria-live="polite"></span></div>
 </main>
 
 <script src="../tools.js"></script>
@@ -23,21 +23,22 @@
 <script>
 E.tool(function () {
   "use strict";
-  var file = E.qs("#file"), w = E.qs("#w"), h = E.qs("#h"), lock = E.qs("#lock"), original = E.qs("#original"), fmt = E.qs("#fmt"), q = E.qs("#q"), canvas = E.qs("#preview"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl");
+  var file = E.qs("#file"), w = E.qs("#w"), h = E.qs("#h"), lock = E.qs("#lock"), original = E.qs("#original"), fmt = E.qs("#fmt"), q = E.qs("#q"), canvas = E.qs("#preview"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl"), frame = E.qs("#frame");
   var source = null, sourceWidth = 0, sourceHeight = 0, sourceBytes = 0, name = "image", loadSeq = 0, renderSeq = 0, encoded = null, MAX_PIXELS = 40000000;
   function ext(type) { return type === "image/jpeg" ? "jpg" : type.split("/")[1]; }
   function discard(image) { if (image && typeof image.close === "function") { try { image.close(); } catch (e) {} } }
-  function reset() { renderSeq++; discard(source); source = null; encoded = null; sourceWidth = 0; sourceHeight = 0; sourceBytes = 0; canvas.width = 0; canvas.height = 0; w.value = ""; h.value = ""; download.disabled = true; original.disabled = true; meta.textContent = ""; error.textContent = ""; }
+  function reset() { renderSeq++; discard(source); source = null; encoded = null; sourceWidth = 0; sourceHeight = 0; sourceBytes = 0; canvas.width = 0; canvas.height = 0; frame.hidden = true; w.value = ""; h.value = ""; download.disabled = true; original.disabled = true; meta.textContent = ""; error.textContent = ""; }
   function draw() {
     var seq = ++renderSeq;
     encoded = null; download.disabled = true; error.textContent = ""; meta.textContent = "";
     q.disabled = fmt.value === "image/png";
+    download.textContent = "download " + ext(fmt.value);
     if (!source) return;
     var width = Number(w.value), height = Number(h.value), type = fmt.value;
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 12000 || height > 12000) { error.textContent = "width and height must be whole numbers from 1 to 12000"; return; }
     if (width * height > MAX_PIXELS) { error.textContent = "that size exceeds the 40 megapixel safety limit"; return; }
     try {
-    canvas.width = width; canvas.height = height;
+    canvas.width = width; canvas.height = height; frame.hidden = false;
     var context = canvas.getContext("2d");
     if (!context) { error.textContent = "canvas is unavailable in this browser"; return; }
     if (type === "image/jpeg") { context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--color-qr-paper").trim(); context.fillRect(0, 0, width, height); }
@@ -87,6 +88,7 @@ E.tool(function () {
   try { var probe = document.createElement("canvas"), webp = fmt.querySelector('option[value="image/webp"]'); probe.width = probe.height = 1; if (webp && probe.toDataURL("image/webp").indexOf("data:image/webp") !== 0) webp.remove(); if (probe.toDataURL("image/avif").indexOf("data:image/avif") === 0) fmt.appendChild(E.el("option", { value: "image/avif", text: "avif" })); } catch (e) {}
   E.on(window, "pagehide", function (event) { if (event && event.persisted) return; loadSeq++; renderSeq++; discard(source); source = null; });
   q.disabled = fmt.value === "image/png";
+  download.textContent = "download " + ext(fmt.value);
 });
 </script>
 </body>
