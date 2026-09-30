@@ -1,0 +1,18 @@
+# eyes.tools crawler policy
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_dev/
+Disallow: /.github/
+Disallow: /desktop/
+Disallow: /deploy/
+Disallow: /functions/
+Disallow: /scripts/
+Disallow: /tests/
+Disallow: /t/
+Disallow: /.git/
+Disallow: /package.json
+Disallow: /vercel.json
+Disallow: /_routes.json
+
+Sitemap: https://eyes.tools/sitemap.xml

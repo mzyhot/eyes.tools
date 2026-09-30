@@ -16,7 +16,7 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
   t.after(() => app.close());
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const get = path => fetch(base + path);
-  for (const path of ['/', '/share', '/json', '/s.js', '/site.js', '/theme.js', '/fonts.css', '/index.js', '/THIRDPARTYLICENSES', '/LICENSE', '/ADDENDUM']) {
+  for (const path of ['/', '/share', '/json', '/s.js', '/site.js', '/theme.js', '/fonts.css', '/index.js', '/robots.txt', '/sitemap.xml', '/THIRDPARTYLICENSES', '/LICENSE', '/ADDENDUM']) {
     const res = await get(path);
     assert.equal(res.status, 200, path);
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
@@ -38,6 +38,16 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
     assert.match(res.headers.get('content-security-policy'), /script-src 'self'$/);
     await res.arrayBuffer();
   }
+  const robots = await get('/robots.txt');
+  assert.match(robots.headers.get('content-type'), /^text\/plain;\s*charset=utf-8$/i);
+  const robotsBody = await robots.text();
+  assert.match(robotsBody, /^User-agent: \*$/m);
+  assert.match(robotsBody, /^Allow: \/$/m);
+  assert.match(robotsBody, /^Disallow: \/api\/$/m);
+  assert.match(robotsBody, /^Sitemap: https:\/\/eyes\.tools\/sitemap\.xml$/m);
+  const sitemap = await get('/sitemap.xml');
+  assert.match(sitemap.headers.get('content-type'), /^application\/xml;\s*charset=utf-8$/i);
+  assert.match(await sitemap.text(), /<urlset[^>]+sitemaps\.org\/schemas\/sitemap\/0\.9/);
   assert.deepEqual(await (await get('/healthz')).json(), { status: 'ok' });
   // Old and non-canonical addresses redirect permanently, keeping the query.
   for (const [from, to] of [['/t/share.html', '/share'], ['/t/json.html?t=%7B%7D', '/json?t=%7B%7D'], ['/index.html', '/'], ['/share/', '/share'], ['/t/lines.html', '/lines']]) {

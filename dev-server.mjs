@@ -89,6 +89,7 @@ const MIME_TYPES = new Map([
   [".wasm", "application/wasm"],
   [".webm", "video/webm"],
   [".webp", "image/webp"],
+  [".xml", "application/xml; charset=utf-8"],
   [".woff", "font/woff"],
   [".woff2", "font/woff2"]
 ]);
