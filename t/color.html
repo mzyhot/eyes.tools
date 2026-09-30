@@ -285,6 +285,37 @@
         var query = E.param("t"); if (query !== null) f.value = query;
         var backgroundQuery = E.param("bg"); if (backgroundQuery !== null) b.value = backgroundQuery;
         run();
+
+        /* For agents: the pair is checked on the page, where the visitor can see it. */
+        E.agentTool({
+          name: "check_contrast",
+          title: "check two colors' contrast",
+          description: "Give the WCAG contrast ratio of a text color on a background and whether it passes " +
+            "AA or AAA, with both colors as hex, rgb and hsl. Accepts any opaque CSS color: hex, rgb(), " +
+            "hsl(), oklch(), names such as rebeccapurple. The pair is shown on the page.",
+          input: {
+            type: "object",
+            properties: {
+              foreground: { type: "string", description: "The text color." },
+              background: { type: "string", description: "The color behind it." }
+            },
+            required: ["foreground", "background"]
+          },
+          readOnly: true,
+          run: function (args) {
+            f.value = String(args.foreground == null ? "" : args.foreground);
+            b.value = String(args.background == null ? "" : args.background);
+            run();
+            if (er.textContent) throw new Error(er.textContent);
+            var ratio = rows.ratio.v.textContent.split(" · ");
+            return {
+              ratio: ratio[0],
+              wcag: ratio[1],
+              foreground: { hex: rows.hex.v.textContent, rgb: rows.rgb.v.textContent, hsl: rows.hsl.v.textContent },
+              background: { hex: rows.bgHex.v.textContent, rgb: rows.bgRgb.v.textContent, hsl: rows.bgHsl.v.textContent }
+            };
+          }
+        });
       });
 </script>
 </body>

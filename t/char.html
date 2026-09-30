@@ -150,6 +150,38 @@
         E.on(copy, "click", function () { E.copy(character, this); });
         input.value = E.param("t") || "";
         run();
+
+        /* For agents: the lookup the page does, shown on the page. */
+        E.agentTool({
+          name: "look_up_character",
+          title: "look up a character",
+          description: "Find one character from the character itself, a decimal number, a U+ or 0x code, an " +
+            "html entity such as &copy; or &#169;, or an ascii control name such as LF, and give its " +
+            "decimal, code point, UTF-8 bytes, html, javascript, css and url forms. The character is " +
+            "shown on the page.",
+          input: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "One character, or a code or name for one." },
+              set: { type: "string", enum: ["unicode", "ascii"], default: "unicode", description: "ascii refuses anything past 127." }
+            },
+            required: ["query"]
+          },
+          readOnly: true,
+          run: function (args) {
+            var set = args.set == null ? "unicode" : String(args.set);
+            var radio = E.qs('input[name=mode][value="' + (set === "ascii" ? "ascii" : "unicode") + '"]');
+            if (set !== "unicode" && set !== "ascii") throw new Error("set must be unicode or ascii");
+            radio.checked = true;
+            input.value = String(args.query == null ? "" : args.query);
+            run();
+            if (error.textContent) throw new Error(error.textContent);
+            if (!character) throw new Error("give a character, or a code or name for one");
+            var result = { character: character, shownAs: glyph.textContent, forms: {} };
+            rows.forEach(function (row, at) { result.forms[FORMS[at][0]] = row.v.textContent; });
+            return result;
+          }
+        });
       });
 </script>
 </body>

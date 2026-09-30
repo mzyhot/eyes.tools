@@ -201,6 +201,30 @@ E.tool(function () {
     E.download(JSON.stringify(data, null, 2) + "\n", filename + "-metadata.json", "application/json");
     E.flash(this, "downloaded");
   });
+
+  /* For agents: what was read from the visitor's file, never the file. */
+  E.agentTool({
+    name: "read_image_metadata",
+    title: "read the image's metadata",
+    description: "Give the metadata read from the image the visitor has chosen or dropped on this page: " +
+      "camera, lens, exposure, dates, gps position, color profile and more, as \"group · tag\" fields. " +
+      "The image never leaves the browser. If no image is chosen, ask the visitor to choose or drop one here.",
+    readOnly: true,
+    run: function (args, signal) {
+      if (!input.files || !input.files.length) throw new Error("no image is chosen on the page; ask the visitor to choose or drop one");
+      return new Promise(function (resolve, reject) {
+        (function wait() {
+          if (signal && signal.aborted) { reject(new Error("cancelled")); return; }
+          if (summary.textContent === "reading…") { setTimeout(wait, 100); return; }
+          var fields = {};
+          allRows.forEach(function (row) { fields[row[0]] = row[1]; });
+          var result = { fields: fields };
+          if (er.textContent) result.note = er.textContent;
+          resolve(result);
+        })();
+      });
+    }
+  });
 });
 </script>
 </body>

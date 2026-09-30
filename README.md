@@ -118,6 +118,18 @@ saved in the browser.
 Keyboard: `/` focuses the filter on the index, `↑↓` move, `↵` opens, `Esc`
 clears the filter there and returns to the index from any tool.
 
+## Agents
+
+Every page offers its actions to AI agents in the browser through
+[WebMCP](https://github.com/webmachinelearning/webmcp): `find_tool` everywhere,
+and on each tool's page the tool itself — `convert_case`, `hash_text`,
+`check_contrast`, `convert_time_zone` and so on. An agent's call runs the page's
+own code on the page's own fields, so the visitor sees what it did, and the work
+stays in the browser as it does for a person. Tools that act on a file use the
+one the visitor chose; sending anything to another device, or replacing what
+the visitor wrote, is left to the visitor. A page registers its tools with
+`E.agentTool` in `s.js`, which does nothing where the browser lacks WebMCP.
+
 ## Deploying
 
 To get every feature, run the Node server behind a reverse proxy that

@@ -95,6 +95,39 @@ E.tool(function () {
   var query = E.param("t");
   if (query) input.value = query;
   run();
+
+  /* For agents: the code is drawn on the page, where it can be scanned or
+     saved, and handed back as svg. */
+  var LEVELS = { low: "L", medium: "M", quartile: "Q", high: "H" };
+  E.agentTool({
+    name: "make_qr_code",
+    title: "make a qr code",
+    description: "Make a QR code for text or a link. It is drawn on the page, ready to scan or download " +
+      "as png or svg, and returned as svg markup. Higher error correction survives more damage but " +
+      "holds less text.",
+    input: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The text or link to encode." },
+        size: { type: "integer", enum: [192, 256, 384, 512], default: 256, description: "Pixels a side." },
+        errorCorrection: { type: "string", enum: ["low", "medium", "quartile", "high"], default: "medium" }
+      },
+      required: ["text"]
+    },
+    readOnly: true,
+    run: function (args) {
+      var size = String(args.size == null ? 256 : args.size), level = args.errorCorrection == null ? "medium" : String(args.errorCorrection);
+      if (!Array.prototype.some.call(E.qs("#size").options, function (o) { return o.value === size; })) throw new Error("size must be 192, 256, 384 or 512");
+      if (!LEVELS.hasOwnProperty(level)) throw new Error("error correction must be low, medium, quartile or high");
+      E.qs("#size").value = size;
+      E.qs("#level").value = LEVELS[level];
+      input.value = String(args.text == null ? "" : args.text);
+      run();
+      if (error.textContent) throw new Error(error.textContent);
+      if (!svgText) throw new Error("give some text to encode");
+      return { svg: svgText };
+    }
+  });
 });
 </script>
 </body>

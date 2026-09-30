@@ -250,6 +250,50 @@
           E.copy(report, this);
         });
         run();
+
+        /* For agents: the conversion the page does, on the page's fields. */
+        E.agentTool({
+          name: "convert_time_zone",
+          title: "convert a time between zones",
+          description: "Say what a local date and time in one IANA time zone is in another, handling daylight " +
+            "saving: a time that never happens (the clock skipped it) is refused, and one that happens " +
+            "twice (the clock went back) uses the first unless told otherwise. Leave out dateTime for now. " +
+            "The conversion is shown on the page.",
+          input: {
+            type: "object",
+            properties: {
+              dateTime: { type: "string", description: "Local date and time in the from zone, as YYYY-MM-DDTHH:MM." },
+              from: { type: "string", description: "IANA zone such as America/Chicago, or UTC." },
+              to: { type: "string", description: "IANA zone such as Asia/Tokyo." },
+              occurrence: { type: "string", enum: ["earlier", "later"], default: "earlier", description: "Which one, when the local time happens twice." }
+            },
+            required: ["from", "to"]
+          },
+          readOnly: true,
+          run: function (args) {
+            if (args.dateTime != null && args.dateTime !== "") {
+              var value = String(args.dateTime).trim().slice(0, 16);
+              if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(value)) throw new Error("dateTime must look like 2026-11-01T01:30");
+              when.value = value;
+            } else if (!when.value) {
+              when.value = new Date().toISOString().slice(0, 16);
+            }
+            var which = args.occurrence == null ? "earlier" : String(args.occurrence);
+            if (which !== "earlier" && which !== "later") throw new Error("occurrence must be earlier or later");
+            from.value = String(args.from == null ? "" : args.from);
+            to.value = String(args.to == null ? "" : args.to);
+            occurrence.value = which;
+            lastSource = "";
+            run();
+            if (er.textContent) throw new Error(er.textContent);
+            return {
+              from: source.textContent,
+              to: dest.textContent,
+              instant: iso.textContent,
+              happensTwice: !overlap.hidden
+            };
+          }
+        });
       });
 </script>
 </body>

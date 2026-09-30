@@ -102,6 +102,28 @@ E.tool(function () {
 
   input.value = E.param("t") || "";
   run();
+
+  /* For agents: the same eleven forms, with the text shown on the page. */
+  E.agentTool({
+    name: "convert_case",
+    title: "change the case of text",
+    description: "Rewrite text or an identifier in every common case at once: camel, pascal, snake, kebab, " +
+      "constant, dot, path, title, sentence, lower and upper. The text is also shown on the page.",
+    input: {
+      type: "object",
+      properties: { text: { type: "string", description: "The text or identifier to rewrite." } },
+      required: ["text"]
+    },
+    readOnly: true,
+    run: function (args) {
+      input.value = String(args.text == null ? "" : args.text);
+      run();
+      if (!input.value.trim()) throw new Error("give some text to convert");
+      var forms = {};
+      rows.forEach(function (r, at) { forms[FORMS[at][0]] = r.v.textContent; });
+      return forms;
+    }
+  });
 });
 </script>
 </body>

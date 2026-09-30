@@ -201,6 +201,28 @@
         });
         var query = E.param("t"); if (query !== null) input.value = query;
         run();
+
+        /* For agents: the barcode is drawn on the page and handed back as svg. */
+        E.agentTool({
+          name: "make_ean13_barcode",
+          title: "make an ean-13 barcode",
+          description: "Make an EAN-13 retail barcode from 12 digits (the check digit is added) or 13 (the " +
+            "check digit is verified). For a 12-digit UPC-A code, put a 0 in front. It is drawn on the " +
+            "page, ready to download as svg or png, and returned as svg markup.",
+          input: {
+            type: "object",
+            properties: { digits: { type: "string", description: "12 or 13 digits; spaces and hyphens are ignored." } },
+            required: ["digits"]
+          },
+          readOnly: true,
+          run: function (args) {
+            input.value = String(args.digits == null ? "" : args.digits);
+            run();
+            if (error.textContent) throw new Error(error.textContent);
+            if (!number) throw new Error("give 12 or 13 digits");
+            return { number: number, svg: new XMLSerializer().serializeToString(svg) };
+          }
+        });
       });
 </script>
 </body>

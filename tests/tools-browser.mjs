@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
 const context = await browser.newContext();
@@ -10,6 +10,17 @@ const base = process.env.SITE_TEST_URL || 'http://127.0.0.1:8880';
 const failures = [], errors = [];
 page.on('pageerror', error => errors.push(`${page.url()}: ${error.message}`));
 await context.addInitScript(() => document.addEventListener('securitypolicyviolation', e => { throw new Error('CSP blocked ' + e.blockedURI + ' (' + e.violatedDirective + ')'); }));
+// Browsers do not ship WebMCP by default yet: a stand-in registry records what
+// each page offers, as document.modelContext would, and refuses a duplicate name.
+await context.addInitScript(() => {
+  const tools = new Map();
+  const registry = { tools, registerTool(tool) {
+    if (tools.has(tool.name)) return Promise.reject(new DOMException('duplicate ' + tool.name, 'InvalidStateError'));
+    if (!/^[A-Za-z0-9_.-]{1,128}$/.test(tool.name) || !tool.description) return Promise.reject(new DOMException('bad tool', 'InvalidStateError'));
+    JSON.stringify(tool.inputSchema); tools.set(tool.name, tool); return Promise.resolve();
+  } };
+  Object.defineProperty(Document.prototype, 'modelContext', { configurable: true, get: () => registry });
+});
 // Tests never depend on font services or the public randomness relay.
 await context.route('https://fonts.googleapis.com/**', route => route.fulfill({ contentType: 'text/css', body: '' }));
 await context.route('https://drand.cloudflare.com/**', route => route.abort());
@@ -175,6 +186,30 @@ try {
     wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(frames * 2, 40);
     for (let i=0; i<frames; i++) wav.writeInt16LE(Math.round(Math.sin(2*Math.PI*440*i/8000)*16000), 44+i*2);
     await page.locator('#file').setInputFiles({ name:'tone.wav', mimeType:'audio/wav', buffer:wav }); await enabled('#dl'); await has('#meta', '1.00 s'); assert.equal((await download('#dl')).bytes.subarray(1,4).toString(), 'PNG');
+  });
+  await check('WebMCP: every page offers its tools, and they answer like the page', async () => {
+    const call = (name, input) => page.evaluate(async ([n, i]) => JSON.parse(JSON.stringify(await document.modelContext.tools.get(n).execute(i, { signal: new AbortController().signal }))), [name, input]);
+    const offered = () => page.evaluate(() => [...document.modelContext.tools.keys()]);
+    await go(''); assert.deepEqual(await offered(), ['find_tool']);
+    assert.deepEqual((await call('find_tool', { query: 'time zone' })).tools.map(t => t.url), [base + '/tz']);
+    const names = new Set();
+    for (const slug of (await readdir(new URL('../t/', import.meta.url))).filter(f => f.endsWith('.html')).map(f => f.slice(0, -5))) {
+      if (slug === 'lines' || slug === 'units') continue;
+      await go(slug);
+      for (const name of await offered()) if (name !== 'find_tool') { assert.ok(!names.has(name), 'tool name reused: ' + name); names.add(name); }
+    }
+    assert.ok(names.size >= 30, 'only ' + names.size + ' tools offered');
+    await go('case'); assert.equal((await call('convert_case', { text: 'hello World' })).snake, 'hello_world'); assert.equal(await page.locator('#in').inputValue(), 'hello World');
+    assert.ok((await call('convert_case', { text: '' })).error);
+    await go('hash'); assert.equal((await call('hash_text', { text: 'abc🌍' }))['sha-256'], createHash('sha256').update('abc🌍').digest('hex'));
+    assert.match((await call('hash_chosen_file', {})).error, /no file/);
+    await go('calc'); assert.equal((await call('calculate', { expression: '2^3^2' })).result, 512); assert.equal((await call('convert_units', { value: 0, from: 'celsius', to: '°F' })).result, 32);
+    assert.match((await call('calculate', { expression: '1/0' })).error, /zero/);
+    await go('json'); assert.ok((await call('format_json', { json: '{bad}' })).error); assert.equal((await call('format_json', { json: '{ "a" : 1 }', indent: 'minify' })).json, '{"a":1}');
+    await go('color'); assert.equal((await call('check_contrast', { foreground: 'black', background: 'white' })).ratio, '21.00:1');
+    await go('uuid'); assert.equal((await call('generate_ids', { kind: 'ulid', count: 3 })).ids.length, 3);
+    await go('dump'); await call('add_to_scratchpad', { text: 'from an agent' }); assert.ok((await page.locator('#pad').inputValue()).endsWith('from an agent'));
+    await go('tz'); assert.equal((await call('convert_time_zone', { dateTime: '2026-11-01T01:30', from: 'America/New_York', to: 'UTC', occurrence: 'later' })).instant, '2026-11-01T06:30:00.000Z');
   });
   await check('directory filtering and theme persistence', async () => {
     await go('dir'); await fill('#q', 'github'); assert.ok((await text('main')).toLowerCase().includes('github')); await enabled('#copy-urls');

@@ -33,7 +33,9 @@ E.tool(function () {
   var b = E.qs("#flip"), er = E.qs("#err"), first = E.qs("#first"), all = E.qs("#all"), proof = E.qs("#proof");
   var counts = E.qs("#counts"), copy = E.qs("#copy"), report = "";
   E.on(copy, "click", function () { E.copy(report, this); });
-  E.on(b, "click", function () {
+  /* Flip as many coins as the field asks, drawing the result on the page.
+     Resolves to the flips, or rejects with the message the page shows. */
+  function flip() {
     var raw = E.qs("#n").value.trim(), n = Number(raw);
     er.textContent = "";
     counts.textContent = report = "";
@@ -45,11 +47,11 @@ E.tool(function () {
     E.qs("#chain").textContent = "";
     if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 1 || n > 100) {
       er.textContent = "flips must be a whole number between 1 and 100";
-      return;
+      return Promise.reject(new Error(er.textContent));
     }
     b.disabled = true;
     b.dataset.state = "loading";
-    R.source("trng", R.byteCount(2, n)).then(function (r) {
+    return R.source("trng", R.byteCount(2, n)).then(function (r) {
       var vals = [];
       for (var i = 0; i < n; i++) vals.push((r.bytes[i >> 3] >> (i & 7) & 1) ? "heads" : "tails");
       first.textContent = vals[0];
@@ -62,12 +64,32 @@ E.tool(function () {
       E.qs("#round").textContent = r.round;
       E.qs("#chain").textContent = r.chainHash;
       E.flash(b, "flipped");
+      return { flips: vals, heads: heads, tails: n - heads, verified: !!r.verified, round: r.round, chainHash: r.chainHash };
     }).catch(function (e) {
       er.textContent = e.message || "drand request failed";
+      throw new Error(er.textContent);
     }).finally(function () {
       b.disabled = false;
       delete b.dataset.state;
     });
+  }
+  E.on(b, "click", function () { flip().catch(function () {}); });
+
+  /* For agents: a flip on the page, with the beacon round that proves it. */
+  E.agentTool({
+    name: "flip_coins",
+    title: "flip coins",
+    description: "Flip up to 100 coins using a public drand randomness beacon whose signature the page " +
+      "verifies, so anyone can check the round later. Needs the network. The flips are shown on the page.",
+    input: {
+      type: "object",
+      properties: { count: { type: "integer", minimum: 1, maximum: 100, default: 1 } }
+    },
+    readOnly: true,
+    run: function (args) {
+      E.qs("#n").value = String(args.count == null ? 1 : args.count);
+      return flip();
+    }
   });
 });
 </script>

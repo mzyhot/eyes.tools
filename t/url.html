@@ -117,6 +117,58 @@
           input.value = query;
           E.qs("#parse").click();
         }
+
+        /* For agents: each action is the page's own button, pressed on the
+           agent's text, so the visitor sees the same result. */
+        function press(id, text, formEncoding) {
+          input.value = String(text == null ? "" : text);
+          form.checked = !!formEncoding;
+          E.qs("#" + id).click();
+          if (error.textContent) throw new Error(error.textContent);
+        }
+        E.agentTool({
+          name: "parse_url",
+          title: "take a url apart",
+          description: "Split an absolute URL into scheme, user, host, port, path, query, fragment and decoded " +
+            "query parameters. The URL and its parts are shown on the page.",
+          input: { type: "object", properties: { url: { type: "string", description: "An absolute URL, scheme included." } }, required: ["url"] },
+          readOnly: true,
+          run: function (args) {
+            press("parse", args.url);
+            var url = new URL(input.value), parameters = [];
+            url.searchParams.forEach(function (value, key) { parameters.push({ name: key, value: value }); });
+            return {
+              scheme: url.protocol.slice(0, -1), username: url.username, password: url.password,
+              host: url.hostname, port: url.port, path: url.pathname, query: url.search, fragment: url.hash,
+              parameters: parameters
+            };
+          }
+        });
+        E.agentTool({
+          name: "percent_encode",
+          title: "percent-encode text for a url",
+          description: "Percent-encode text so it can sit in a URL path segment or query value. With form " +
+            "encoding, spaces become + as in submitted forms.",
+          input: {
+            type: "object",
+            properties: { text: { type: "string" }, formEncoding: { type: "boolean", default: false } },
+            required: ["text"]
+          },
+          readOnly: true,
+          run: function (args) { press("enc", args.text, args.formEncoding); return { encoded: output.textContent }; }
+        });
+        E.agentTool({
+          name: "percent_decode",
+          title: "decode percent-encoded text",
+          description: "Decode percent-encoded text from a URL. With form encoding, + is read as a space.",
+          input: {
+            type: "object",
+            properties: { text: { type: "string" }, formEncoding: { type: "boolean", default: false } },
+            required: ["text"]
+          },
+          readOnly: true,
+          run: function (args) { press("dec", args.text, args.formEncoding); return { decoded: output.textContent }; }
+        });
       });
 </script>
 </body>

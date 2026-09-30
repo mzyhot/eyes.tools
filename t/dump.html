@@ -574,6 +574,69 @@ E.tool(function () {
   E.on(document, "visibilitychange", function () { if (document.hidden) flushSave(); });
 
   try { pad.setSelectionRange(pad.value.length, pad.value.length); } catch (e) {}
+
+  /* ── for agents ───────────────────────────────────────────────────── */
+
+  /* Agents may read the pad and add to it. Nothing here replaces or clears
+     what the visitor wrote: that stays theirs to do. */
+  E.agentTool({
+    name: "read_scratchpad",
+    title: "read the scratchpad",
+    description: "Read the text in the visitor's scratchpad, which is kept in this browser and autosaves.",
+    readOnly: true,
+    run: function () {
+      var s = scan(pad.value);
+      return { text: pad.value, characters: s.chars, words: s.words, lines: s.lines, savedAt: savedAt ? new Date(savedAt).toISOString() : null };
+    }
+  });
+  E.agentTool({
+    name: "add_to_scratchpad",
+    title: "add text to the scratchpad",
+    description: "Add text at the end of the visitor's scratchpad, on a new line, and save it in this " +
+      "browser. What is already there is kept.",
+    input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    run: function (args) {
+      var text = String(args.text == null ? "" : args.text);
+      if (!text) throw new Error("give some text to add");
+      if (pad.value.length + text.length > 2000000) throw new Error("the pad would pass 2 million characters");
+      forgetUndo();
+      setText(pad.value + (pad.value && !/\n$/.test(pad.value) ? "\n" : "") + text);
+      try { pad.setSelectionRange(pad.value.length, pad.value.length); } catch (e) {}
+      var s = scan(pad.value);
+      return { characters: s.chars, lines: s.lines, saved: storeOK };
+    }
+  });
+  E.agentTool({
+    name: "clean_up_lines",
+    title: "sort and tidy lines",
+    description: "Tidy a list of lines: trim each, drop empty ones, remove duplicates, and sort (natural " +
+      "order, so item2 comes before item10) or reverse. Works on the given text, or on the scratchpad's " +
+      "when none is given, and returns the result without changing the pad.",
+    input: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "Lines to tidy; the scratchpad's text when left out." },
+        order: { type: "string", enum: ["keep", "asc", "desc", "reverse"], default: "keep" },
+        dedupe: { type: "boolean", default: true },
+        trim: { type: "boolean", default: true },
+        removeEmpty: { type: "boolean", default: true },
+        ignoreCase: { type: "boolean", default: false, description: "For duplicates and sorting." }
+      }
+    },
+    readOnly: true,
+    run: function (args) {
+      var order = args.order == null ? "keep" : String(args.order);
+      if (["keep", "asc", "desc", "reverse"].indexOf(order) < 0) throw new Error("order must be keep, asc, desc or reverse");
+      var result = processLines(args.text == null ? pad.value : String(args.text), {
+        order: order,
+        dedupe: args.dedupe !== false,
+        trim: args.trim !== false,
+        empty: args.removeEmpty !== false,
+        ignoreCase: !!args.ignoreCase
+      });
+      return { text: result.text, linesBefore: result.before, linesAfter: result.after };
+    }
+  });
 });
 </script>
 </body>

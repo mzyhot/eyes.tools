@@ -146,6 +146,35 @@
         E.on(E.qs("#again"), "click", run);
         E.on(copy, "click", function () { E.copy(values.join("\n"), this); });
         run();
+
+        /* For agents: generated here from Web Crypto and shown on the page too. */
+        E.agentTool({
+          name: "generate_passwords",
+          title: "make passwords",
+          description: "Make passwords (letters, digits and symbols, easily confused ones left out), " +
+            "passphrases (hyphen-joined words) or numeric pins, using Web Crypto randomness in the " +
+            "browser. Returns the values and their strength in bits. The values are shown on the page.",
+          input: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["password", "passphrase", "pin"], default: "password" },
+              length: { type: "integer", minimum: 4, maximum: 128, description: "Characters, or words for a passphrase. 20, 12 and 6 when left out." },
+              count: { type: "integer", minimum: 1, maximum: 100, default: 1 }
+            }
+          },
+          readOnly: true,
+          run: function (args) {
+            var wanted = args.kind == null ? "password" : String(args.kind);
+            var radio = E.qs('input[name=kind][value="' + (wanted === "passphrase" ? "phrase" : wanted) + '"]');
+            if (["password", "passphrase", "pin"].indexOf(wanted) < 0 || !radio) throw new Error("kind must be password, passphrase or pin");
+            if (!radio.checked) { radio.checked = true; radio.dispatchEvent(new Event("change")); }
+            if (args.length != null) lengthInput.value = String(args.length);
+            E.qs("#n").value = String(args.count == null ? 1 : args.count);
+            run();
+            if (error.textContent) throw new Error(error.textContent);
+            return { values: values.slice(), strength: strength.textContent };
+          }
+        });
       });
 </script>
 </body>

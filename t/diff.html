@@ -166,6 +166,37 @@ E.tool(function () {
   E.on(E.qs("#swap"), "click", function () { var value = a.value; a.value = b.value; b.value = value; run(); });
   E.on(copy, "click", function () { E.copy(o.textContent, this); });
   run();
+
+  /* For agents: the same listing, with both texts shown on the page. */
+  E.agentTool({
+    name: "diff_text",
+    title: "compare two texts line by line",
+    description: "Compare two texts line by line and return a unified listing: two spaces before a line " +
+      "both share, + before a line only in after, - before a line only in before. Up to 5,000 lines " +
+      "a side. Both texts and the listing are shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        before: { type: "string" },
+        after: { type: "string" },
+        ignoreSurroundingSpaces: { type: "boolean", default: false, description: "Treat lines that differ only in leading or trailing spaces as the same." }
+      },
+      required: ["before", "after"]
+    },
+    readOnly: true,
+    run: function (args) {
+      a.value = String(args.before == null ? "" : args.before);
+      b.value = String(args.after == null ? "" : args.after);
+      E.qs("#ignore-space").checked = !!args.ignoreSurroundingSpaces;
+      run();
+      if (er.textContent) throw new Error(er.textContent);
+      return {
+        added: E.qsa(".added", o).length,
+        removed: E.qsa(".removed", o).length,
+        diff: o.textContent
+      };
+    }
+  });
 });
 </script>
 </body>

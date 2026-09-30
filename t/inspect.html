@@ -207,6 +207,41 @@
         var query = E.param("t");
         if (query) input.value = query;
         run();
+
+        /* For agents: the page's table as rows, with the text on the page. */
+        var AGENT_ROWS = 2000;
+        E.agentTool({
+          name: "inspect_text",
+          title: "list the characters in text",
+          description: "List every character in a text with its code point and UTF-8 bytes, naming the ones " +
+            "that are invisible or look like a space (zero-width, no-break, direction marks, control " +
+            "characters). With the ascii set, codes are ascii decimals and anything past 127 is marked. " +
+            "The text and the table are shown on the page.",
+          input: {
+            type: "object",
+            properties: {
+              text: { type: "string" },
+              set: { type: "string", enum: ["unicode", "ascii"], default: "unicode" }
+            },
+            required: ["text"]
+          },
+          readOnly: true,
+          run: function (args) {
+            var set = args.set == null ? "unicode" : String(args.set);
+            if (set !== "unicode" && set !== "ascii") throw new Error("set must be unicode or ascii");
+            E.qs('input[name=mode][value="' + set + '"]').checked = true;
+            input.value = String(args.text == null ? "" : args.text);
+            run();
+            var rows = report ? report.split("\n").map(function (line) { return line.split("\t"); }) : [];
+            var result = {
+              columns: set === "ascii" ? ["character", "ascii decimal", "name or utf-8 bytes"] : ["character", "code point", "utf-8 bytes"],
+              rows: rows.slice(0, AGENT_ROWS)
+            };
+            if (rows.length > AGENT_ROWS || error.textContent.indexOf("showing the first") === 0) result.truncated = true;
+            if (error.textContent) result.note = error.textContent;
+            return result;
+          }
+        });
       });
 </script>
 </body>

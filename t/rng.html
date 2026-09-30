@@ -111,6 +111,49 @@ E.tool(function () {
   E.on(btn, "click", function () { try { draw(); } catch (e) { er.textContent = e.message || "invalid range"; } });
   E.on(E.qs("#copy"), "click", function () { E.copy(o.textContent, this); });
   note();
+
+  /* For agents: the page's own draw, so the visitor sees the numbers. */
+  E.agentTool({
+    name: "random_numbers",
+    title: "pick random numbers",
+    description: "Pick up to 100 whole numbers between a minimum and a maximum, inclusive, optionally " +
+      "without repeats. The source is csrng (the browser's Web Crypto, fit for secrets; the default), " +
+      "trng (a public drand beacon, verified, needs the network) or prng (Math.random, not for security). " +
+      "The numbers are shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        min: { type: "integer", default: 1 },
+        max: { type: "integer", default: 100 },
+        count: { type: "integer", minimum: 1, maximum: 100, default: 1 },
+        unique: { type: "boolean", default: false, description: "Never pick the same number twice." },
+        source: { type: "string", enum: ["csrng", "trng", "prng"], default: "csrng" }
+      }
+    },
+    readOnly: true,
+    run: function (args) {
+      var source = args.source == null ? "csrng" : String(args.source);
+      var radio = E.qs('input[name=src][value="' + source + '"]');
+      if (["csrng", "trng", "prng"].indexOf(source) < 0 || !radio) throw new Error("source must be csrng, trng or prng");
+      radio.checked = true;
+      note();
+      E.qs("#min").value = String(args.min == null ? 1 : args.min);
+      E.qs("#max").value = String(args.max == null ? 100 : args.max);
+      E.qs("#count").value = String(args.count == null ? 1 : args.count);
+      E.qs("#unique").checked = !!args.unique;
+      var pending;
+      try { pending = draw(); } catch (e) { er.textContent = e.message || "invalid range"; throw e; }
+      return pending.then(function () {
+        if (er.textContent) throw new Error(er.textContent);
+        var numbers = o.textContent.split("\n").map(function (value) {
+          return Number.isSafeInteger(Number(value)) ? Number(value) : value;
+        });
+        var result = { numbers: numbers, source: source };
+        if (!proof.hidden) { result.round = Number(round.textContent); result.chainHash = chain.textContent; }
+        return result;
+      });
+    }
+  });
 });
 </script>
 </body>

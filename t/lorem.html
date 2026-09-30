@@ -79,6 +79,34 @@ E.tool(function () {
   E.on(E.qs("#copy"), "click", function () { E.copy(out.textContent, this); });
   E.on(E.qs("#dl"), "click", function () { E.download(out.textContent, "lorem.txt", "text/plain;charset=utf-8"); E.flash(this, "downloaded"); });
   run();
+
+  /* For agents: the page's own settings, so the visitor sees the same text. */
+  E.agentTool({
+    name: "generate_lorem_ipsum",
+    title: "make placeholder text",
+    description: "Make lorem ipsum placeholder text: a number of paragraphs (short, medium or long), " +
+      "sentences or words. The text is shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        count: { type: "integer", minimum: 1, maximum: 10000, default: 3, description: "How many paragraphs, sentences or words; at most 100, 1,000 and 10,000." },
+        unit: { type: "string", enum: ["paragraphs", "sentences", "words"], default: "paragraphs" },
+        paragraphLength: { type: "string", enum: ["short", "medium", "long"], default: "medium" }
+      }
+    },
+    readOnly: true,
+    run: function (args) {
+      var kind = args.unit == null ? "paragraphs" : String(args.unit), size = args.paragraphLength == null ? "medium" : String(args.paragraphLength);
+      if (["paragraphs", "sentences", "words"].indexOf(kind) < 0) throw new Error("unit must be paragraphs, sentences or words");
+      if (["short", "medium", "long"].indexOf(size) < 0) throw new Error("paragraph length must be short, medium or long");
+      unit.value = kind;
+      length.value = size;
+      quantity.value = String(args.count == null ? 3 : args.count);
+      run();
+      if (E.qs("#err").textContent) throw new Error(E.qs("#err").textContent);
+      return { text: out.textContent };
+    }
+  });
 });
 </script>
 </body>

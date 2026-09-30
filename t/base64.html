@@ -102,6 +102,48 @@ E.tool(function () {
   });
   var query = E.param("t");
   if (query) { input.value = query; E.qs("#enc").click(); }
+
+  /* For agents: both directions, through the page's own fields. */
+  E.agentTool({
+    name: "base64_encode",
+    title: "encode text as base64",
+    description: "Encode text (as UTF-8) to base64, optionally the url-safe alphabet without padding. " +
+      "The text and the result are shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The text to encode." },
+        urlSafe: { type: "boolean", description: "Use - and _ and drop the = padding.", default: false }
+      },
+      required: ["text"]
+    },
+    readOnly: true,
+    run: function (args) {
+      E.qs("#url-safe").checked = !!args.urlSafe;
+      input.value = String(args.text == null ? "" : args.text);
+      runEncode();
+      if (error.textContent) throw new Error(error.textContent);
+      return { base64: output.value };
+    }
+  });
+  E.agentTool({
+    name: "base64_decode",
+    title: "decode base64 to text",
+    description: "Decode standard or url-safe base64 back to UTF-8 text. Refuses input that is not base64 " +
+      "or does not decode to UTF-8 text. The input and the result are shown on the page.",
+    input: {
+      type: "object",
+      properties: { base64: { type: "string", description: "The base64 to decode; spaces and line breaks are ignored." } },
+      required: ["base64"]
+    },
+    readOnly: true,
+    run: function (args) {
+      input.value = String(args.base64 == null ? "" : args.base64);
+      runDecode();
+      if (error.textContent) throw new Error(error.textContent);
+      return { text: output.value };
+    }
+  });
 });
 </script>
 </body>

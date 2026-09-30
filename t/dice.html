@@ -42,7 +42,9 @@ E.tool(function () {
     return value;
   }
   E.on(copy, "click", function () { E.copy(report, this); });
-  E.on(b, "click", function () {
+  /* Roll what the fields ask for, drawing the result on the page. Resolves to
+     the roll, or rejects with the message the page shows. */
+  function roll() {
     var n, s;
     er.textContent = "";
     report = "";
@@ -55,10 +57,10 @@ E.tool(function () {
     try {
       n = whole("#dice", 1, 100, "dice");
       s = whole("#sides", 2, 1000000, "sides");
-    } catch (e) { er.textContent = e.message; return; }
+    } catch (e) { er.textContent = e.message; return Promise.reject(e); }
     b.disabled = true;
     b.dataset.state = "loading";
-    R.source("trng", R.byteCount(BigInt(s), n)).then(function (r) {
+    return R.source("trng", R.byteCount(BigInt(s), n)).then(function (r) {
       var vals = [], at = 0, total = 0;
       for (var i = 0; i < n; i++) {
         var x = R.uniform(r.bytes, BigInt(s), at);
@@ -75,12 +77,37 @@ E.tool(function () {
       E.qs("#round").textContent = r.round;
       E.qs("#chain").textContent = r.chainHash;
       E.flash(b, "rolled");
+      return { rolls: vals, total: total, verified: !!r.verified, round: r.round, chainHash: r.chainHash };
     }).catch(function (e) {
       er.textContent = e.message || "drand request failed";
+      throw new Error(er.textContent);
     }).finally(function () {
       b.disabled = false;
       delete b.dataset.state;
     });
+  }
+  E.on(b, "click", function () { roll().catch(function () {}); });
+
+  /* For agents: a roll on the page, with the beacon round that proves it. */
+  E.agentTool({
+    name: "roll_dice",
+    title: "roll dice",
+    description: "Roll up to 100 dice of 2 to 1,000,000 sides, using a public drand randomness beacon " +
+      "whose signature the page verifies, so anyone can check the round later. Needs the network. " +
+      "The roll is shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        dice: { type: "integer", minimum: 1, maximum: 100, default: 1 },
+        sides: { type: "integer", minimum: 2, maximum: 1000000, default: 6 }
+      }
+    },
+    readOnly: true,
+    run: function (args) {
+      E.qs("#dice").value = String(args.dice == null ? 1 : args.dice);
+      E.qs("#sides").value = String(args.sides == null ? 6 : args.sides);
+      return roll();
+    }
   });
 });
 </script>

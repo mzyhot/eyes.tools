@@ -407,6 +407,31 @@ E.tool(function () {
 
   q.value = E.param("q") || "";
   render();
+
+  /* For agents: the same filter, typed into the page's own field. */
+  E.agentTool({
+    name: "search_directory",
+    title: "find a website in the directory",
+    description: "Search a hand-picked directory of " + TOTAL + " long-lived websites (reference, archives, " +
+      "tools, learning, reading, maps and data, directories, the weird web) by name, description, " +
+      "address or group. Leave out the query to list them all. The matches are shown on the page.",
+    input: {
+      type: "object",
+      properties: { query: { type: "string", description: "Words that must all appear, such as \"public domain books\"." } }
+    },
+    readOnly: true,
+    run: function (args) {
+      q.value = String(args.query == null ? "" : args.query).slice(0, MAX_TERM);
+      render();
+      var sites = [];
+      groups.forEach(function (group) {
+        group.sites.forEach(function (site) {
+          sites.push({ name: site.name, url: site.url, description: site.desc, group: group.group });
+        });
+      });
+      return { sites: sites };
+    }
+  });
 });
 </script>
 </body>

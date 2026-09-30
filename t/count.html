@@ -47,6 +47,28 @@ E.tool(function () {
   var query = E.param("t");
   if (query) input.value = query;
   run();
+
+  /* For agents: the same readout, with the text shown on the page. */
+  var KEYS = ["words", "characters", "charactersWithoutSpaces", "codePoints", "utf8Bytes", "lines", "sentences", "readingTime"];
+  E.agentTool({
+    name: "count_text",
+    title: "count words and characters",
+    description: "Count words, characters (as a person sees them), characters without spaces, Unicode code " +
+      "points, UTF-8 bytes, lines and sentences in a text, and estimate its reading time at 200 words a " +
+      "minute. The text is shown on the page.",
+    input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    readOnly: true,
+    run: function (args) {
+      input.value = String(args.text == null ? "" : args.text);
+      run();
+      var result = {};
+      stats.forEach(function (value, index) {
+        var text = value.textContent;
+        result[KEYS[index]] = /^\d+$/.test(text) ? Number(text) : text;
+      });
+      return result;
+    }
+  });
 });
 </script>
 </body>

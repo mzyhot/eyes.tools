@@ -99,6 +99,55 @@ E.tool(function () {
   E.on(input, "input", E.debounce(run, 120));
   input.value = E.param("t") || "";
   run();
+
+  /* For agents: each mode, run through the page so the visitor sees it. */
+  function agentRun(next, text) {
+    mode = next;
+    input.value = String(text == null ? "" : text);
+    run();
+    if (error.textContent) throw new Error(error.textContent);
+    return output.value;
+  }
+  E.agentTool({
+    name: "format_json",
+    title: "format or minify json",
+    description: "Check that text is valid JSON and lay it out with 2 or 4 spaces or tabs, or minify it. " +
+      "Numbers, key order and duplicate keys are kept exactly as written. Invalid JSON returns the parser's " +
+      "error. The input and the result are shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        json: { type: "string", description: "The JSON text." },
+        indent: { type: "string", enum: ["2", "4", "tab", "minify"], default: "2", description: "Indentation, or minify for one line." }
+      },
+      required: ["json"]
+    },
+    readOnly: true,
+    run: function (args) {
+      var indent = args.indent == null ? "2" : String(args.indent);
+      if (indent !== "minify") {
+        if (!E.qs('#indent option[value="' + indent + '"]')) throw new Error("indent must be 2, 4, tab or minify");
+        E.qs("#indent").value = indent;
+      }
+      return { json: agentRun(indent === "minify" ? "minify" : "format", args.json) };
+    }
+  });
+  E.agentTool({
+    name: "escape_json_string",
+    title: "escape text as a json string",
+    description: "Turn text into a JSON string literal, quotes and escapes included, ready to paste into JSON or JavaScript.",
+    input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    readOnly: true,
+    run: function (args) { return { json: agentRun("escape", args.text) }; }
+  });
+  E.agentTool({
+    name: "unescape_json_string",
+    title: "read a json string literal",
+    description: "Turn a JSON string literal, in double quotes, back into the text it stands for.",
+    input: { type: "object", properties: { json: { type: "string", description: "A JSON string, quotes included." } }, required: ["json"] },
+    readOnly: true,
+    run: function (args) { return { text: agentRun("unescape", args.json) }; }
+  });
 });
 </script>
 </body>

@@ -89,6 +89,56 @@ E.tool(function () {
   E.on(window, "pagehide", function (event) { if (event && event.persisted) return; loadSeq++; renderSeq++; discard(source); source = null; });
   q.disabled = fmt.value === "image/png";
   download.textContent = "download " + ext(fmt.value);
+
+  /* For agents: new settings for the image the visitor chose, set in the
+     page's own fields. The image never leaves the tab; the visitor downloads
+     the result with the page's button. */
+  E.agentTool({
+    name: "resize_image",
+    title: "resize the image on the page",
+    description: "Resize or convert the image the visitor has chosen or dropped on this page, and report " +
+      "the new size in pixels and bytes. Give a width or a height to keep proportions, or both to set " +
+      "each. The image never leaves the browser: tell the visitor to press download on the page to save " +
+      "it. If no image is chosen, ask the visitor to choose or drop one here.",
+    input: {
+      type: "object",
+      properties: {
+        width: { type: "integer", minimum: 1, maximum: 12000 },
+        height: { type: "integer", minimum: 1, maximum: 12000 },
+        format: { type: "string", description: "png, jpeg or webp; avif where the browser can write it." },
+        quality: { type: "integer", minimum: 1, maximum: 100, description: "For jpeg, webp and avif." }
+      }
+    },
+    readOnly: true,
+    run: function (args, signal) {
+      if (!source) throw new Error("no image is chosen on the page; ask the visitor to choose or drop one");
+      if (args.format != null) {
+        var type = "image/" + String(args.format).toLowerCase().replace(/^jpg$/, "jpeg");
+        if (!fmt.querySelector('option[value="' + type + '"]')) {
+          throw new Error("this browser can write " + E.qsa("option", fmt).map(function (o) { return o.textContent; }).join(", "));
+        }
+        fmt.value = type;
+      }
+      if (args.quality != null) { q.value = String(args.quality); E.qs("#qv").textContent = q.value; }
+      var width = args.width, height = args.height;
+      if (width != null || height != null) {
+        lock.checked = width == null || height == null;
+        if (width == null) width = Math.max(1, Math.round(height * sourceWidth / sourceHeight));
+        if (height == null) height = Math.max(1, Math.round(width * sourceHeight / sourceWidth));
+        w.value = String(width);
+        h.value = String(height);
+      }
+      draw();
+      return new Promise(function (resolve, reject) {
+        (function wait() {
+          if (signal && signal.aborted) { reject(new Error("cancelled")); return; }
+          if (error.textContent) { reject(new Error(error.textContent)); return; }
+          if (!encoded) { setTimeout(wait, 50); return; }
+          resolve({ width: canvas.width, height: canvas.height, format: ext(encoded.type), bytes: encoded.size, originalBytes: sourceBytes, summary: meta.textContent });
+        })();
+      });
+    }
+  });
 });
 </script>
 </body>

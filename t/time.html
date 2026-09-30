@@ -74,6 +74,38 @@ E.tool(function () {
   input.value = query === null ? new Date().toISOString() : query;
   if (queryUnit === "seconds" || queryUnit === "milliseconds") unit.value = queryUnit;
   run();
+
+  /* For agents: the page's own reading of a date or timestamp. */
+  var KEYS = ["local", "utc", "iso8601", "unixSeconds", "unixMilliseconds"];
+  E.agentTool({
+    name: "convert_timestamp",
+    title: "read a date or unix timestamp",
+    description: "Turn a unix timestamp (seconds or milliseconds) or a date such as 2026-08-21T12:00:00Z " +
+      "into local time, UTC, ISO 8601 and both unix forms. Local time is the visitor's browser's. Leave " +
+      "value out for the current moment. The result is shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        value: { type: "string", description: "A date, or a unix timestamp in seconds or milliseconds." },
+        unit: { type: "string", enum: ["auto", "seconds", "milliseconds"], default: "auto", description: "How to read a bare number; auto picks by size." }
+      }
+    },
+    readOnly: true,
+    run: function (args) {
+      var chosen = args.unit == null ? "auto" : String(args.unit);
+      if (["auto", "seconds", "milliseconds"].indexOf(chosen) < 0) throw new Error("unit must be auto, seconds or milliseconds");
+      unit.value = chosen;
+      input.value = args.value == null || args.value === "" ? new Date().toISOString() : String(args.value);
+      run();
+      if (error.textContent) throw new Error(error.textContent);
+      var result = {};
+      values.forEach(function (value, index) {
+        result[KEYS[index]] = index > 2 ? Number(value.textContent) : value.textContent;
+      });
+      if (interpreted.textContent) result.readAs = interpreted.textContent.split(" · ")[0].replace(/^read as /, "");
+      return result;
+    }
+  });
 });
 </script>
 </body>

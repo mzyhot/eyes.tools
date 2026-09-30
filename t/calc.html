@@ -254,6 +254,71 @@ E.tool(function () {
   runCalculation(true);
   choose();
   setMode(E.param("mode") === "units" ? "units" : "calculate");
+
+  /* ── for agents ── both panels, driven through their own fields ───── */
+
+  E.agentTool({
+    name: "calculate",
+    title: "work out an expression",
+    description: "Evaluate an arithmetic expression: + - × ÷ (or * /), ^ for powers, parentheses, " +
+      "sqrt, abs, round, floor, ceil, pi and e. A percent divides by 100, so 200 * 10% is 20. The " +
+      "expression and result are shown on the page.",
+    input: {
+      type: "object",
+      properties: { expression: { type: "string", description: "Such as (125 + 75) * 1.08." } },
+      required: ["expression"]
+    },
+    readOnly: true,
+    run: function (args) {
+      setMode("calculate");
+      input.value = String(args.expression == null ? "" : args.expression);
+      runCalculation(true);
+      if (error.textContent) throw new Error(error.textContent);
+      if (calculation === null) throw new Error("give an expression to work out");
+      return { result: Number(output.textContent), exact: calculation };
+    }
+  });
+
+  /* A unit named by its symbol, exactly, or by its name in any case. */
+  function findUnit(group, wanted) {
+    var raw = String(wanted == null ? "" : wanted).trim(), lower = raw.toLowerCase(), at = -1;
+    group.units.forEach(function (unit, i) { if (at < 0 && unit[0] === raw) at = i; });
+    group.units.forEach(function (unit, i) { if (at < 0 && (unit[1] === lower || unit[1].replace(/s$/, "") === lower)) at = i; });
+    return at;
+  }
+  E.agentTool({
+    name: "convert_units",
+    title: "convert between units",
+    description: "Convert a number between units of one quantity. Units, by symbol: " +
+      quantities.map(function (group) {
+        return group.name + " " + group.units.map(function (unit) { return unit[0]; }).join(" ");
+      }).join("; ") + ". Names such as \"miles\" work too. Volume units are US liquid; kB, MB and GB " +
+      "are powers of 1,000 and KiB, MiB and GiB of 1,024. The conversion is shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        value: { type: "number" },
+        from: { type: "string", description: "Unit symbol or name, such as km or kilometers." },
+        to: { type: "string", description: "Unit symbol or name." }
+      },
+      required: ["value", "from", "to"]
+    },
+    readOnly: true,
+    run: function (args) {
+      var group = quantities.filter(function (g) { return findUnit(g, args.from) >= 0 && findUnit(g, args.to) >= 0; })[0];
+      if (!group) throw new Error("no quantity has both " + args.from + " and " + args.to + "; check the units");
+      setMode("units");
+      quantity.value = group.id;
+      choose();
+      from.value = String(findUnit(group, args.from));
+      to.value = String(findUnit(group, args.to));
+      unitInput.value = String(args.value == null ? "" : args.value);
+      runConversion();
+      if (unitError.textContent) throw new Error(unitError.textContent);
+      if (!resultText) throw new Error("give a number to convert");
+      return { result: Number(resultText), unit: group.units[Number(to.value)][0], text: unitOutput.textContent };
+    }
+  });
 });
 </script>
 </body>

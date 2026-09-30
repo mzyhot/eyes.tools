@@ -340,6 +340,43 @@ E.tool(function () {
   })();
 
   run();
+
+  /* For agents: the page's own generator, with the batch on the page. */
+  E.agentTool({
+    name: "generate_ids",
+    title: "make unique ids",
+    description: "Make a batch of ids from Web Crypto randomness: uuid v4 (random), uuid v7 (time-ordered), " +
+      "ulid (time-ordered, 26 characters), or short ids from an alphabet of your choosing. The batch " +
+      "is shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["v4", "v7", "ulid", "short"], default: "v4" },
+        count: { type: "integer", minimum: 1, maximum: MAX_N, default: 1 },
+        length: { type: "integer", minimum: 1, maximum: MAX_LEN, description: "Short ids only; 21 when left out." },
+        alphabet: { type: "string", description: "Short ids only; the characters to draw from." },
+        uppercase: { type: "boolean", default: false, description: "uuids only." },
+        braces: { type: "boolean", default: false, description: "uuids only: wrap in {}." },
+        hyphens: { type: "boolean", default: true, description: "uuids only." }
+      }
+    },
+    readOnly: true,
+    run: function (args) {
+      var k = args.kind == null ? "v4" : String(args.kind);
+      var radio = E.qs('input[name=kind][value="' + k + '"]');
+      if (["v4", "v7", "ulid", "short"].indexOf(k) < 0 || !radio) throw new Error("kind must be v4, v7, ulid or short");
+      radio.checked = true;
+      nIn.value = String(args.count == null ? 1 : args.count);
+      if (args.length != null) lenIn.value = String(args.length);
+      if (args.alphabet != null) alphaIn.value = String(args.alphabet);
+      cbUpper.checked = !!args.uppercase;
+      cbBraces.checked = !!args.braces;
+      cbHyphens.checked = args.hyphens !== false;
+      run();
+      if (err.textContent) throw new Error(err.textContent);
+      return { ids: lines.slice() };
+    }
+  });
 });
 </script>
 </body>

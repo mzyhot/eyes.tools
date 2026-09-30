@@ -625,6 +625,86 @@ E.tool(function () {
   input.value = E.param("t") || "";
   doText();
   compare();
+
+  /* ── for agents ───────────────────────────────────────── */
+
+  function setEncoding(encoding, uppercase) {
+    var mode = encoding == null ? "hex" : String(encoding);
+    if (mode === "base64") mode = "b64";
+    var radio = E.qs('input[name="enc"][value="' + mode + '"]');
+    if (!radio) throw new Error("encoding must be hex or base64");
+    radio.checked = true;
+    ucBox.checked = !!uppercase;
+    ucBox.disabled = mode === "b64";
+  }
+  function digests(store) {
+    var out = {};
+    ALGOS.forEach(function (a) { if (store[a.key]) out[a.label] = fmt(store[a.key]); });
+    return out;
+  }
+
+  E.agentTool({
+    name: "hash_text",
+    title: "hash text",
+    description: "Compute the md5, sha-1, sha-256, sha-384 and sha-512 digests of a text's UTF-8 bytes, " +
+      "in hex or base64. md5 is fine for spotting accidental corruption but broken for security. The " +
+      "text and digests are shown on the page.",
+    input: {
+      type: "object",
+      properties: {
+        text: { type: "string" },
+        encoding: { type: "string", enum: ["hex", "base64"], default: "hex" },
+        uppercase: { type: "boolean", default: false, description: "Uppercase hex." }
+      },
+      required: ["text"]
+    },
+    readOnly: true,
+    run: function (args) {
+      setEncoding(args.encoding, args.uppercase);
+      input.value = String(args.text == null ? "" : args.text);
+      doText();
+      var bytes = enc.encode(input.value);
+      if (bytes.length > TEXT_CAP) throw new Error(terr.textContent || "text is too long to hash here");
+      var store = { md5: new MD5().update(bytes).digest() };
+      return shas(bytes).then(function (out) {
+        for (var k in out) store[k] = out[k];
+        return digests(store);
+      }, function (e) { throw new Error(subtleMsg(e)); });
+    }
+  });
+
+  /* The file the visitor chose or dropped on the page, hashed here in the
+     browser: the agent gets digests, never the file. */
+  E.agentTool({
+    name: "hash_chosen_file",
+    title: "hash the file on the page",
+    description: "Give the digests of the file the visitor has chosen or dropped on this page, once hashing " +
+      "finishes. The file itself is never sent anywhere. If no file is chosen, ask the visitor to choose " +
+      "or drop one here.",
+    input: {
+      type: "object",
+      properties: {
+        encoding: { type: "string", enum: ["hex", "base64"], default: "hex" },
+        uppercase: { type: "boolean", default: false }
+      }
+    },
+    readOnly: true,
+    run: function (args, signal) {
+      setEncoding(args.encoding, args.uppercase);
+      paint();
+      if (!current) throw new Error("no file is chosen on the page; ask the visitor to choose or drop one");
+      return new Promise(function (resolve, reject) {
+        (function wait() {
+          if (signal && signal.aborted) { reject(new Error("cancelled")); return; }
+          if (runBtn.dataset.state === "loading") { setTimeout(wait, 100); return; }
+          if (!fileD.md5) { reject(new Error(ferr.textContent || "the file could not be read")); return; }
+          var result = { file: current.name, bytes: current.size, digests: digests(fileD) };
+          if (ferr.textContent) result.note = ferr.textContent;
+          resolve(result);
+        })();
+      });
+    }
+  });
 });
 </script>
 </body>
