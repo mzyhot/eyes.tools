@@ -12,40 +12,27 @@ on:
 
 jobs:
   claude:
-    # Only the owner and collaborators may start a run: it holds
-    # write access and spends the maintainer's token, and on a public
-    # repository anyone can comment.
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
-        contains(fromJSON('["OWNER","COLLABORATOR"]'), github.event.comment.author_association)) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') &&
-        contains(fromJSON('["OWNER","COLLABORATOR"]'), github.event.comment.author_association)) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') &&
-        contains(fromJSON('["OWNER","COLLABORATOR"]'), github.event.review.author_association)) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
-        contains(fromJSON('["OWNER","COLLABORATOR"]'), github.event.issue.author_association))
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
-    # A run holds write access, so it gets an hour rather than GitHub's six.
-    timeout-minutes: 60
-    # Actions are pinned to commits, like check.yml: a moved tag cannot change
-    # what runs with write access. Update the SHA and comment together.
-    # Write access so Claude can push its branch, open the pull request and
-    # reply on the issue itself. Everything it does is credited to claude[bot].
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
+      pull-requests: read
+      issues: read
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
     steps:
       - name: Checkout repository
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+        uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -59,9 +46,5 @@ jobs:
           # Optional: Add claude_args to customize behavior and configuration
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          # By default the action pushes a branch and posts a "Create PR" link,
-          # which makes whoever clicks it the pull request's author. Letting
-          # Claude run `gh pr create` means it opens the PR as claude[bot].
-          claude_args: |
-            --allowedTools "Bash(gh pr create:*),Bash(gh pr view:*)"
-            --append-system-prompt "When you change code, open a pull request yourself with gh pr create rather than posting a link to create one."
+          # claude_args: '--allowed-tools Bash(gh pr *)'
+
