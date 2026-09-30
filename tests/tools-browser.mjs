@@ -160,9 +160,20 @@ try {
   await check('coin and dice rendering with a deterministic verified-beacon fixture', async () => {
     for (const name of ['coin', 'dice']) {
       await go(name);
-      await page.evaluate(() => { R.source = async (_, n) => ({ bytes: new Uint8Array(n), verified: true, round: 123, chainHash: R.chainHash }); });
+      await page.evaluate(() => { R.source = async (mode, n) => mode === 'trng' ? ({ bytes: new Uint8Array(n), verified: true, round: 123, chainHash: R.chainHash }) : Promise.reject(new Error('wrong source ' + mode)); });
+      await page.locator('input[value="trng"]').check();
       await click(name === 'coin' ? '#flip' : '#roll'); await enabled('#copy'); await has('#round', '123');
       if (name === 'coin') assert.match(await text('#first'), /heads|tails/i); else assert.equal((await text('#total')).trim(), '2');
+    }
+  });
+  await check('coin and dice also draw from web crypto and Math.random, with no proof shown', async () => {
+    for (const name of ['coin', 'dice']) {
+      for (const source of ['csrng', 'prng']) {
+        await go(name); await page.locator(`input[value="${source}"]`).check();
+        await click(name === 'coin' ? '#flip' : '#roll'); await enabled('#copy');
+        assert.equal(await page.locator('#proof').isHidden(), true, name + ' ' + source);
+        if (name === 'dice') assert.match(await text('#total'), /^\d+$/); else assert.match(await text('#first'), /^(heads|tails)$/);
+      }
     }
   });
   await check('drand requests carry no custom headers, so Safari sends them without a preflight', async () => {
