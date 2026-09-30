@@ -13,6 +13,7 @@
 /desktop/
 /dev-server.mjs
 /functions/
+/github-webhook.mjs
 /package-lock.json
 /public-files.mjs
 /scripts/

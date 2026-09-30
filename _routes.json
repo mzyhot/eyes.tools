@@ -12,6 +12,7 @@
     "/desktop/*",
     "/dev-server.mjs",
     "/functions/*",
+    "/github-webhook.mjs",
     "/package-lock.json",
     "/package.json",
     "/public-files.mjs",
