@@ -34,8 +34,6 @@
   }
   .vd.-yes { background: var(--color-ink); color: var(--color-paper); border-color: var(--color-ink); }
   .vd.-no { color: var(--color-alert); border-color: var(--color-alert); }
-  .check input:disabled { opacity: 0.38; cursor: not-allowed; }
-  .check:has(input:disabled) { color: var(--color-dim); opacity: 0.5; cursor: default; }
 </style>
 <script src="../site.js"></script>
 <script src="../theme.js"></script>
@@ -319,7 +317,7 @@ E.tool(function () {
       host.appendChild(E.el("div", { class: "res" }, [
         E.el("div", { class: "res__k", text: a.label }), v, b
       ]));
-      return { key: a.key, label: a.label, v: v };
+      return { key: a.key, label: a.label, v: v, b: b };
     });
   }
   var rowsT = rows(tout), rowsF = rows(fout);
@@ -331,8 +329,8 @@ E.tool(function () {
   }
 
   function paint() {
-    rowsT.forEach(function (r) { r.v.textContent = fmt(textD[r.key]); });
-    rowsF.forEach(function (r) { r.v.textContent = fmt(fileD[r.key]); });
+    rowsT.forEach(function (r) { r.v.textContent = fmt(textD[r.key]); r.b.disabled = !r.v.textContent; });
+    rowsF.forEach(function (r) { r.v.textContent = fmt(fileD[r.key]); r.b.disabled = !r.v.textContent; });
     compare();
   }
 

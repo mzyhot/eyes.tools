@@ -79,7 +79,7 @@ body[data-tool="share"] [hidden] { display: none !important; }
       <p class="hint">you are <span class="mono" id="your-name">…</span></p>
       <p class="hint" id="status" role="status">finding devices…</p>
     </div>
-    <p class="hint">use send files on a device, or drop files onto it</p>
+    <p class="hint" id="send-hint" hidden>press send files on a device, or drop files onto it.</p>
     <p class="err" id="err" role="alert"></p>
     <input type="file" id="files" aria-label="files to send" multiple hidden>
   </section>
@@ -152,6 +152,7 @@ E.tool(function () {
   function activity() { return [...peers.values()].some(p => p.outgoing || p.incoming || p.queue.length); }
   function render() {
     $('#empty').hidden = peers.size > 0;
+    $('#send-hint').hidden = !peers.size;
     $('#device-count').textContent = peers.size ? peers.size + (peers.size === 1 ? ' device' : ' devices') : 'devices';
     $('#status').textContent = online ? 'room open' : 'reconnecting…';
     $('#new-link').disabled = activity();

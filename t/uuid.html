@@ -9,8 +9,8 @@
 <style>
   /* scoped: the shared .out-head is a single line; three affordances need to wrap at 320px */
   .out-head { flex-wrap: wrap; }
-  .check input:disabled { cursor: not-allowed; }
-  .check:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+  /* the summary carries a byte size; lowercasing would turn KB into kb */
+  #stat { text-transform: none; }
 </style>
 <script src="../site.js"></script>
 <script src="../theme.js"></script>
@@ -63,7 +63,7 @@
 
   <div>
     <div class="out-head">
-      <span class="lbl" id="stat" aria-live="polite"></span>
+      <span class="lbl num" id="stat" aria-live="polite"></span>
       <span class="row__spacer"></span>
       <button class="tbtn" type="button" id="regen">regenerate</button>
       <button class="tbtn" type="button" id="copy" disabled>copy all</button>

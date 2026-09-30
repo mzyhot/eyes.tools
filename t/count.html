@@ -14,7 +14,7 @@
 <main class="stack-6">
   <section><label class="lbl" for="in">text</label><textarea class="field" id="in"></textarea></section>
   <dl class="kv" id="stats" aria-live="polite"><dt>words</dt><dd>0</dd><dt id="characters-label">characters</dt><dd>0</dd><dt>without spaces</dt><dd>0</dd><dt>code points</dt><dd>0</dd><dt>utf-8 bytes</dt><dd>0</dd><dt>lines</dt><dd>0</dd><dt>sentences</dt><dd>0</dd><dt>reading time</dt><dd>0 min</dd></dl>
-  <button class="btn -ghost" id="copy" type="button">copy stats</button>
+  <div class="row"><button class="btn -ghost" id="copy" type="button">copy stats</button></div>
 </main>
 
 <script src="../tools.js"></script>
@@ -26,16 +26,24 @@ E.tool(function () {
   var segmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
   var wordSegmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "word" }) : null;
   if (!segmenter) E.qs("#characters-label").textContent = "characters (code points)";
+  /* Runs of text ended by . ! or ? and a space, plus any unfinished last
+     sentence, so a draft that has not reached its full stop still counts. */
+  function sentences(s) {
+    return s.split(/[.!?]+(?:\s+|$)/).filter(function (part) { return /[\p{L}\p{N}]/u.test(part); }).length;
+  }
   function run() {
     var s = input.value, points = Array.from(s), characters = segmenter ? Array.from(segmenter.segment(s), function (part) { return part.segment; }) : points;
     var words = wordSegmenter ? Array.from(wordSegmenter.segment(s)).filter(function (part) { return part.isWordLike; }).length : (s.trim() ? s.trim().split(/\s+/u).length : 0);
     var withoutSpaces = characters.filter(function (c) { return !/^\s+$/u.test(c); }).length;
     var values = [words, characters.length, withoutSpaces, points.length, new TextEncoder().encode(s).length, s ? s.split(/\r\n|\r|\n/).length : 0,
-      (s.match(/[.!?]+(?:\s|$)/g) || []).length, words ? Math.max(1, Math.ceil(words / 200)) + " min" : "0 min"];
+      sentences(s), words ? Math.max(1, Math.ceil(words / 200)) + " min" : "0 min"];
     values.forEach(function (value, index) { stats[index].textContent = value; });
   }
   E.on(input, "input", run);
-  E.on(E.qs("#copy"), "click", function () { E.copy(E.qs("#stats").innerText, this); });
+  E.on(E.qs("#copy"), "click", function () {
+    var labels = E.qsa("#stats dt");
+    E.copy(stats.map(function (value, index) { return labels[index].textContent + "  " + value.textContent; }).join("\n"), this);
+  });
   var query = E.param("t");
   if (query) input.value = query;
   run();

@@ -40,7 +40,7 @@
     <input class="field" id="q" type="search" autocomplete="off" autocorrect="off"
            autocapitalize="off" spellcheck="false" placeholder="filter"
            aria-controls="out" aria-describedby="q-help">
-    <p class="hint" aria-hidden="true">
+    <p class="hint keyboard-hint" aria-hidden="true">
       <span class="kbd" id="filter-key">/</span> to filter · <span class="kbd">↑↓</span> to move ·
       <span class="kbd">↵</span> to open in a new tab
     </p>
@@ -52,10 +52,10 @@
     <div class="out-head">
       <span class="lbl num" id="count" aria-live="polite"></span>
       <span class="row__spacer"></span>
-      <button class="tbtn" type="button" id="copy">copy</button>
+      <button class="tbtn" type="button" id="copy">copy md</button>
       <button class="tbtn" type="button" id="copy-urls">copy urls</button>
       <button class="tbtn" type="button" id="dl">download md</button>
-      <button class="tbtn" type="button" id="bookmarks">bookmarks</button>
+      <button class="tbtn" type="button" id="bookmarks">download bookmarks</button>
     </div>
     <div id="out"></div>
     <p class="hint" id="empty" hidden>nothing by that name.</p>
@@ -186,7 +186,7 @@ E.tool(function () {
 
     { group: "directories & discovery", sites: [
       { name: "fmhy",                 url: "https://fmhy.net",                   desc: "free media and tools index" },
-      { name: "alternativeTo",        url: "https://alternativeto.net",          desc: "software alternatives directory" },
+      { name: "alternativeto",        url: "https://alternativeto.net",          desc: "software alternatives directory" },
       { name: "the indie web index",  url: "https://theindex.fyi",               desc: "small web directories" },
       { name: "curlie",               url: "https://curlie.org",                 desc: "volunteer-edited web directory" },
       { name: "indieweb",             url: "https://indieweb.org",               desc: "independent web community" },
