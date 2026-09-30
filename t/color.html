@@ -7,18 +7,42 @@
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
 <style>
+      /* a text field and the browser's own picker, side by side */
+      .pick { display: flex; gap: var(--space-2); }
+      .pick .field { flex: 1 1 auto; }
+      .pick input[type="color"] {
+        flex: 0 0 auto;
+        width: var(--control-size);
+        height: var(--control-size);
+        padding: var(--space-1);
+        border: var(--rule) solid var(--color-rule);
+        border-radius: var(--radius);
+        background: var(--color-paper);
+        cursor: pointer;
+        transition: border-color var(--dur-1) var(--ease-out);
+      }
+      .pick input[type="color"]:hover { border-color: var(--color-dim); }
+      .pick input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+      .pick input[type="color"]::-webkit-color-swatch { border: 0; border-radius: var(--radius); }
+      .pick input[type="color"]::-moz-color-swatch { border: 0; border-radius: var(--radius); }
       .swatch {
         display: grid;
         place-items: center;
+        align-content: center;
+        gap: var(--space-3);
         min-height: calc(var(--space-16) * 3);
         padding: var(--space-6);
+        text-align: center;
+        border: var(--rule) solid var(--color-rule);
+        background: var(--swatch, var(--color-paper-2));
+      }
+      .swatch__big {
         font-size: var(--text-display);
         font-weight: 500;
         line-height: var(--lh-tight);
         letter-spacing: var(--track-tight);
-        border: var(--rule) solid var(--color-rule);
-        background: var(--swatch, var(--color-paper-2));
       }
+      .swatch__small { font-size: var(--text-base); line-height: var(--lh-snug); }
     </style>
 <script src="../site.js"></script>
 <script src="../theme.js"></script>
@@ -29,28 +53,24 @@
       <section class="grid2">
         <div>
           <label class="lbl" for="fg">foreground</label>
-          <input class="field" id="fg" value="#111111" autocomplete="off" spellcheck="false">
+          <div class="pick">
+            <input class="field" id="fg" value="#111111" autocomplete="off" spellcheck="false" aria-describedby="err">
+            <input type="color" id="fg-pick" value="#111111" aria-label="pick the foreground color">
+          </div>
         </div>
         <div>
           <label class="lbl" for="bg">background</label>
-          <input class="field" id="bg" value="#ffffff" autocomplete="off" spellcheck="false">
+          <div class="pick">
+            <input class="field" id="bg" value="#ffffff" autocomplete="off" spellcheck="false" aria-describedby="err">
+            <input type="color" id="bg-pick" value="#ffffff" aria-label="pick the background color">
+          </div>
         </div>
       </section>
       <p class="err" id="err" role="alert"></p>
       <div class="swatch" id="swatch" role="img" aria-label="color sample"></div>
-      <dl class="kv" id="readout" aria-live="polite">
-        <dt>foreground hex</dt><dd id="hex"></dd>
-        <dt>foreground rgb</dt><dd id="rgb"></dd>
-        <dt>foreground hsl</dt><dd id="hsl"></dd>
-        <dt>contrast</dt><dd id="ratio"></dd>
-        <dt>wcag</dt><dd id="wcag"></dd>
-      </dl>
+      <div id="readout" aria-live="polite"></div>
       <div class="row">
-        <button class="btn -ghost" id="copy-hex" type="button" disabled>copy hex</button>
-        <button class="btn -ghost" id="copy-rgb" type="button" disabled>copy rgb</button>
-        <button class="btn -ghost" id="copy-hsl" type="button" disabled>copy hsl</button>
         <button class="btn -ghost" id="swap" type="button">swap</button>
-        <button class="tbtn" id="copy-report" type="button" disabled>copy contrast</button>
       </div>
     </main>
 
@@ -62,14 +82,15 @@
 
         var f = E.qs("#fg");
         var b = E.qs("#bg");
+        var fPick = E.qs("#fg-pick");
+        var bPick = E.qs("#bg-pick");
         var er = E.qs("#err");
         var swatch = E.qs("#swatch");
         var readout = E.qs("#readout");
-        var copyRgb = E.qs("#copy-rgb");
-        var copyHsl = E.qs("#copy-hsl");
-        var copyHex = E.qs("#copy-hex"), copyReport = E.qs("#copy-report");
 
-        function parse(value) {
+        /* hex, rgb() and hsl() are parsed here, exactly, so nothing is lost to
+           a round trip through the browser. */
+        function parseExact(value) {
           value = String(value).trim().toLowerCase();
           var match = value.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
           if (!match) {
@@ -97,11 +118,39 @@
           ];
         }
 
+        /* Anything else the browser calls a color — a name, hwb(), lab(),
+           oklch(), four- and eight-digit hex — is painted onto one pixel and
+           read back as sRGB. Keywords that only mean something in a document
+           are refused, and so is anything see-through: it has no single
+           contrast until you know what lies beneath it. */
+        var probe = null;
+        function parseCss(value) {
+          value = String(value).trim();
+          if (!value || /^(?:currentcolor|inherit|initial|unset|revert|revert-layer)$/i.test(value)) return null;
+          if (!window.CSS || !CSS.supports || !CSS.supports("color", value)) return null;
+          if (!probe) {
+            var canvas = document.createElement("canvas");
+            canvas.width = canvas.height = 1;
+            probe = canvas.getContext("2d", { willReadFrequently: true });
+            if (!probe) return null;
+          }
+          probe.clearRect(0, 0, 1, 1);
+          probe.fillStyle = "#000";
+          probe.fillStyle = value;
+          probe.fillRect(0, 0, 1, 1);
+          var d = probe.getImageData(0, 0, 1, 1).data;
+          return d[3] === 255 ? [d[0], d[1], d[2]] : "translucent";
+        }
+
+        function parse(value) { return parseExact(value) || parseCss(value); }
+
         function cssHex(color) {
           return "#" + color.map(function (value) {
             return value.toString(16).padStart(2, "0");
           }).join("");
         }
+
+        function rgb(color) { return "rgb(" + color.join(" ") + ")"; }
 
         function luminance(color) {
           return color.map(function (value) {
@@ -135,57 +184,98 @@
             Math.round(saturation * 100) + "% " + Math.round(lightness * 100) + "%)";
         }
 
+        /* One result row: label, value, and its copy button. */
+        function row(label, id, copyLabel, buttonId) {
+          var v = E.el("div", { class: "res__v", id: id });
+          var button = E.el("button", { class: "tbtn", type: "button", text: "copy", "aria-label": "copy " + copyLabel, disabled: true });
+          if (buttonId) button.id = buttonId;
+          E.on(button, "click", function () { E.copy(button.dataset.value || v.textContent, button); });
+          readout.appendChild(E.el("div", { class: "res" }, [E.el("div", { class: "res__k", text: label }), v, button]));
+          return { v: v, button: button };
+        }
+
+        var rows = {
+          ratio: row("contrast", "ratio", "the contrast report", "copy-report"),
+          hex: row("foreground hex", "hex", "the foreground hex"),
+          rgb: row("foreground rgb", "rgb", "the foreground rgb"),
+          hsl: row("foreground hsl", "hsl", "the foreground hsl"),
+          bgHex: row("background hex", "bg-hex", "the background hex"),
+          bgRgb: row("background rgb", "bg-rgb", "the background rgb"),
+          bgHsl: row("background hsl", "bg-hsl", "the background hsl")
+        };
+
+        function show(key, text, copyText) {
+          var r = rows[key];
+          r.v.textContent = text;
+          r.button.disabled = !text;
+          if (copyText) r.button.dataset.value = copyText;
+          else delete r.button.dataset.value;
+        }
+
         function clearReadout() {
-          ["#hex", "#rgb", "#hsl", "#ratio", "#wcag"].forEach(function (selector) {
-            E.qs(selector).textContent = "";
-          });
+          Object.keys(rows).forEach(function (key) { show(key, ""); });
           swatch.removeAttribute("style");
           swatch.textContent = "";
-          copyRgb.disabled = true;
-          copyHsl.disabled = true;
-          copyHex.disabled = true; copyReport.disabled = true;
+          swatch.setAttribute("aria-label", "color sample");
+        }
+
+        function problem(field, name, value) {
+          field.setAttribute("aria-invalid", "true");
+          if (value === "translucent") return name + " is see-through, so its contrast depends on what is behind it. use an opaque color.";
+          return name + ": use hex, rgb(255 0 0), hsl(0 100% 50%), or a css color name";
         }
 
         function run() {
           var foreground = parse(f.value);
           var background = parse(b.value);
           er.textContent = "";
+          f.removeAttribute("aria-invalid");
+          b.removeAttribute("aria-invalid");
           clearReadout();
 
-          if (!foreground || !background) {
-            if (f.value.trim() || b.value.trim()) er.textContent = "use hex, rgb(255 0 0), or hsl(0 100% 50%)";
+          if (!Array.isArray(foreground) || !Array.isArray(background)) {
+            var messages = [];
+            if (f.value.trim() && !Array.isArray(foreground)) messages.push(problem(f, "foreground", foreground));
+            if (b.value.trim() && !Array.isArray(background)) messages.push(problem(b, "background", background));
+            er.textContent = messages.join(" · ");
             return;
           }
 
+          fPick.value = cssHex(foreground);
+          bPick.value = cssHex(background);
+
           var ratio = (Math.max(luminance(foreground), luminance(background)) + 0.05) /
             (Math.min(luminance(foreground), luminance(background)) + 0.05);
-          E.qs("#hex").textContent = cssHex(foreground);
-          E.qs("#rgb").textContent = "rgb(" + foreground.join(" ") + ")";
-          E.qs("#hsl").textContent = hsl(foreground);
-          E.qs("#ratio").textContent = ratio.toFixed(2) + ":1";
-          E.qs("#wcag").textContent = ratio >= 7
+          var verdict = ratio >= 7
             ? "AAA text"
             : ratio >= 4.5
               ? "AA text"
               : ratio >= 3
                 ? "AA large text only"
                 : "fail";
+          /* Rounded down, so a pair that only reaches 4.5 after rounding up is
+             never shown as passing. */
+          var shown = (Math.floor(ratio * 100) / 100).toFixed(2) + ":1";
+          show("ratio", shown + " · " + verdict, cssHex(foreground) + " on " + cssHex(background) + " · " + shown + " · " + verdict);
+          show("hex", cssHex(foreground));
+          show("rgb", rgb(foreground));
+          show("hsl", hsl(foreground));
+          show("bgHex", cssHex(background));
+          show("bgRgb", rgb(background));
+          show("bgHsl", hsl(background));
           swatch.setAttribute(
             "style",
             "--swatch:" + cssHex(background) + ";color:" + cssHex(foreground)
           );
-          swatch.textContent = "Aa";
-          copyRgb.disabled = false;
-          copyHsl.disabled = false;
-          copyHex.disabled = false; copyReport.disabled = false;
+          swatch.setAttribute("aria-label", "sample text in " + cssHex(foreground) + " on " + cssHex(background));
+          swatch.appendChild(E.el("span", { class: "swatch__big", text: "Aa" }));
+          swatch.appendChild(E.el("span", { class: "swatch__small", text: "the quick brown fox jumps over the lazy dog" }));
         }
 
         E.on(f, "input", run);
         E.on(b, "input", run);
-        E.on(copyRgb, "click", function () { E.copy(E.qs("#rgb").textContent, this); });
-        E.on(copyHsl, "click", function () { E.copy(E.qs("#hsl").textContent, this); });
-        E.on(copyHex, "click", function () { E.copy(E.qs("#hex").textContent, this); });
-        E.on(copyReport, "click", function () { E.copy(cssHex(parse(f.value)) + " on " + cssHex(parse(b.value)) + " · " + E.qs("#ratio").textContent + " · " + E.qs("#wcag").textContent, this); });
+        E.on(fPick, "input", function () { f.value = fPick.value; run(); });
+        E.on(bPick, "input", function () { b.value = bPick.value; run(); });
         E.on(E.qs("#swap"), "click", function () {
           var value = f.value;
           f.value = b.value;
