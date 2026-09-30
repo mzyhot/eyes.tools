@@ -165,6 +165,18 @@ try {
       if (name === 'coin') assert.match(await text('#first'), /heads|tails/i); else assert.equal((await text('#total')).trim(), '2');
     }
   });
+  await check('drand requests carry no custom headers, so Safari sends them without a preflight', async () => {
+    await go('rng');
+    const sent = await page.evaluate(async () => {
+      const seen = [], original = window.fetch;
+      window.fetch = (url, init) => { seen.push({ url: String(url), headers: Object.keys((init && init.headers) || {}) }); return original(url, init); };
+      try { await R.source('trng', 32); } catch (_) {}
+      window.fetch = original;
+      return seen;
+    });
+    assert.ok(sent.length > 0 && sent.every(r => r.url.startsWith('https://drand.cloudflare.com/')), JSON.stringify(sent));
+    assert.deepEqual(sent.filter(r => r.headers.length), [], 'custom headers force a CORS preflight the relay refuses');
+  });
   await check('URL parsing, form encoding and malformed escapes', async () => {
     await go('url'); await fill('#in', 'https://example.com/path?q=a%20b#hash'); await click('#parse'); await has('#out', 'example.com'); await has('#out', '/path');
     await fill('#in', 'hello 🌍'); await click('#enc'); assert.ok((await text('#out')).includes('%F0%9F%8C%8D'));

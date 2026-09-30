@@ -1,8 +1,8 @@
 /* 𓁹𓁹 — shared randomness sources.
  *
  * Three tools (rng, dice, coin) draw their randomness through this module, and
- * rng lets the visitor choose where it comes from; dice and coin always use the
- * drand beacon. It exposes a single global, `R`.
+ * each lets the visitor choose where it comes from. It exposes a single
+ * global, `R`.
  *
  * The three sources, weakest first:
  *
@@ -146,6 +146,12 @@
    * Rebuilding it per draw costs an extra network round trip before every roll.
    * Beacon freshness is unaffected: `noCache` puts a cache-busting parameter on
    * each beacon request, and the round check below is what actually enforces it.
+   *
+   * The empty third argument matters. Left out, the client sends its own
+   * `User-Agent` header with every beacon request. Chrome drops that header,
+   * but Safari, the desktop app's WebKit and Firefox send it, which turns a
+   * plain cross-origin GET into one that needs a CORS preflight, and the relay
+   * does not approve that header — so the draw failed there with "Load failed".
    */
   function client() {
     if (chainClient) return chainClient;
@@ -155,7 +161,7 @@
       chainVerificationParams: { chainHash: CHAIN_HASH, publicKey: PUBLIC_KEY }
     };
     var chain = new Drand.HttpCachingChain(ENDPOINT, options);
-    chainClient = new Drand.HttpChainClient(chain, options);
+    chainClient = new Drand.HttpChainClient(chain, options, {});
     return chainClient;
   }
 
