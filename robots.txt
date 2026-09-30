@@ -1,5 +1,6 @@
 # eyes.tools crawler policy
 User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /api/
 Disallow: /_dev/

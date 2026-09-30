@@ -42,6 +42,7 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
   assert.match(robots.headers.get('content-type'), /^text\/plain;\s*charset=utf-8$/i);
   const robotsBody = await robots.text();
   assert.match(robotsBody, /^User-agent: \*$/m);
+  assert.match(robotsBody, /^Content-Signal: search=yes, ai-input=yes, ai-train=no$/m);
   assert.match(robotsBody, /^Allow: \/$/m);
   assert.match(robotsBody, /^Disallow: \/api\/$/m);
   assert.match(robotsBody, /^Sitemap: https:\/\/eyes\.tools\/sitemap\.xml$/m);
