@@ -11,6 +11,8 @@
   .out-head { flex-wrap: wrap; }
   /* the summary carries a byte size; lowercasing would turn KB into kb */
   #stat { text-transform: none; }
+  /* the notes are prose, so they are set as prose */
+  .notes dd { font-family: var(--font-ui); line-height: var(--lh-snug); }
 </style>
 <script src="../site.js"></script>
 <script src="../theme.js"></script>
@@ -74,7 +76,7 @@
 
   <div class="section--ruled">
     <span class="lbl">notes</span>
-    <dl class="kv">
+    <dl class="kv -stack notes">
       <dt>v4</dt>
       <dd>122 random bits from crypto.getRandomValues; version nibble 4 and variant bits 10 fixed per RFC 9562.</dd>
       <dt>v7</dt>

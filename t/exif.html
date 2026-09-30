@@ -20,11 +20,10 @@
     <p class="err" id="err" role="alert"></p>
   </section>
 
-  <section>
+  <section class="stack">
     <div id="filter-wrap" hidden>
       <label class="lbl" for="filter">filter metadata</label>
       <input class="field" id="filter" type="search" autocomplete="off">
-      <div class="sep"></div>
     </div>
     <div class="out-head">
       <span class="lbl" id="summary">metadata</span>
@@ -32,7 +31,7 @@
       <button class="tbtn" id="copy" type="button" disabled>copy</button>
       <button class="tbtn" id="download" type="button" disabled>download json</button>
     </div>
-    <dl class="kv" id="out" aria-live="polite"></dl>
+    <dl class="kv -stack" id="out" aria-live="polite"></dl>
   </section>
 
 </main>
@@ -85,19 +84,28 @@ E.tool(function () {
   /* Expanded tags → sorted [label, value] rows. A group is either a tag itself
      (shown as "metadata · group") or a map of tags ("group · tag"). */
   function flatten(tags) {
-    var rows = [];
+    /* ExifReader can report one fact under two groups — a png's header
+       appears as both "png" and "pngFile" — so a tag already listed with the
+       same value is not listed again. */
+    var rows = [], seen = new Set();
+    function add(group, key, value) {
+      var fact = key + "\u0000" + value;
+      if (seen.has(fact)) return;
+      seen.add(fact);
+      rows.push([group + " · " + key, value]);
+    }
     Object.keys(tags || {}).sort().forEach(function (group) {
       var value = tags[group], single;
       if (value == null || SKIP.test(group)) return;
       if (typeof value !== "object" || Array.isArray(value) || ArrayBuffer.isView(value) || hasDescription(value)) {
         single = valueText(value);
-        if (single && single !== BINARY && single !== STRUCTURED) rows.push(["metadata · " + group, single]);
+        if (single && single !== BINARY && single !== STRUCTURED) add("metadata", group, single);
         return;
       }
       Object.keys(value).sort().forEach(function (key) {
         if (SKIP.test(key)) return;
         var d = valueText(value[key]);
-        if (d && d !== BINARY && d !== STRUCTURED) rows.push([group + " · " + key, d]);
+        if (d && d !== BINARY && d !== STRUCTURED) add(group, key, d);
       });
     });
     return rows;

@@ -125,7 +125,7 @@ markup genuinely has no equivalent — and if you do, scope the style in a
 **Output** — `.out` (mono block, preserves whitespace) · `.out--scroll`
 (max-height + scroll) · `.out-head` (label row above an output) ·
 `.res` / `.res__k` / `.res__v` (label · value · copy row — the workhorse) ·
-`.kv` / `dt` / `dd` (definition readout) · `.figure` (frame for canvas/svg/img) ·
+`.kv` / `dt` / `dd` (definition readout; `.kv.-stack` puts long values under their labels on phones) · `.figure` (frame for canvas/svg/img) ·
 `.reveal` (140ms fade-in; add on newly-computed output, never on page load)
 
 Segmented control markup — the radio must live **inside** its label:

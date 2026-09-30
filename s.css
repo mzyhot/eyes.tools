@@ -479,6 +479,10 @@ input[type="range"]::-moz-range-thumb {
 .kv dt { color: var(--color-dim); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 .kv dd:empty::before { content: "—"; color: var(--color-dim); }
+/* For values too long to share a phone's width with their labels: each sits
+   under its label there, and beside it on a wider screen. */
+.kv.-stack { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-1); }
+.kv.-stack dd + dt { margin-top: var(--space-3); }
 
 /* canvas / figure output */
 .figure {
@@ -653,9 +657,13 @@ input[type="range"]::-moz-range-thumb { width: var(--space-5); height: var(--spa
 }
 .seg label:has(input:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: 2px; z-index: 1; }
 
-.out-head { flex-wrap: wrap; }
-.out-head > .lbl { flex-basis: 100%; }
-.out-head > .row__spacer { display: none; }
+/* On a narrow screen a lone button stays on its label's line, pushed right.
+   Several go to a line of their own below the label, flush with it, so a group
+   of actions is never split across the label's line and the next. */
+.out-head { flex-wrap: wrap; column-gap: var(--space-4); }
+.out-head:has(> .tbtn ~ .tbtn) > .lbl { flex-basis: 100%; }
+.out-head:has(> .tbtn ~ .tbtn) > .row__spacer { display: none; }
+.out-head:has(> .tbtn ~ .tbtn) > .tbtn { padding-inline: 0; }
 .res { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
 .res__k { grid-column: 1 / -1; }
 .kv { grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr); }
@@ -691,11 +699,15 @@ input[type="range"]::-moz-range-thumb { width: var(--space-5); height: var(--spa
   .grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .row > .btn { flex: 0 0 auto; }
-  .out-head > .lbl { flex-basis: auto; }
-  .out-head > .row__spacer { display: block; }
+  .out-head { column-gap: var(--space-2); }
+  .out-head:has(> .tbtn ~ .tbtn) > .lbl { flex-basis: auto; }
+  .out-head:has(> .tbtn ~ .tbtn) > .row__spacer { display: block; }
+  .out-head:has(> .tbtn ~ .tbtn) > .tbtn { padding-inline: var(--space-2); }
   .res { grid-template-columns: 7.5rem minmax(0, 1fr) auto; }
   .res__k { grid-column: auto; }
-  .kv { grid-template-columns: minmax(0, auto) minmax(0, 1fr); }
+  .kv, .kv.-stack { grid-template-columns: minmax(0, auto) minmax(0, 1fr); }
+  .kv.-stack { row-gap: var(--space-2); }
+  .kv.-stack dd + dt { margin-top: 0; }
   .item { flex-direction: row; align-items: baseline; gap: var(--space-4); }
   .item__name { min-width: 7rem; }
   .foot { flex-direction: row; flex-wrap: nowrap; align-items: center; gap: var(--space-4); margin-top: var(--space-16); }
