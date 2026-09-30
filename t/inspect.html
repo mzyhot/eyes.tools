@@ -17,6 +17,7 @@
         font-size: var(--text-xs);
       }
       .inspect-row span { overflow-wrap: anywhere; }
+      .inspect-head { color: var(--color-dim); }
       @media (max-width: 420px) {
         .inspect-row {
           grid-template-columns: minmax(2.5rem, .4fr) minmax(0, 1fr);
@@ -46,7 +47,7 @@
 
       <section>
         <div class="out-head">
-          <span class="lbl">character</span>
+          <span class="lbl" id="summary">characters</span>
           <span class="row__spacer"></span>
           <button class="tbtn" id="copy" type="button" disabled>copy table</button>
           <button class="tbtn" id="download" type="button" disabled>download tsv</button>
@@ -66,6 +67,7 @@
         var error = E.qs("#err");
         var copy = E.qs("#copy");
         var download = E.qs("#download");
+        var summary = E.qs("#summary");
         var report = "";
         var MAX_ROWS = 10000;
         var names = [
@@ -150,6 +152,9 @@
           copy.disabled = rows.length === 0;
           download.disabled = rows.length === 0;
 
+          summary.textContent = rows.length
+            ? (scan.truncated ? "first " : "") + rows.length.toLocaleString() + (rows.length === 1 ? " character" : " characters")
+            : "characters";
           if (scan.truncated) {
             error.textContent = "showing the first " + MAX_ROWS.toLocaleString() +
               " characters to keep the page responsive";
@@ -159,6 +164,13 @@
              live appends would lay the page out ten thousand times. */
           var frag = document.createDocumentFragment();
           var warnedNonAscii = false;
+          if (rows.length) {
+            frag.appendChild(E.el("div", { class: "inspect-row inspect-head", "aria-hidden": "true" }, [
+              E.el("span", { text: "character" }),
+              E.el("span", { text: ascii ? "ascii decimal" : "code point" }),
+              E.el("span", { text: ascii ? "name / utf-8 bytes" : "utf-8 bytes" })
+            ]));
+          }
           rows.forEach(function (character) {
             var codePoint = character.codePointAt(0);
             var bytes = utf8(character);

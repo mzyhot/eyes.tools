@@ -6,6 +6,11 @@
 <link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
+<style>
+  /* Unchanged lines recede so the changes read at a glance; the +/- prefix
+     still says which way each one went. */
+  #out .same { color: var(--color-dim); }
+</style>
 <script src="../site.js"></script>
 <script src="../theme.js"></script>
 </head>
@@ -114,7 +119,7 @@ E.tool(function () {
     }
 
     var result = [], added = 0, removed = 0, k;
-    for (k = 0; k < head; k++) result.push("  " + y[k]);
+    for (k = 0; k < head; k++) result.push(["same", "  " + y[k]]);
 
     if (coreN || coreM) {
       /* dp[i][j] is the length of the longest common subsequence of the core
@@ -139,13 +144,19 @@ E.tool(function () {
       i = 0; j = 0;
       while (i < coreN || j < coreM) {
         row = i * stride;
-        if (i < coreN && j < coreM && kx[head + i] === ky[head + j]) { result.push("  " + y[head + j]); i++; j++; }
-        else if (j < coreM && (i === coreN || dp[row + j + 1] >= dp[row + stride + j])) { result.push("+ " + y[head + j++]); added++; }
-        else { result.push("- " + x[head + i++]); removed++; }
+        if (i < coreN && j < coreM && kx[head + i] === ky[head + j]) { result.push(["same", "  " + y[head + j]]); i++; j++; }
+        else if (j < coreM && (i === coreN || dp[row + j + 1] >= dp[row + stride + j])) { result.push(["added", "+ " + y[head + j++]]); added++; }
+        else { result.push(["removed", "- " + x[head + i++]]); removed++; }
       }
     }
 
-    o.textContent = result.join("\n");
+    /* One span per line, built off-document and appended once. The newlines
+       live in the text, so copying the listing still gives a plain diff. */
+    var listing = document.createDocumentFragment();
+    result.forEach(function (line, at) {
+      listing.appendChild(E.el("span", { class: line[0], text: at ? "\n" + line[1] : line[1] }));
+    });
+    o.appendChild(listing);
     E.qs("#summary").textContent = added || removed ? added + " added · " + removed + " removed" : ignoreSpace ? "no changes beyond surrounding whitespace" : "no changes";
     copy.disabled = false;
   }
