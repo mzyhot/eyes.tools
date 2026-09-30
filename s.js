@@ -527,6 +527,95 @@
     return main;
   }
 
+  /* ── tools for AI agents (WebMCP) ────────────────────── */
+
+  /* WebMCP lets a page offer its actions to an AI agent working in the browser:
+     each is a named tool with a JSON Schema for its input, run by the page's
+     own script. The draft standard keeps the registry on `document`; Chromium's
+     first releases put it on `navigator`, so both are looked for. Where neither
+     exists, which is most browsers today, offering a tool does nothing. */
+  function modelContext() {
+    var context = document.modelContext || navigator.modelContext;
+    return context && typeof context.registerTool === "function" ? context : null;
+  }
+
+  /**
+   * Offer one of this page's actions to AI agents through WebMCP.
+   *
+   * `run` receives the agent's input and returns, or resolves to, a result
+   * that survives JSON. Throwing is how a tool refuses: the message goes back
+   * as `{ error }`, in the same quiet, specific words the page shows a person,
+   * because a rejected call reaches the agent with no reason attached. A tool
+   * that works on what is on the page does it through the page's own fields,
+   * so the visitor sees what the agent did.
+   * @param {Object} tool
+   * @param {string} tool.name Unique on the page: letters, digits, `_`, `-`, `.`.
+   * @param {string} tool.title A short label a browser may show the visitor.
+   * @param {string} tool.description What it does and when to use it, for the agent.
+   * @param {Object} [tool.input] JSON Schema for the input object.
+   * @param {boolean} [tool.readOnly] Set when it changes nothing beyond the page's
+   *   own fields, so an agent may call it without asking.
+   * @param {Function} tool.run `(input, signal)` → result or a promise of one.
+   */
+  E.agentTool = function (tool) {
+    var context = modelContext();
+    if (!context || !tool || typeof tool.run !== "function") return;
+    var definition = {
+      name: tool.name,
+      title: tool.title,
+      description: tool.description,
+      inputSchema: tool.input || { type: "object", properties: {} },
+      annotations: { readOnlyHint: !!tool.readOnly },
+      execute: function (input, options) {
+        return Promise.resolve().then(function () {
+          return tool.run(input || {}, options && options.signal);
+        }).catch(function (error) {
+          return { error: (error && error.message) || String(error) };
+        });
+      }
+    };
+    try {
+      Promise.resolve(context.registerTool(definition)).catch(function (error) {
+        if (window.console && console.warn) console.warn("agent tool " + tool.name + " was not offered:", error);
+      });
+    } catch (error) {
+      if (window.console && console.warn) console.warn("agent tool " + tool.name + " was not offered:", error);
+    }
+  };
+
+  /* Every page, the index and the not-found page included, can point an agent
+     at the right tool. Matching is the index's: every word typed must appear
+     in a tool's name, lede or search aliases. */
+  function offerToolFinder() {
+    if (!window.TOOLS) return;
+    E.agentTool({
+      name: "find_tool",
+      title: "find a tool",
+      description: "List the tools on " + (SITE.wordmark || "this site") + " (text, code, images, randomness, " +
+        "time, sharing) with the address of each. Give words to narrow the list. Each tool's page " +
+        "offers its own actions to agents once it is open.",
+      input: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Words to look for, such as \"password\" or \"time zone\". Leave out to list every tool." }
+        }
+      },
+      readOnly: true,
+      run: function (input) {
+        var words = String(input.query || "").toLowerCase().split(/\s+/).filter(Boolean);
+        var found = window.TOOLS.filter(function (t) {
+          var haystack = (t.name + " " + t.desc + " " + (t.alias || "")).toLowerCase();
+          return words.every(function (word) { return haystack.indexOf(word) !== -1; });
+        });
+        return {
+          tools: found.map(function (t) {
+            return { name: t.name, description: t.desc, url: new URL(E.toolHref(t.slug), location.href).href };
+          })
+        };
+      }
+    });
+  }
+
   /* ── the tool's own script ───────────────────────────── */
 
   var queued = [], ready = false;
@@ -666,6 +755,7 @@
     });
 
     if (kind === "tool") watchDrops();
+    offerToolFinder();
 
     /* Escape returns to the index from any tool page. Typing takes precedence:
        the first Escape leaves a field, a second one leaves the tool. Dialogs and
