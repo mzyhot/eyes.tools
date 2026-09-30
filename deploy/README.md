@@ -105,6 +105,27 @@ default, lets it through with no rule opening `/api/share/*`.
   combinations; see [Sharing](https://github.com/mzyhot/eyes.tools/wiki/Sharing#stun-and-turn)
   in the wiki for configuration.
 
+### GitHub deployment webhook
+
+The Node service exposes one deployment hook at `POST /api/github/sync`. It
+accepts only JSON POST requests whose `X-Hub-Signature-256` matches the HMAC
+SHA-256 signature GitHub computes with `GITHUB_SECRET`, and only for
+`mzyhot/eyes.tools`. A valid request queues the protected
+`eyes-updater.service`, which checks out the verified `main` release. The
+webhook body is never used as a command or as a Git ref.
+
+Set the same random value in the service environment on the host:
+
+```
+GITHUB_SECRET=replace-with-a-long-random-value
+```
+
+In the GitHub repository settings, create a webhook pointing to
+`https://eyes.tools/api/github/sync`, choose `application/json`, and use that
+same secret. Subscribe to the events you want to trigger a check (a `push`
+to `main` is sufficient). Keep the endpoint out of CDN caches and preserve
+its POST body and `X-Hub-Signature-256` header.
+
 ## Verify after each release
 
 ```bash

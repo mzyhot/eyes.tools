@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
@@ -70,6 +70,56 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
     assert.equal(res.headers.get('content-encoding'), expected, offer);
     await res.arrayBuffer();
   }
+});
+
+test('GitHub deployment webhook accepts only signed requests for this repository', async t => {
+  const calls = [];
+  const secret = 'test webhook secret';
+  const app = createEyesServer({ githubWebhookOptions: {
+    secret,
+    sync: async call => calls.push(call)
+  } });
+  await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+  t.after(() => app.close());
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const payload = JSON.stringify({
+    ref: 'refs/heads/main',
+    repository: { full_name: 'mzyhot/eyes.tools' }
+  });
+  const signature = 'sha256=' + createHmac('sha256', secret).update(payload).digest('hex');
+  const post = (body = payload, headers = {}) => fetch(base + '/api/github/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': signature, ...headers },
+    body
+  });
+
+  const get = await fetch(base + '/api/github/sync');
+  assert.equal(get.status, 405);
+  assert.equal(get.headers.get('allow'), 'POST');
+  await get.arrayBuffer();
+
+  const unsigned = await fetch(base + '/api/github/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
+  assert.equal(unsigned.status, 401);
+  await unsigned.arrayBuffer();
+
+  const bad = await post(payload, { 'X-Hub-Signature-256': 'sha256=' + '0'.repeat(64) });
+  assert.equal(bad.status, 401);
+  await bad.arrayBuffer();
+
+  const wrongRepository = JSON.stringify({ repository: { full_name: 'someone/else' } });
+  const wrongSignature = 'sha256=' + createHmac('sha256', secret).update(wrongRepository).digest('hex');
+  const refused = await post(wrongRepository, { 'X-Hub-Signature-256': wrongSignature });
+  assert.equal(refused.status, 403);
+  await refused.arrayBuffer();
+
+  const accepted = await post(payload, { 'X-GitHub-Event': 'push', 'X-GitHub-Delivery': 'delivery-1' });
+  assert.equal(accepted.status, 202);
+  assert.deepEqual(calls, [{
+    delivery: 'delivery-1',
+    event: 'push',
+    payload: { ref: 'refs/heads/main', repository: { full_name: 'mzyhot/eyes.tools' } }
+  }]);
+  assert.deepEqual(await accepted.json(), { accepted: true });
 });
 
 test('starts when run through a symlinked release directory', { timeout: 10000 }, async t => {

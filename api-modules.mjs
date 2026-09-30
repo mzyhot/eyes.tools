@@ -12,9 +12,14 @@
  *
  * Static hosts run none of this; they serve the pages only.
  */
+import { createGithubWebhookService } from "./github-webhook.mjs";
 import { createShareService } from "./share-server.mjs";
 
 export const API_MODULES = [
+  {
+    prefix: "/api/github/",
+    create: (options) => createGithubWebhookService(options.githubWebhookOptions)
+  },
   {
     prefix: "/api/share/",
     create: (options) => createShareService(options.shareOptions)
