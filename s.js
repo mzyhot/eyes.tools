@@ -477,7 +477,7 @@
     if (kind === "tool") parts.push(E.el("a", { href: E.home, text: LABELS.home || "" }));
     parts.push(E.el("span", { class: "row__spacer" }));
     var note = kind === "index" ? (SITE.footer || {}).index : (entry && entry.note) || (SITE.footer || {}).local;
-    if (note) parts.push(E.el("span", { text: note }));
+    if (note) parts.push(E.el("span", { class: "foot__note", text: note }));
     return E.el("footer", { class: kind === "index" ? "foot directory-foot" : "foot" }, parts);
   }
 
@@ -575,6 +575,62 @@
     queued.push(fn);
   };
 
+  /* ── files dropped on a tool page ────────────────────── */
+
+  /* A file dragged onto a page would otherwise replace the page with the file.
+     On a tool page it goes to the page's one visible file field instead, as if
+     chosen there; with no such field the drop is simply refused. These
+     listeners sit on the window, the last stop of the event, so a page that
+     handles drops itself has already claimed the event by the time they run. */
+  var dropTimer = null;
+
+  function carriesFiles(e) {
+    var types = e.dataTransfer && e.dataTransfer.types;
+    return !!types && Array.prototype.indexOf.call(types, "Files") >= 0;
+  }
+
+  function soleFileField() {
+    var fields = E.qsa('main input[type="file"]').filter(function (field) {
+      return !field.disabled && !field.closest("[hidden]");
+    });
+    return fields.length === 1 ? fields[0] : null;
+  }
+
+  function markDrop(field) {
+    E.qsa("[data-drop]").forEach(function (el) { if (el !== field) delete el.dataset.drop; });
+    clearTimeout(dropTimer);
+    if (!field) return;
+    field.dataset.drop = "1";
+    /* dragleave fires for every child crossed, so the mark is kept alive by the
+       stream of dragover events instead and lapses shortly after they stop. */
+    dropTimer = setTimeout(function () { delete field.dataset.drop; }, 180);
+  }
+
+  function watchDrops() {
+    E.on(window, "dragover", function (e) {
+      if (!carriesFiles(e) || e.defaultPrevented) return;
+      e.preventDefault();
+      var field = soleFileField();
+      e.dataTransfer.dropEffect = field ? "copy" : "none";
+      markDrop(field);
+    });
+    E.on(window, "drop", function (e) {
+      if (!carriesFiles(e) || e.defaultPrevented) return;
+      e.preventDefault();
+      markDrop(null);
+      var field = soleFileField(), file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!field || !file) return;
+      try {
+        var list = new DataTransfer();
+        list.items.add(file);
+        field.files = list.files;
+      } catch (error) {
+        try { field.files = e.dataTransfer.files; } catch (again) { return; }
+      }
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+
   /* ── page boot ───────────────────────────────────────── */
 
   /* Everything a page gets for free. Runs as soon as this script does, which is
@@ -608,6 +664,8 @@
         E.copy("value" in src ? src.value : src.textContent, b);
       });
     });
+
+    if (kind === "tool") watchDrops();
 
     /* Escape returns to the index from any tool page. Typing takes precedence:
        the first Escape leaves a field, a second one leaves the tool. Dialogs and

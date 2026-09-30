@@ -79,13 +79,19 @@ The site's one job is: **the visitor leaves holding a result.**
 - **Every result is one click from being taken away.** Copy button (`E.copy`) for
   text; download button (`E.download`) for files and images.
 - **Empty state is silence,** not an illustration or a paragraph of encouragement.
-  `.res__v:empty` and `.out:empty` already render an em dash.
+  `.res__v:empty`, `.out:empty` and an empty `.kv dd` already render an em dash.
 - **Deep-link the input where it's cheap.** `E.param("t")` reads `?t=…`; prefill
   from it if present. Never put user data in the URL automatically.
 - **Silent success.** No toasts. Confirm by swapping a button label (`E.flash`),
   which `E.copy` already does.
 - **Errors are quiet and specific.** Write the message into an `.err` element:
-  `unexpected } at line 4`, not `Something went wrong!`.
+  `unexpected } at line 4`, not `Something went wrong!`. While the visitor is
+  still typing, an unfinished input is not yet wrong: hold its error until they
+  pause (see `calc.html`).
+- **Files can be dropped anywhere.** A file dropped on a tool page lands in its
+  one visible file field, as if chosen there, and fires `change`. A page that
+  handles drops itself calls `preventDefault()` on `dragover` and `drop`, and
+  the shared handler leaves them alone.
 
 ## 4. Voice
 

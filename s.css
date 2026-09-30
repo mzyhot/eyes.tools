@@ -185,6 +185,8 @@ hr { border: 0; border-top: var(--rule) solid var(--color-rule); margin: 0; }
 .field:disabled { color: var(--color-dim); background: var(--color-paper-2); cursor: not-allowed; }
 .field::placeholder { color: var(--color-dim); opacity: 1; }
 .field[aria-invalid="true"] { border-color: var(--color-alert); }
+/* a file is being dragged over the page and will land in this field */
+.field[data-drop] { border-color: var(--color-ink); background: var(--color-paper-2); }
 
 textarea.field {
   min-height: 8rem;
@@ -257,6 +259,7 @@ input[type="range"]::-webkit-slider-thumb {
   border: 0;
   border-radius: var(--radius);
 }
+input[type="range"]:disabled { opacity: 0.38; cursor: not-allowed; }
 input[type="range"]::-moz-range-thumb {
   width: 0.75rem;
   height: 0.75rem;
@@ -387,6 +390,9 @@ input[type="range"]::-moz-range-thumb {
   transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
 }
 .check input:checked { background: var(--color-ink); border-color: var(--color-ink); }
+.check:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+.check:has(input:disabled):hover { color: var(--color-dim); }
+.check input:disabled { cursor: not-allowed; }
 
 /* ═══ output ════════════════════════════════════════════ */
 
@@ -472,6 +478,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .kv dt { color: var(--color-dim); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
+.kv dd:empty::before { content: "—"; color: var(--color-dim); }
 
 /* canvas / figure output */
 .figure {
@@ -691,8 +698,11 @@ input[type="range"]::-moz-range-thumb { width: var(--space-5); height: var(--spa
   .kv { grid-template-columns: minmax(0, auto) minmax(0, 1fr); }
   .item { flex-direction: row; align-items: baseline; gap: var(--space-4); }
   .item__name { min-width: 7rem; }
-  .foot { flex-direction: row; align-items: center; gap: var(--space-4); margin-top: var(--space-16); }
+  .foot { flex-direction: row; flex-wrap: nowrap; align-items: center; gap: var(--space-4); margin-top: var(--space-16); }
   .foot > .row__spacer { display: block; }
+  /* A long network note wraps inside its own column rather than dropping the
+     whole note onto a line of its own. */
+  .foot__note { min-width: 0; text-align: right; text-wrap: balance; }
 }
 
 @media (min-width: 40rem) and (hover: hover) and (pointer: fine) {
