@@ -126,9 +126,10 @@ and on each tool's page the tool itself — `convert_case`, `hash_text`,
 `check_contrast`, `convert_time_zone` and so on. An agent's call runs the page's
 own code on the page's own fields, so the visitor sees what it did, and the work
 stays in the browser as it does for a person. Tools that act on a file use the
-one the visitor chose; sending anything to another device, or replacing what
-the visitor wrote, is left to the visitor. A page registers its tools with
-`E.agentTool` in `s.js`, which does nothing where the browser lacks WebMCP.
+one the visitor chose; replacing what the visitor wrote is left to the visitor.
+Share offers agents nothing: a transfer needs a person on each device. A page
+registers its tools with `E.agentTool` in `s.js`, which does nothing where the
+browser lacks WebMCP.
 
 ## Deploying
 

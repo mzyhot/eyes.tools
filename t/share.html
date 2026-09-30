@@ -695,23 +695,6 @@ E.tool(function () {
   if (!window.isSecureContext || !window.RTCPeerConnection || !window.crypto?.subtle) { error('open share over https in a browser that supports WebRTC.'); $('#status').textContent = 'unavailable'; }
   else if (location.protocol === 'file:' && !SERVICE) { error('open share on the website to find other devices.'); $('#status').textContent = 'offline'; }
   else if (readRoom()) { showRoom(); discover(); }
-
-  /* For agents: where the room stands. Sending stays with the visitor, who
-     chooses what leaves this device and for whom. */
-  E.agentTool({
-    name: 'get_share_status',
-    title: 'see who is in the share room',
-    description: 'Give the link that brings another device into this share room, this device\'s name, and ' +
-      'the devices already in the room with their state. Files and text go device to device over WebRTC; ' +
-      'the visitor sends them with the buttons on each device.',
-    readOnly: true,
-    run: () => ({
-      link: $('#room-panel').hidden ? '' : $('#room-link').value,
-      you: $('#your-name').textContent,
-      status: $('#status').textContent,
-      devices: [...peers.values()].map(p => ({ name: p.name, device: p.device, state: p.label.textContent }))
-    })
-  });
 });
 </script>
 </body>

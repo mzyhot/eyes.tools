@@ -98,8 +98,13 @@ default, lets it through with no rule opening `/api/share/*`.
   45 seconds without data. Avoid a proxy read timeout below that interval.
 - Exclude `/api/*` from CDN and proxy caching. A join request should return JSON,
   never an HTML page or a cached response.
-- Do not transform HTML/JavaScript or inject scripts at the edge: inline scripts
-  use CSP hashes calculated from the original HTML.
+- Do not transform HTML/JavaScript or inject inline scripts at the edge: inline
+  scripts use CSP hashes calculated from the original HTML. An added
+  same-origin script tag leaves those hashes intact, so Cloudflare's WebMCP
+  bridge (`/.webmcp/bridge.js`, injected when WebMCP is on under Agent
+  Readiness) runs under the policy as it is, beside the tools each page
+  registers itself. Its Site MCP server pack reads tools from `/mcp`, which
+  this server does not provide, so that pack finds nothing to offer.
 - WebRTC sends files directly or through your optional TURN relay. The HTTP proxy
   carries only signaling, not file data. TURN is needed for some NAT/firewall
   combinations; see [Sharing](https://github.com/mzyhot/eyes.tools/wiki/Sharing#stun-and-turn)

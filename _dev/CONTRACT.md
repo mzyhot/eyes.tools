@@ -98,7 +98,8 @@ The site's one job is: **the visitor leaves holding a result.**
   sees what the agent did and the agent gets the same answer, and the same
   error, a person would. A tool reads a file only once the visitor has chosen
   it, and never sends one anywhere. Leave anything that sends data off the
-  device, or discards what the visitor wrote, to the visitor.
+  device, or discards what the visitor wrote, to the visitor; share offers
+  agents nothing, since a transfer needs a person at each end.
 
 ## 4. Voice
 
