@@ -56,11 +56,10 @@ E.tool(function () {
         correctLevel: QRCode.CorrectLevel[E.qs("#level").value] })._oQRCode;
     } catch (e) { error.textContent = "input is too long for this error-correction level"; return; }
     try {
-      /* The code sits inside a quiet zone four modules wide, as the standard
-         asks, so a scanner can find it on any background. The whole image,
-         zone included, is the selected size; each edge is rounded to a whole
-         pixel so modules stay crisp. */
-      var count = model.getModuleCount(), span = count + 8;
+      /* The code sits inside a border one module wide, so it scales with the
+         code. The whole image, border included, is the selected size; each
+         edge is rounded to a whole pixel so modules stay crisp. */
+      var count = model.getModuleCount(), span = count + 2;
       var style = getComputedStyle(document.documentElement), ink = hexColor(style.getPropertyValue("--color-qr-ink").trim()), paper = hexColor(style.getPropertyValue("--color-qr-paper").trim());
       var canvas = document.createElement("canvas"), path = [];
       canvas.width = canvas.height = size;
@@ -70,7 +69,7 @@ E.tool(function () {
       context.fillStyle = paper; context.fillRect(0, 0, size, size); context.fillStyle = ink;
       for (var row = 0; row < count; row++) for (var col = 0; col < count; col++) {
         if (!model.isDark(row, col)) continue;
-        var left = edge(col + 4), top = edge(row + 4), width = edge(col + 5) - left, height = edge(row + 5) - top;
+        var left = edge(col + 1), top = edge(row + 1), width = edge(col + 2) - left, height = edge(row + 2) - top;
         path.push("M" + left + " " + top + "h" + width + "v" + height + "h-" + width + "z");
         context.fillRect(left, top, width, height);
       }

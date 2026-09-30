@@ -647,13 +647,13 @@ E.tool(function () {
       // Render the vendored QR matrix with the existing theme-independent QR tokens.
       const qr = new QRCode(document.createElement('div'), { text: link.href, correctLevel: QRCode.CorrectLevel.M });
       const matrix = qr._oQRCode, count = matrix.getModuleCount(), canvas = document.createElement('canvas');
-      // Four modules of quiet zone on every side, as the standard asks, drawn
-      // into the canvas so they scale with the code.
-      canvas.width = canvas.height = (count + 8) * 4;
+      // A border one module wide on every side, drawn into the canvas so it
+      // scales with the code.
+      canvas.width = canvas.height = (count + 2) * 4;
       const ctx = canvas.getContext('2d'), style = getComputedStyle(document.documentElement);
       ctx.fillStyle = style.getPropertyValue('--color-qr-paper').trim(); ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = style.getPropertyValue('--color-qr-ink').trim();
-      for (let y = 0; y < count; y++) for (let x = 0; x < count; x++) if (matrix.isDark(y, x)) ctx.fillRect((x + 4) * 4, (y + 4) * 4, 4, 4);
+      for (let y = 0; y < count; y++) for (let x = 0; x < count; x++) if (matrix.isDark(y, x)) ctx.fillRect((x + 1) * 4, (y + 1) * 4, 4, 4);
       host.append(canvas);
     }
     render();
