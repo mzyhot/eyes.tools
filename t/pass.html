@@ -6,6 +6,10 @@
 <link rel="stylesheet" href="../fonts.css">
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
+<style>
+  /* one row per value, each with its own copy: no label column to fill */
+  #out .res { grid-template-columns: minmax(0, 1fr) auto; }
+</style>
 <script src="../site.js"></script>
 <script src="../theme.js"></script>
 </head>
@@ -35,12 +39,12 @@
       </section>
 
       <section>
-        <div class="out" id="out" aria-live="polite"></div>
+        <div id="out" aria-live="polite"></div>
         <p class="err" id="err" role="alert"></p>
         <p class="hint" id="strength"></p>
         <div class="row mt-2">
           <button class="btn" id="again" type="button">regenerate</button>
-          <button class="btn -ghost" id="copy" type="button" disabled>copy</button>
+          <button class="btn -ghost" id="copy" type="button" disabled>copy all</button>
         </div>
       </section>
     </main>
@@ -58,7 +62,7 @@
         var copy = E.qs("#copy");
         var lengthInput = E.qs("#len"), lengthLabel = E.qs("#len-label"), strength = E.qs("#strength");
         var lengths = { password: "20", phrase: "12", pin: "6" };
-        var previousKind = "password";
+        var previousKind = "password", values = [];
 
         function pick(alphabet) {
           var limit = 256 - (256 % alphabet.length);
@@ -91,12 +95,12 @@
           error.textContent = "";
           copy.disabled = true;
           strength.textContent = "";
+          values = [];
 
           try {
             var selectedKind = kind();
             var length = whole(E.qs("#len"), 4, 128, selectedKind === "phrase" ? "word count" : "length");
             var count = whole(E.qs("#n"), 1, 100, "how many");
-            var values = [];
 
             for (var index = 0; index < count; index += 1) {
               if (selectedKind === "phrase") {
@@ -111,7 +115,12 @@
               }
             }
 
-            output.textContent = values.join("\n");
+            values.forEach(function (value, index) {
+              var button = E.el("button", { class: "tbtn", type: "button", text: "copy", "aria-label": "copy value " + (index + 1) });
+              E.on(button, "click", function () { E.copy(value, button); });
+              output.appendChild(E.el("div", { class: "res" }, [E.el("div", { class: "res__v", text: value }), button]));
+            });
+            copy.textContent = values.length > 1 ? "copy all" : "copy";
             copy.disabled = values.length === 0;
             var choices = selectedKind === "phrase" ? WORDS.length : selectedKind === "pin" ? 10 : ALPHABET.length;
             strength.textContent = Math.floor(length * Math.log2(choices)) + " bits of randomness per value" +
@@ -135,7 +144,7 @@
         E.on(E.qs("#len"), "input", run);
         E.on(E.qs("#n"), "input", run);
         E.on(E.qs("#again"), "click", run);
-        E.on(copy, "click", function () { E.copy(output.textContent, this); });
+        E.on(copy, "click", function () { E.copy(values.join("\n"), this); });
         run();
       });
 </script>

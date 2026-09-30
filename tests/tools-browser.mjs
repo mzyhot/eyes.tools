@@ -132,8 +132,8 @@ try {
   });
   await check('lorem word count and password/PIN generation', async () => {
     await go('lorem'); await page.locator('#unit').selectOption('words'); await fill('#n', '7'); await page.waitForFunction(() => document.querySelector('#out').textContent.trim().split(/\s+/).length === 7);
-    await go('pass'); let rows = (await text('#out')).trim().split('\n'); assert.equal(rows.length, 5); assert.ok(rows.every(r => r.length === 20));
-    await page.locator('input[value="pin"]').check(); await fill('#len', '8'); await click('#again'); rows = (await text('#out')).trim().split('\n'); assert.ok(rows.every(r => /^\d{8}$/.test(r)));
+    await go('pass'); let rows = await page.locator('#out .res__v').allTextContents(); assert.equal(rows.length, 5); assert.ok(rows.every(r => r.length === 20));
+    await page.locator('input[value="pin"]').check(); await fill('#len', '8'); await click('#again'); rows = await page.locator('#out .res__v').allTextContents(); assert.ok(rows.every(r => /^\d{8}$/.test(r)));
   });
   await check('UUID, UUIDv7 and ULID formats and uniqueness', async () => {
     await go('uuid');
