@@ -6,9 +6,9 @@ on:
   push:
     branches: [main]
   pull_request:
-  # 05:17 UTC, off the hour, when GitHub's scheduler is least backed up.
+  # 01:00 UTC.
   schedule:
-    - cron: '17 5 * * *'
+    - cron: '0 1 * * *'
   workflow_dispatch:
 
 permissions:
