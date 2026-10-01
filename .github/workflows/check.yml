@@ -1,9 +1,15 @@
 name: checks
 
+# Runs on each push to main and each pull request, and daily on main so a
+# floating Node release or a runner image change shows up without a commit.
 on:
   push:
     branches: [main]
   pull_request:
+  # 1 am Central, following daylight saving time.
+  schedule:
+    - cron: '0 1 * * *'
+      timezone: 'America/Chicago'
   workflow_dispatch:
 
 permissions:
