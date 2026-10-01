@@ -6,9 +6,10 @@ on:
   push:
     branches: [main]
   pull_request:
-  # 01:00 UTC.
+  # 1 am Central, following daylight saving time.
   schedule:
     - cron: '0 1 * * *'
+      timezone: 'America/Chicago'
   workflow_dispatch:
 
 permissions:
