@@ -5,8 +5,8 @@
 [![desktop](https://github.com/mzyhot/eyes.tools/actions/workflows/desktop.yml/badge.svg)](https://github.com/mzyhot/eyes.tools/actions/workflows/desktop.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-red)](LICENSE)
 
-**[Explore the codebase wiki →](https://github.com/mzyhot/eyes.tools/wiki)** — setup, tool catalog,
-architecture, contributor guides, APIs, deployment, and troubleshooting.
+Documentation is in the [wiki](https://github.com/mzyhot/eyes.tools/wiki): setup, the
+tool catalog, architecture, contributing, APIs, deployment and troubleshooting.
 
 A directory of small, mostly local tools. No build step, framework, runtime npm
 dependencies, or analytics. Every interface is one HTML file holding its own
@@ -214,8 +214,7 @@ for what each suite covers and how to diagnose failures.
 
 ## Supporting the project
 
-eyes.tools is free, has no ads or analytics, and stays that way. If it saves
-you time, you can support its development with the button below.
+eyes.tools is free and has no ads or analytics. To support its development:
 
 [![Support eyes.tools](.github/assets/support-us-square.svg)](https://square.link/u/JduZKl4L)
 

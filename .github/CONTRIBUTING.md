@@ -1,39 +1,36 @@
 # Contributing
 
-Thanks for helping. eyes.tools is small on purpose, so a short read saves a
-rejected pull request.
-
 ## Before you start
 
-- **New tools:** open a discussion or an issue first. The site grows slowly, and
-  a tool has to be useful, local, and small enough to live in one file.
-- **Bugs and fixes:** a pull request is welcome straight away. For anything
-  that touches share or the server, an issue first helps.
-- **Security problems:** do not open an issue. See [SECURITY.md](SECURITY.md).
+- **New tools:** open an issue or a discussion first. A tool has to run in the
+  browser and fit in one file.
+- **Bugs and fixes:** send a pull request. For changes to share or the server,
+  open an issue first.
+- **Security issues:** report them privately, as described in
+  [SECURITY.md](SECURITY.md).
 
 ## How the project works
 
-- [README.md](../README.md) — the layout and what to edit for what.
-- [_dev/CONTRACT.md](../_dev/CONTRACT.md) — the rules every tool page follows.
-  Read it in full before writing a tool.
-- [AGENTS.md](../AGENTS.md) — the review rules for share, network identity and
-  the published surface. They apply to people too.
+- [README.md](../README.md): the layout, and which file to edit for what.
+- [_dev/CONTRACT.md](../_dev/CONTRACT.md): the rules every tool page follows.
+  Read it before writing a tool.
+- [AGENTS.md](../AGENTS.md): the review rules for share, network identity and
+  the published files.
 
 ## Checks
 
-Every pull request must pass:
+Run these before opening a pull request:
 
 ```bash
 npm run check
 npm test
 ```
 
-Changes to a page, the shared runtime or share should also pass the browser
-suite described in the README's Testing section. CI runs all three.
+Changes to a page, the shared runtime or share also need the browser suite;
+see Testing in the README. CI runs all three.
 
-## Licensing of contributions
+## Licensing
 
-By submitting a contribution you agree that it is licensed under the
-project's terms: the GNU AGPL-3.0 ([LICENSE](../LICENSE)) with the additional
-terms in [ADDENDUM](../ADDENDUM). Only submit work you have the right to
-license that way.
+Contributions are licensed under the GNU AGPL-3.0 ([LICENSE](../LICENSE)) with
+the additional terms in [ADDENDUM](../ADDENDUM). Only submit work you have the
+right to license this way.
