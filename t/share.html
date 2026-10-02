@@ -86,7 +86,7 @@ body[data-tool="share"] [hidden] { display: none !important; }
   <section class="room-panel" id="room-panel" aria-label="room invitation" hidden>
     <div class="stack-2">
       <label class="lbl" for="room-link">one link. both devices.</label>
-      <p class="hint">open this link or scan the code on the other device. anyone with the link can join, until you close this page or take a new link.</p>
+      <p class="hint">open this link or scan the code on the other device. anyone with the link can join, until you close this page or take a new link. devices on your network see this one without it.</p>
       <input class="field" id="room-link" readonly>
       <div class="row"><button class="btn -sm" id="copy-room" type="button">copy link</button><button class="tbtn" id="new-link" type="button">new link</button></div>
     </div>
@@ -98,8 +98,8 @@ body[data-tool="share"] [hidden] { display: none !important; }
   </section>
   <details class="share-help">
     <summary>can't see the other device?</summary>
-    <p class="hint">Open the link, or scan the code, on the other device, and keep share open on both. The link works from any network. It stops working when this page closes, when you take a new link, or half a minute after a connection drops.</p>
-    <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Up to 256 MB per transfer; remove received files to free space.</p>
+    <p class="hint">On the same Wi-Fi, devices with share open appear by themselves. A VPN, Private Relay, or IPv6 on only one of them can hide them from each other; then open the link, or scan the code, on the other device. The link works from any network. It stops working when this page closes, when you take a new link, or half a minute after a connection drops.</p>
+    <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Received files are saved to this browser's storage as they arrive, so a transfer can be as large as the space it allows; in a private window, or a browser without that storage, they are held in memory, up to 256 MB at a time. Remove received files to free space.</p>
     <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site's server storage. The server only introduces the two devices and passes the connection details. A relay may carry encrypted data when configured.</p>
     <button class="tbtn" id="retry" type="button">refresh devices</button>
   </details>
@@ -120,7 +120,14 @@ body[data-tool="share"] [hidden] { display: none !important; }
 E.tool(function () {
   'use strict';
   const $ = s => document.querySelector(s);
+  /* A transfer held in memory, where received files live when this browser
+     has no storage for them, is bounded by LIMIT, and all of them by RETAIN. */
   const LIMIT = 256 * 1024 * 1024, RETAIN = 512 * 1024 * 1024, CHUNK = 16384;
+  /* Receiver-paced sending, as ShareDrop did it: the receiver confirms every
+     BLOCK chunks once they are stored, and the sender stays at most WINDOW
+     chunks ahead of that, so a slow disk holds the sender back instead of the
+     transfer piling up in memory. */
+  const BLOCK = 64, WINDOW = 4 * BLOCK;
   /* Automatic reconnection gives up after this many consecutive failures; after
      that, pressing send on the device tries again. */
   const MAX_RETRIES = 5;
@@ -174,12 +181,12 @@ E.tool(function () {
    * Any notice goes under the empty list, where the next step is: reconnecting
    * clears the error line, and this has to outlive that.
    */
-  const EMPTY_NOTE = $('#empty-note').textContent;
+  const LINK_NOTE = $('#empty-note').textContent, NEARBY_NOTE = 'open share on a device on this network, or this link on any other. it will appear here.';
   function newLink(note) {
     if (activity()) return;
     clearTimeout(severedTimer); severedTimer = null; everConnected = false;
     room = ''; history.replaceState(null, '', location.pathname + location.search);
-    $('#empty-note').textContent = note || EMPTY_NOTE;
+    $('#empty-note').textContent = note || LINK_NOTE;
     discover();
   }
   async function api(path, body, current = session) {
@@ -272,6 +279,8 @@ E.tool(function () {
           if (version !== epoch || stopped) { api('leave', {}, joined).catch(() => {}); return; }
           session = joined;
           $('#your-name').textContent = joined.name;
+          /* Say how the other device will arrive, unless a notice is showing. */
+          if ([LINK_NOTE, NEARBY_NOTE].includes($('#empty-note').textContent)) $('#empty-note').textContent = joined.nearby ? NEARBY_NOTE : LINK_NOTE;
           /* Arriving without a link, the service mints one from this session's
              own id. It is the page's address from here on, so a reload rejoins
              the same room rather than opening another. */
@@ -320,6 +329,132 @@ E.tool(function () {
       stream?.abort();
       await nap(backoff); backoff = Math.min(backoff * 2, 10000);
     }
+  }
+  /**
+   * Where received files go.
+   *
+   * As ShareDrop did, received bytes are written to disk as they arrive rather
+   * than held in memory, so a transfer needs free space, not free memory, and
+   * has no size limit of its own. The disk here is this site's private
+   * storage, the standard successor to the API ShareDrop used. Safari before
+   * 26 can only write it from a worker, so the writes happen in one, built from
+   * `storageWorker`: one folder per tab, one file per received item.
+   *
+   * A tab holds a lock named after its folder for as long as it lives, so a
+   * new tab can clear the folders that closed ones left behind without
+   * touching a live one. Where the storage is missing or refuses to write —
+   * private windows, older browsers, some webviews — `disk` is false and
+   * received files are held in memory instead, within LIMIT and RETAIN.
+   */
+  function storageWorker() {
+    let share = null, folder = null, queue = Promise.resolve();
+    const open = new Map();
+    const ops = {
+      async init({ tab }) {
+        share = await (await navigator.storage.getDirectory()).getDirectoryHandle('share', { create: true });
+        folder = await share.getDirectoryHandle(tab, { create: true });
+        /* Some private windows hand out storage that cannot be written; find out now, not mid-transfer. */
+        const probe = await (await folder.getFileHandle('probe', { create: true })).createSyncAccessHandle();
+        await probe.close(); await folder.removeEntry('probe');
+      },
+      async sweep({ keep }) {
+        for await (const name of share.keys()) if (!keep.includes(name)) await share.removeEntry(name, { recursive: true }).catch(() => {});
+      },
+      async open({ file }) {
+        const access = await (await folder.getFileHandle(file, { create: true })).createSyncAccessHandle();
+        await access.truncate(0); open.set(file, { access, at: 0 });
+      },
+      write({ file, data }) {
+        const entry = open.get(file);
+        if (!entry) throw new Error('no such file');
+        /* A short write is a full disk. */
+        if (entry.access.write(data, { at: entry.at }) !== data.byteLength) throw new DOMException('short write', 'QuotaExceededError');
+        entry.at += data.byteLength;
+      },
+      /* Older engines return promises from these; awaiting covers both. */
+      async close({ file }) {
+        const entry = open.get(file); open.delete(file);
+        if (entry) { await entry.access.flush(); await entry.access.close(); }
+        return (await folder.getFileHandle(file)).getFile();
+      },
+      async remove({ file }) {
+        const entry = open.get(file); open.delete(file);
+        if (entry) await Promise.resolve(entry.access.close()).catch(() => {});
+        await folder.removeEntry(file).catch(() => {});
+      }
+    };
+    /* One at a time, in arrival order, so a reply means everything before it is done. */
+    self.onmessage = ({ data }) => {
+      queue = queue.then(() => ops[data.op](data)).then(result => postMessage({ seq: data.seq, result }),
+        error => postMessage({ seq: data.seq, error: error?.name === 'QuotaExceededError' ? 'not enough space on this device.' : 'could not save the received file.' }));
+    };
+  }
+  async function openStorage() {
+    if (!window.Worker || !navigator.storage?.getDirectory) return false;
+    const tab = random(12), url = URL.createObjectURL(new Blob(['(' + storageWorker + ')()'], { type: 'text/javascript' }));
+    let worker = null;
+    try {
+      if (navigator.locks) await new Promise(granted => { navigator.locks.request('eyes-share-' + tab, () => { granted(); return new Promise(() => {}); }).catch(granted); });
+      worker = new Worker(url);
+      const pending = new Map(); let seq = 0;
+      const call = (op, args = {}, transfer = []) => new Promise((resolve, reject) => {
+        pending.set(++seq, { resolve, reject }); worker.postMessage({ op, seq, ...args }, transfer);
+      });
+      worker.onmessage = ({ data }) => {
+        const p = pending.get(data.seq); if (!p) return;
+        pending.delete(data.seq); 'error' in data ? p.reject(new Error(data.error)) : p.resolve(data.result);
+      };
+      worker.onerror = e => { e.preventDefault(); for (const p of pending.values()) p.reject(new Error('could not save the received file.')); pending.clear(); };
+      await Promise.race([call('init', { tab }), new Promise((_, reject) => setTimeout(reject, 10000))]);
+      if (navigator.locks) navigator.locks.query().then(({ held }) => call('sweep', {
+        keep: held.map(lock => lock.name).filter(name => name.startsWith('eyes-share-')).map(name => name.slice('eyes-share-'.length))
+      })).catch(() => {});
+      return { call };
+    } catch { worker?.terminate(); return false; }
+    finally { URL.revokeObjectURL(url); }
+  }
+  /* undefined until the storage is known; then the storage, or false. */
+  let disk;
+  const storage = openStorage().then(value => disk = value);
+  /** Why `size` more bytes cannot be received now, or '' when they can. */
+  async function capacity(size) {
+    if (!await storage) {
+      if (size > LIMIT) return 'this browser can take up to 256 MB at a time.';
+      return retained + reserved + size > RETAIN ? 'remove received files to make room first.' : '';
+    }
+    /* Without an estimate (Safari before 17) the transfer is tried, and a full disk fails it cleanly. */
+    const estimate = await navigator.storage.estimate?.().catch(() => null);
+    if (!estimate?.quota) return '';
+    return estimate.quota - estimate.usage - reserved < size ? 'not enough space on this device for that transfer.' : '';
+  }
+  /**
+   * Where one incoming batch's bytes go, in the order they arrive: `open` and
+   * `write` a file, `end` it to get the finished file, and `stored` settles
+   * once everything written so far is safe. `report` hears any failure.
+   */
+  function sink(batch, report) {
+    if (!disk) {
+      let chunks = [];
+      return {
+        memory: true,
+        open() { chunks = []; },
+        write(chunk) { if (chunks.length >= 65536) throw new Error('received unexpected file data'); chunks.push(chunk); },
+        stored: () => Promise.resolve(),
+        end(index, type) { const blob = new Blob(chunks, { type }); chunks = []; return Promise.resolve(blob); },
+        discard() { chunks = []; }
+      };
+    }
+    const names = [];
+    let last = Promise.resolve();
+    const run = (op, args, transfer) => { last = disk.call(op, args, transfer); last.catch(report); return last; };
+    return {
+      memory: false,
+      open(index) { names[index] = batch.id + '-' + index; run('open', { file: names[index] }); },
+      write(chunk, index) { run('write', { file: names[index], data: chunk }, [chunk]); },
+      stored: () => last,
+      end(index) { return run('close', { file: names[index] }); },
+      discard() { for (const file of names) if (file) disk.call('remove', { file }).catch(() => {}); }
+    };
   }
   function transferRow(name, detail) {
     $('#transfers-section').hidden = false;
@@ -480,8 +615,8 @@ E.tool(function () {
     enqueue(items) {
       if (this.closed) throw new Error('that device left. ask them to reopen share.');
       if (!items.length || items.length > 100) throw new Error('choose up to 100 files at a time.');
+      /* No size limit here: the receiver says what it has room for. */
       const size = items.reduce((n, item) => n + item.size, 0);
-      if (size > LIMIT) throw new Error('send up to 256 MB at a time. choose fewer files.');
       if (this.queue.length + (this.outgoing ? 1 : 0) >= 10) throw new Error('wait for the queued transfers to finish.');
       error('');
       const name = items.length === 1 ? items[0].name : items.length + ' files';
@@ -498,7 +633,9 @@ E.tool(function () {
       if (this.outgoing || !this.queue.length || this.dc?.readyState !== 'open') return;
       const batch = this.outgoing = this.queue.shift(); batch.state = 'offered';
       batch.ui.update('waiting for ' + this.name + ' to accept');
-      this.control({ t: 'offer', id: batch.id, items: batch.items.map(({ name, size, kind }) => ({ name, size, kind })) });
+      /* `paced` offers acknowledgements; a page from before them leaves it out
+         and is sent to without waiting, as it expects. */
+      this.control({ t: 'offer', id: batch.id, items: batch.items.map(({ name, size, kind }) => ({ name, size, kind })), paced: true });
       batch.timer = setTimeout(() => this.cancelOutgoing(batch, "no response. send again when they're ready."), 120000);
     }
     finishOutgoing(message) {
@@ -519,7 +656,7 @@ E.tool(function () {
       const batch = this.incoming; if (!batch) return;
       clearTimeout(batch.timer);
       if (batch.accepted) reserved -= batch.size;
-      batch.chunks = []; batch.files = []; batch.ui.finish(message); this.incoming = null; render();
+      batch.sink?.discard(); batch.files = []; batch.ui.finish(message); this.incoming = null; render();
     }
     incomingTimeout(batch) {
       clearTimeout(batch.timer);
@@ -533,9 +670,12 @@ E.tool(function () {
         return { name: safeName(item.name), size: item.size, kind: item.kind };
       });
       const size = items.reduce((n, f) => n + f.size, 0);
-      if (size > LIMIT || size + retained + reserved > RETAIN) { this.control({ t: 'reject', id: data.id, reason: 'not enough space; remove received files first' }); return; }
+      /* Held in memory, the bounds are known at once; on disk, the space is
+         checked when the transfer is accepted. */
+      if (disk === false && size > LIMIT) { this.control({ t: 'reject', id: data.id, reason: 'too large for this browser; it takes up to 256 MB' }); return; }
+      if (disk === false && size + retained + reserved > RETAIN) { this.control({ t: 'reject', id: data.id, reason: 'not enough space; remove received files first' }); return; }
       const title = items.length === 1 ? items[0].name : items.length + ' files';
-      const batch = this.incoming = { id: data.id, items, size, accepted: false, index: 0, fileBytes: 0, bytes: 0, chunks: [], files: [], ui: transferRow(title, 'from ' + this.name + ' · ' + E.bytes(size)) };
+      const batch = this.incoming = { id: data.id, items, size, paced: data.paced === true, accepted: false, index: 0, fileBytes: 0, bytes: 0, count: 0, sink: null, files: [], ui: transferRow(title, 'from ' + this.name + ' · ' + E.bytes(size)) };
       batch.ui.update(this.name + ' wants to send ' + (items[0].kind === 'text' ? 'text' : items.length === 1 ? 'a file' : 'files'));
       batch.ui.progress.hidden = true;
       if (items.length > 1) {
@@ -548,11 +688,17 @@ E.tool(function () {
          fails the connection like any other drop; declining or expiring still
          clears the row, whether or not the answer reaches the sender. */
       const answer = data => { try { this.control(data); return true; } catch { return false; } };
-      batch.ui.actions.append(button('accept', () => {
+      batch.ui.actions.append(button('accept', async () => {
+        if (this.incoming !== batch || batch.accepted || batch.checking) return;
+        batch.checking = true;
+        const problem = await capacity(size);
+        batch.checking = false;
         if (this.incoming !== batch || batch.accepted) return;
-        if (retained + reserved + size > RETAIN) { error('remove received files to make room first.'); return; }
-        if (!answer({ t: 'accept', id: batch.id })) { this.fail('device is not connected.'); return; }
-        batch.accepted = true; reserved += size; batch.ui.progress.hidden = false; batch.ui.update('receiving…', 0);
+        if (problem) { error(problem); return; }
+        if (!answer({ t: 'accept', id: batch.id, ...(batch.paced ? { paced: true } : {}) })) { this.fail('device is not connected.'); return; }
+        batch.accepted = true; reserved += size;
+        batch.sink = sink(batch, e => { if (this.incoming === batch) this.fail(e.message); });
+        batch.ui.progress.hidden = false; batch.ui.update('receiving…', 0);
         batch.ui.actions.replaceChildren(button('cancel', () => this.fail('transfer cancelled.')));
         this.incomingTimeout(batch); render();
       }, true), button('decline', () => { answer({ t: 'reject', id: batch.id, reason: 'declined' }); this.finishIncoming('declined'); }));
@@ -562,8 +708,11 @@ E.tool(function () {
     message(raw) {
       if (typeof raw !== 'string') {
         const b = this.incoming;
-        if (!(raw instanceof ArrayBuffer) || !raw.byteLength || raw.byteLength > CHUNK || !b?.accepted || !b.started || b.chunks.length >= 65536 || b.fileBytes + raw.byteLength > b.items[b.index].size) throw new Error('received unexpected file data');
-        b.chunks.push(raw); b.fileBytes += raw.byteLength; b.bytes += raw.byteLength; this.incomingTimeout(b);
+        if (!(raw instanceof ArrayBuffer) || !raw.byteLength || raw.byteLength > CHUNK || !b?.accepted || !b.started || b.fileBytes + raw.byteLength > b.items[b.index].size) throw new Error('received unexpected file data');
+        /* The chunk moves to the storage worker; count it first. */
+        const length = raw.byteLength;
+        b.sink.write(raw, b.index); b.fileBytes += length; b.bytes += length; this.incomingTimeout(b);
+        if (b.paced && ++b.count % BLOCK === 0) this.acknowledge(b, b.count);
         const percent = b.size ? Math.floor(b.bytes / b.size * 100) : 100;
         b.ui.update('receiving · ' + percent + '%', b.size ? b.bytes / b.size : 1); return;
       }
@@ -572,27 +721,52 @@ E.tool(function () {
       if (!data || typeof data.t !== 'string') throw new Error('invalid transfer message');
       if (data.t === 'offer') { this.offer(data); return; }
       const out = this.outgoing, incoming = this.incoming;
-      if (data.t === 'accept' && out?.id === data.id && out.state === 'offered') { clearTimeout(out.timer); this.transmit(out).catch(e => { if (this.outgoing === out) this.fail(e.message); }); return; }
+      if (data.t === 'accept' && out?.id === data.id && out.state === 'offered') { clearTimeout(out.timer); out.paced = data.paced === true; this.transmit(out).catch(e => { if (this.outgoing === out) this.fail(e.message); }); return; }
       if (data.t === 'reject' && out?.id === data.id && out.state === 'offered') { this.finishOutgoing('not sent · ' + String(data.reason || 'declined').slice(0, 120)); this.pump(); return; }
       if (data.t === 'cancel' && incoming?.id === data.id) { this.finishIncoming('sender cancelled'); return; }
+      if (data.t === 'ack' && out?.id === data.id && out.state === 'sending' && out.paced) {
+        if (!Number.isSafeInteger(data.n) || data.n < out.acked || data.n > out.sentChunks) throw new Error('invalid transfer acknowledgement');
+        out.acked = data.n; out.wake?.(); return;
+      }
       if (data.t === 'file' && incoming?.id === data.id && incoming.accepted) {
         if (incoming.started || data.index !== incoming.index || incoming.index >= incoming.items.length) throw new Error('invalid file order');
-        incoming.started = true; this.incomingTimeout(incoming); return;
+        incoming.started = true; incoming.sink.open(incoming.index); this.incomingTimeout(incoming); return;
       }
       if (data.t === 'file-end' && incoming?.id === data.id && incoming.accepted) {
         const b = incoming;
         if (!b.started || data.index !== b.index || b.fileBytes !== b.items[b.index].size) throw new Error('received file is incomplete');
-        b.files.push(new Blob(b.chunks, { type: b.items[b.index].kind === 'text' ? 'text/plain;charset=utf-8' : 'application/octet-stream' }));
-        b.chunks = []; b.fileBytes = 0; b.started = false; b.index++; this.incomingTimeout(b); return;
+        b.files.push(b.sink.end(b.index, b.items[b.index].kind === 'text' ? 'text/plain;charset=utf-8' : 'application/octet-stream'));
+        b.fileBytes = 0; b.started = false; b.index++; this.incomingTimeout(b); return;
       }
-      if (data.t === 'done' && incoming?.id === data.id && incoming.accepted) {
+      if (data.t === 'done' && incoming?.id === data.id && incoming.accepted && !incoming.done) {
         if (incoming.index !== incoming.items.length || incoming.bytes !== incoming.size) throw new Error('transfer is incomplete');
-        this.control({ t: 'received', id: incoming.id }); this.received(incoming); return;
+        /* The receipt waits for the last file to be stored. */
+        const b = incoming; b.done = true;
+        Promise.all(b.files).then(files => {
+          if (this.incoming !== b) return;
+          b.files = files; this.control({ t: 'received', id: b.id }); this.received(b);
+        }).catch(e => { if (this.incoming === b) this.fail(e.message || 'could not save the received file.'); });
+        return;
       }
       if (data.t === 'received' && out?.id === data.id && out.state === 'receipt') { this.finishOutgoing('sent to ' + this.name); this.pump(); return; }
       // Late cancellation/acknowledgment may arrive after a user cancels an offer.
-      if (['cancel', 'reject', 'accept', 'received'].includes(data.t)) return;
+      if (['cancel', 'reject', 'accept', 'received', 'ack'].includes(data.t)) return;
       throw new Error('unexpected transfer message');
+    }
+    /** Tell the sender its first `n` chunks are stored, once they are. */
+    acknowledge(b, n) {
+      b.sink.stored().then(() => { if (this.incoming === b) this.control({ t: 'ack', id: b.id, n }); }).catch(() => {});
+    }
+    /** Wait until the receiver has stored enough for another chunk to go. */
+    async credit(batch, dc) {
+      if (batch.sentChunks - batch.acked < WINDOW) return;
+      await new Promise((resolve, reject) => {
+        const done = error => { clearTimeout(timer); batch.wake = null; dc.removeEventListener('close', close); error ? reject(error) : resolve(); };
+        const close = () => done(new Error('connection closed during transfer'));
+        const timer = setTimeout(() => done(new Error('the receiver stopped responding')), 60000);
+        batch.wake = () => { if (batch.sentChunks - batch.acked < WINDOW) done(); };
+        dc.addEventListener('close', close);
+      });
     }
     async buffer(dc) {
       if (dc.readyState !== 'open') throw new Error('connection closed during transfer');
@@ -606,7 +780,7 @@ E.tool(function () {
       });
     }
     async transmit(batch) {
-      batch.state = 'sending'; const dc = this.dc; let sent = 0;
+      batch.state = 'sending'; batch.sentChunks = 0; batch.acked = 0; const dc = this.dc; let sent = 0;
       const check = () => { if (batch.cancelled || this.outgoing !== batch || this.dc !== dc || dc.readyState !== 'open') throw new Error('transfer cancelled'); };
       const chunkSize = Math.min(CHUNK, this.pc.sctp?.maxMessageSize || CHUNK);
       for (let i = 0; i < batch.items.length; i++) {
@@ -614,7 +788,8 @@ E.tool(function () {
         const file = batch.items[i].blob;
         for (let offset = 0; offset < file.size; offset += chunkSize) {
           check(); await this.buffer(dc);
-          const data = await file.slice(offset, offset + chunkSize).arrayBuffer(); check(); dc.send(data); sent += data.byteLength;
+          if (batch.paced) { await this.credit(batch, dc); check(); }
+          const data = await file.slice(offset, offset + chunkSize).arrayBuffer(); check(); dc.send(data); sent += data.byteLength; batch.sentChunks++;
           batch.ui.update('sending · ' + (batch.size ? Math.floor(sent / batch.size * 100) : 100) + '%', batch.size ? sent / batch.size : 1);
         }
         check(); this.control({ t: 'file-end', id: batch.id, index: i });
@@ -623,7 +798,9 @@ E.tool(function () {
       batch.timer = setTimeout(() => { if (this.outgoing === batch) this.fail('receipt timed out. ask the receiver whether it arrived.'); }, 60000);
     }
     received(batch) {
-      clearTimeout(batch.timer); reserved -= batch.size; retained += batch.size; this.incoming = null;
+      /* Only files held in memory count against RETAIN; stored ones use disk. */
+      const held = batch.sink.memory ? batch.size : 0;
+      clearTimeout(batch.timer); reserved -= batch.size; retained += held; this.incoming = null;
       batch.ui.update('received from ' + this.name, 1); batch.ui.progress.hidden = true; batch.ui.actions.replaceChildren();
       const links = E.el('div', { class: 'received-files stack-2' }); const urls = [];
       batch.items.forEach((item, i) => {
@@ -635,7 +812,7 @@ E.tool(function () {
         }).catch(() => error('could not read the received text'));
       });
       batch.ui.actions.before(links);
-      batch.ui.actions.append(button('remove', () => { urls.forEach(url => URL.revokeObjectURL(url)); retained -= batch.size; batch.files = []; batch.ui.row.remove(); $('#transfers-section').hidden = !$('#transfers').children.length; }));
+      batch.ui.actions.append(button('remove', () => { urls.forEach(url => URL.revokeObjectURL(url)); retained -= held; batch.sink.discard(); batch.files = []; batch.ui.row.remove(); $('#transfers-section').hidden = !$('#transfers').children.length; }));
       render();
     }
   }

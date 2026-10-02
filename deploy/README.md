@@ -68,12 +68,14 @@ header: sharing checks the browser's origin against `Host`, so rewriting it to
 `localhost` causes a 403.
 
 `SHARE_TRUST_CLOUDFLARE=1` accepts the `CF-Connecting-IP` visitor-IP header only
-from loopback connections. It decides nothing but the join rate limit, which
-counts per visitor network. Enable it only when every request reaching Node passes
-through a trusted local proxy that sets or preserves the real header. Without it,
-behind a proxy, every visitor's joins count against one limit — the proxy's own
-address — so a busy site needs the flag. Never expose a trusted proxy or origin
-port directly to the internet.
+from loopback connections. It decides the join rate limit, which counts per
+visitor network, and which network a visitor's devices find each other on.
+Enable it only when every request reaching Node passes through a trusted local
+proxy that sets or preserves the real header. Without it, behind a proxy, every
+visitor's joins count against one limit — the proxy's own address — so a busy
+site needs the flag, and devices meet by link only, because the proxy's address
+is never used as a network. Never expose a trusted proxy or origin port directly
+to the internet.
 
 `SHARE_ALLOWED_ORIGINS` lists origins, besides the site's own, whose pages may use
 the share service. The desktop app serves its pages itself and uses this
@@ -152,7 +154,9 @@ Then visit your public HTTPS site in two browsers and verify:
 
 1. Share opens with a link and a code, and the two devices show different
    four-character codes once the link is opened on the second one.
-2. The link connects devices on different networks.
+2. The link connects devices on different networks, and two devices on one
+   Wi-Fi find each other without it (needs `SHARE_TRUST_CLOUDFLARE=1` behind
+   Cloudflare; Private Relay, a VPN or IPv6 on one device can still split them).
 3. A binary file and a text message arrive intact after the receiver accepts.
 4. Cancelling a transfer leaves no partial download; retry works.
 5. The room still works after leaving both tabs open for at least two minutes.

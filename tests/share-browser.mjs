@@ -1,9 +1,10 @@
 // Run with a local server: SHARE_TEST_URL=http://127.0.0.1:8877 node tests/share-browser.mjs
 // Install Playwright for development, or set PLAYWRIGHT_MODULE to its module path.
 import assert from 'node:assert/strict';
-import { readFile, mkdir } from 'node:fs/promises';
-import { createHash, randomBytes } from 'node:crypto';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { createHash, randomBytes, randomFillSync } from 'node:crypto';
 import { createServer as createTcpServer, connect as tcpConnect } from 'node:net';
+import { createEyesServer } from '../dev-server.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
 const base = process.env.SHARE_TEST_URL || 'http://127.0.0.1:8877';
@@ -11,10 +12,14 @@ const output = process.env.SHARE_TEST_OUTPUT || '/tmp/eyes-share-tests';
 await mkdir(output, { recursive: true });
 const errors = [], requests = [];
 /* Every page opens a room of its own; a second device joins by opening the
-   first one's link, which is how share now works — nothing finds devices by
-   network address any more. */
-async function page({ holdPeerConnectionOpen = false, link = '' } = {}) {
-  const context = await browser.newContext({ acceptDownloads: true });
+   first one's link. Devices on one network also find each other, but only
+   when the service knows the network — never from loopback, which is all
+   this suite connects from, so here every meeting is by link except the one
+   test that sets a trusted visitor address. */
+async function page({ holdPeerConnectionOpen = false, link = '', noStorage = false, address = '' } = {}) {
+  const context = await browser.newContext({ acceptDownloads: true, ...(address ? { extraHTTPHeaders: { 'CF-Connecting-IP': address } } : {}) });
+  /* A browser without the private file system, as a private window may be. */
+  if (noStorage) await context.addInitScript(() => { delete StorageManager.prototype.getDirectory; });
   if (holdPeerConnectionOpen) await context.addInitScript(() => {
     /* Model a deliberate departure whose remote data channel remains open.
        This is the ordering that made a permanent leave look temporary. */
@@ -37,8 +42,26 @@ async function page({ holdPeerConnectionOpen = false, link = '' } = {}) {
 async function connected(p, count = 1) {
   await p.waitForFunction(n => document.querySelectorAll('.device__action').length === n && [...document.querySelectorAll('.device__action')].every(e => e.textContent === 'ready'), count, { timeout: 40000 });
 }
-async function choose(p, files) {
-  const chooser = p.waitForEvent('filechooser'); await p.getByRole('button', { name: /^send files to / }).first().click(); await (await chooser).setFiles(files);
+async function choose(p, files, to = /^send files to /) {
+  const chooser = p.waitForEvent('filechooser'); await p.getByRole('button', { name: to }).first().click(); await (await chooser).setFiles(files);
+}
+/** What this page's origin holds in the private file system. A folder or
+    file removed while it is being listed is skipped, not an error. */
+const stored = p => p.evaluate(async () => {
+  const share = await (await navigator.storage.getDirectory()).getDirectoryHandle('share', { create: true });
+  const folders = [];
+  let bytes = 0;
+  for await (const [name, folder] of share.entries()) {
+    folders.push(name);
+    try { for await (const file of folder.values()) bytes += (await file.getFile()).size; }
+    catch (error) { if (error.name !== 'NotFoundError') throw error; }
+  }
+  return { folders, bytes };
+});
+/** Poll until `test` accepts what is stored. */
+async function storedUntil(p, test) {
+  for (let i = 0; i < 100; i++) { if (test(await stored(p))) return; await new Promise(resolve => setTimeout(resolve, 100)); }
+  throw new Error('storage never reached the expected state');
 }
 const digest = b => createHash('sha256').update(b).digest('hex');
 /** The room link a page is handing out, once the service has minted it. */
@@ -175,6 +198,48 @@ try {
   await download(b, 'after-cancel.txt', Buffer.from('clean retry'));
   console.log('PASS mid-transfer receiver cancellation, no partial download, retry');
 
+  // A transfer larger than memory would allow goes to disk as it arrives,
+  // paced by the receiver's acknowledgements, and removing it frees the space.
+  const bigPath = output + '/big.bin', big = randomFillSync(Buffer.allocUnsafe(300 * 1024 * 1024 + 5));
+  await writeFile(bigPath, big);
+  const before = await stored(a);
+  await choose(b, [bigPath]);
+  await a.getByRole('button', { name: 'accept', exact: true }).click();
+  await a.getByRole('link', { name: 'download big.bin', exact: true }).waitFor({ timeout: 240000 });
+  assert.ok((await stored(a)).bytes >= before.bytes + big.length, 'the file is on disk');
+  await download(a, 'big.bin', big);
+  await b.locator('.transfer__state').filter({ hasText: /^sent to/ }).first().waitFor();
+  await a.locator('.transfer').filter({ hasText: 'big.bin' }).getByRole('button', { name: 'remove', exact: true }).click();
+  await storedUntil(a, now => now.bytes < before.bytes + big.length);
+  console.log('PASS 300 MB received to disk with receiver pacing, exact SHA-256, removed from disk');
+
+  // A folder left by a closed tab is cleared by the next one; a live tab's is not.
+  await a.evaluate(async () => {
+    const share = await (await navigator.storage.getDirectory()).getDirectoryHandle('share', { create: true });
+    await (await share.getDirectoryHandle('abandoned', { create: true })).getFileHandle('left.bin', { create: true });
+  });
+  const live = (await stored(a)).folders.filter(name => name !== 'abandoned');
+  const next = await a.context().newPage(); await next.goto(base + '/share');
+  await storedUntil(a, now => !now.folders.includes('abandoned'));
+  const after = await stored(a);
+  for (const name of live) assert.ok(after.folders.includes(name), 'a live tab keeps its folder');
+  await next.close();
+  console.log('PASS a closed tab\'s storage is cleared, a live tab\'s kept');
+
+  // Without the storage, received files live in memory as before: more than
+  // 256 MB is turned away at once, and a smaller transfer still arrives.
+  const memory = await page({ link: await roomLink(a), noStorage: true });
+  await Promise.all([connected(a, 2), connected(b, 2), connected(memory, 2)]);
+  const memoryName = await memory.locator('#your-name').textContent();
+  await choose(b, [bigPath], 'send files to ' + memoryName);
+  await b.locator('.transfer__state').filter({ hasText: 'not sent · too large for this browser; it takes up to 256 MB' }).waitFor();
+  await choose(b, [{ name: 'to-memory.txt', mimeType: 'text/plain', buffer: Buffer.from('held in memory') }], 'send files to ' + memoryName);
+  await memory.getByRole('button', { name: 'accept', exact: true }).click();
+  await download(memory, 'to-memory.txt', Buffer.from('held in memory'));
+  await memory.context().close();
+  await Promise.all([connected(a), connected(b)]);
+  console.log('PASS without storage, over 256 MB is refused and smaller transfers are held in memory');
+
   // Keyboard entry and native modal dismissal stay on this tool.
   await a.getByRole('button', { name: /^send text to / }).focus();
   await a.keyboard.press('Enter'); await a.locator('#text-dialog').waitFor();
@@ -193,6 +258,26 @@ try {
   await late.waitForFunction(() => document.querySelector('#status').textContent === 'room open');
   assert.equal(await late.locator('.device').count(), 0, 'the abandoned link reaches nobody');
   console.log('PASS a severed connection replaces the link');
+
+  // When the service knows the visitor's network, two devices on it meet
+  // without a link, and a device on another network does not see them.
+  const nearby = createEyesServer({ shareOptions: { trustCloudflare: true } });
+  await new Promise(resolve => nearby.server.listen(0, '127.0.0.1', resolve));
+  const home = 'http://127.0.0.1:' + nearby.server.address().port + '/share';
+  try {
+    const first = await page({ link: home, address: '203.0.113.7' }), second = await page({ link: home, address: '203.0.113.7' });
+    const elsewhere = await page({ link: home, address: '198.51.100.20' });
+    await Promise.all([connected(first), connected(second)]);
+    assert.match(await first.locator('#empty-note').textContent(), /on this network/);
+    assert.notEqual(await first.locator('#room-link').inputValue(), await second.locator('#room-link').inputValue(), 'each still has its own link');
+    await elsewhere.waitForFunction(() => document.querySelector('#status').textContent === 'room open');
+    assert.equal(await elsewhere.locator('.device').count(), 0, 'another network sees nobody');
+    await choose(first, [{ name: 'nearby.txt', mimeType: 'text/plain', buffer: Buffer.from('same wi-fi') }]);
+    await second.getByRole('button', { name: 'accept', exact: true }).click();
+    await download(second, 'nearby.txt', Buffer.from('same wi-fi'));
+    for (const p of [first, second, elsewhere]) await p.context().close();
+  } finally { await nearby.close(); }
+  console.log('PASS devices on one known network meet without a link, others do not');
 
   assert.deepEqual(errors, []);
   assert.ok(requests.every(r => r.bytes < 65536));

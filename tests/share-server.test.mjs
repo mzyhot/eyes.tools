@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createHmac, randomBytes } from 'node:crypto';
-import { createShareService, networkOf } from '../share-server.mjs';
+import { createShareService, isLocalAddress, networkOf } from '../share-server.mjs';
 
 async function fixture(t, options = {}) {
   const share = createShareService(options);
@@ -67,21 +67,64 @@ test('a link crosses networks, isolates other rooms, and never publishes tokens'
   assert.equal((await f.post('signal', { to: c.id, signal: { connection: 'c'.repeat(24), description: { type: 'offer', sdp: 'v=0' } } }, a)).status, 404);
 });
 
-test('without a link a session is alone, and its link dies with it', { timeout: 10000 }, async t => {
+test('two tabs on one network meet without a link, and a link dies with its session', { timeout: 10000 }, async t => {
   const f = await fixture(t, { trustCloudflare: true });
   const headers = { 'CF-Connecting-IP': '192.0.2.1' };
-  // Two tabs on one network, and one address: still two rooms, never one.
+  // One address, two tabs: two rooms, but one network, so they see each other.
   const a = await f.join({}, headers), ae = await f.events(a); await ae.next();
+  assert.equal(a.nearby, true);
   const b = await f.join({}, headers), be = await f.events(b);
   assert.notEqual(a.room, b.room);
-  assert.deepEqual((await be.next()).data, []);
+  assert.equal((await be.next()).data[0].id, a.id);
+  assert.equal((await ae.next()).data.id, b.id);
+  const signal = { connection: 'a'.repeat(24), description: { type: 'offer', sdp: 'v=0' } };
+  assert.equal((await f.post('signal', { to: b.id, signal }, a)).status, 200);
+  assert.deepEqual(await be.next(), { type: 'signal', data: { from: a.id, signal } });
+
+  // Another network sees neither and cannot signal them.
+  const c = await f.join({}, { 'CF-Connecting-IP': '198.51.100.2' }), ce = await f.events(c);
+  assert.deepEqual((await ce.next()).data, []);
+  assert.equal((await f.post('signal', { to: a.id, signal }, c)).status, 404);
 
   // The link reaches its session, and nobody once that session has gone.
   const guest = await f.join({ room: a.room }), ge = await f.events(guest);
   assert.equal((await ge.next()).data[0].id, a.id);
   await f.post('leave', {}, a); await f.post('leave', {}, guest);
+  assert.deepEqual(await be.next(), { type: 'left', data: { id: a.id, removed: true } });
   const late = await f.join({ room: a.room }), le = await f.events(late);
   assert.deepEqual((await le.next()).data, []);
+});
+
+test('a network groups only an address known to be the visitor\'s own', { timeout: 10000 }, async t => {
+  const trusted = await fixture(t, { trustCloudflare: true });
+  const pair = async (f, first, second) => {
+    const a = await f.join({}, first), ae = await f.events(a); await ae.next();
+    const b = await f.join({}, second), be = await f.events(b);
+    return { a, b, met: (await be.next()).data.some(p => p.id === a.id) };
+  };
+  // One IPv6 /64 is one network, and both spellings of an IPv4 client agree.
+  assert.equal((await pair(trusted, { 'CF-Connecting-IP': '2600:1700:abcd:1230::1' }, { 'CF-Connecting-IP': '2600:1700:abcd:1230::2' })).met, true);
+  assert.equal((await pair(trusted, { 'CF-Connecting-IP': '::ffff:203.0.113.7' }, { 'CF-Connecting-IP': '203.0.113.7' })).met, true);
+  assert.equal((await pair(trusted, { 'CF-Connecting-IP': '2600:1700:abcd:1230::1' }, { 'CF-Connecting-IP': '2600:1700:abcd:1231::1' })).met, false);
+  // A private address is a LAN's or a proxy's, never one household's.
+  const lan = await pair(trusted, { 'CF-Connecting-IP': '10.0.0.5' }, { 'CF-Connecting-IP': '10.0.0.5' });
+  assert.equal(lan.met, false); assert.equal(lan.a.nearby, false);
+  // Without the trusted header the socket address is the proxy's, so nobody groups.
+  assert.equal((await pair(trusted, {}, {})).met, false);
+  const untrusted = await fixture(t);
+  assert.equal((await pair(untrusted, { 'CF-Connecting-IP': '192.0.2.9' }, { 'CF-Connecting-IP': '192.0.2.9' })).met, false);
+  assert.equal((await pair(untrusted, { 'X-Forwarded-For': '192.0.2.9' }, { 'X-Forwarded-For': '192.0.2.9' })).met, false);
+});
+
+test('a network holds no more than a room, and the rest meet by link', { timeout: 10000 }, async t => {
+  const f = await fixture(t, { trustCloudflare: true });
+  const headers = { 'CF-Connecting-IP': '192.0.2.1' };
+  const members = [];
+  for (let i = 0; i < 16; i++) members.push(await f.join({}, headers));
+  assert.ok(members.every(s => s.nearby));
+  const extra = await f.join({}, headers), ee = await f.events(extra);
+  assert.equal(extra.nearby, false);
+  assert.deepEqual((await ee.next()).data, []);
 });
 
 test('behind a trusted proxy the join limit follows the visitor, not the proxy', async t => {
@@ -211,4 +254,14 @@ test('the join limit counts a network, not one address in it', async t => {
   assert.notEqual(networkOf('2600:1700:abcd:1230::1'), networkOf('2600:1700:abcd:1231::1'));
   assert.equal(networkOf('::ffff:198.51.100.9'), networkOf('198.51.100.9'));
   assert.equal(networkOf('2600:1700:abcd:1230::1'), '2600:1700:abcd:1230::/64');
+});
+
+test('loopback, private, link-local and carrier addresses never name a network', () => {
+  for (const ip of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.1.1', '100.64.0.1',
+    '100.127.255.255', '0.0.0.0', '::1', '::', 'fd12:3456::1', 'fe80::1', '::ffff:192.168.1.1', '::ffff:127.0.0.1', 'not-an-ip']) {
+    assert.equal(isLocalAddress(ip), true, ip);
+  }
+  for (const ip of ['8.8.8.8', '192.0.2.1', '172.32.0.1', '100.128.0.1', '2600:1700:abcd:1230::1', '::ffff:198.51.100.9']) {
+    assert.equal(isLocalAddress(ip), false, ip);
+  }
 });

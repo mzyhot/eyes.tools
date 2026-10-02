@@ -15,23 +15,35 @@
  *   which it hands back as the link to pass on. That is the whole of the room
  *   bookkeeping: a room exists while someone is in it, its code is unique
  *   because session ids are, and a link reaches nobody once the tab that
- *   minted it has gone. Nobody is ever put in a room with a stranger.
+ *   minted it has gone.
+ *
+ *   A *network* is the second way to meet, as ShareDrop did it: sessions that
+ *   arrive from one public network — one IPv4 address, or one IPv6 /64 — see
+ *   each other too, link or not. It is only used when the address is the
+ *   visitor's own; a loopback, private or proxy address leaves the session to
+ *   its link alone. It misses whenever Private Relay, a VPN or IPv6 on one
+ *   device makes one network look like two, which is why the link stays.
  *
  *   Nothing is persisted. Everything is in memory and dies with the process,
  *   which is the intended lifetime: discovery is ephemeral by design.
  *
  * What is deliberately defensive
  *
- *   Room keys are HMACs under a per-process salt, never raw addresses or raw
- *   link codes, so the in-memory state does not accumulate readable network
- *   identifiers and a leaked key reveals nothing and works nowhere else.
+ *   Room and network keys are HMACs under a per-process salt, never raw
+ *   addresses or raw link codes, so the in-memory state does not accumulate
+ *   readable network identifiers and a leaked key reveals nothing and works
+ *   nowhere else.
  *
  *   Joins are rate limited per network, which needs the visitor's address.
  *   It is only believed when the operator has said this process sits behind
  *   Cloudflare *and* the request arrived from loopback with a valid
  *   `CF-Connecting-IP`, or when no proxy header is present at all; anything
- *   ambiguous is counted against the proxy's own address instead. The address
- *   decides nothing else — it never puts two visitors together.
+ *   ambiguous is counted against the proxy's own address instead. The same
+ *   rule decides whether the address may group visitors into a network, with
+ *   one more condition: it must be public, because a loopback or private
+ *   address belongs to a proxy or a LAN and would put strangers together.
+ *   A network holds no more sessions than a room; past that, newcomers meet
+ *   by link alone.
  *
  *   Requests must be same-origin, or come from an origin the operator has
  *   listed in `SHARE_ALLOWED_ORIGINS` — the desktop app's, which serves its
@@ -45,10 +57,11 @@
  *
  * Bookkeeping
  *
- *   `sessions` is keyed by id. `roomMembers` indexes those same sessions by
- *   room, so finding someone's peers and counting a room are proportional to
- *   the room rather than to everyone connected. The two must be updated
- *   together; `remember` and `forget` are the only places that do it.
+ *   `sessions` is keyed by id. `roomMembers` and `networkMembers` index those
+ *   same sessions by room and by network, so finding someone's peers and
+ *   counting a group are proportional to the group rather than to everyone
+ *   connected. The three must be updated together; `remember` and `forget`
+ *   are the only places that do it.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -79,6 +92,9 @@ const MAX_SDP_LENGTH = 60000;
 const MAX_CANDIDATE_LENGTH = 4096;
 
 const LOOPBACK = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+/* Any of these means a proxy sits in front, so the socket address is the
+   proxy's, shared by every visitor behind it. */
+const PROXY_HEADERS = ['cf-connecting-ip', 'x-forwarded-for', 'x-real-ip', 'forwarded'];
 
 /**
  * Expand a valid IPv6 address to its eight 16-bit groups.
@@ -130,12 +146,41 @@ export function expandIPv6(ip) {
  */
 export function networkOf(ip) {
   const family = isIP(ip);
-  if (family === 4) return ip;
   if (family !== 6) return ip;
   const groups = expandIPv6(ip);
-  const mapped = groups[0] === 0 && groups[1] === 0 && groups[2] === 0 && groups[3] === 0 && groups[4] === 0 && groups[5] === 0xffff;
-  if (mapped) return [groups[6] >> 8, groups[6] & 255, groups[7] >> 8, groups[7] & 255].join('.');
-  return groups.slice(0, 4).map(group => group.toString(16)).join(':') + '::/64';
+  return mappedIPv4(groups) || groups.slice(0, 4).map(group => group.toString(16)).join(':') + '::/64';
+}
+
+/** The IPv4 address an IPv4-mapped IPv6 address carries, or null. */
+function mappedIPv4(groups) {
+  const mapped = groups.slice(0, 5).every(group => group === 0) && groups[5] === 0xffff;
+  return mapped ? [groups[6] >> 8, groups[6] & 255, groups[7] >> 8, groups[7] & 255].join('.') : null;
+}
+
+/**
+ * Whether an address is one many visitors could share without being on one
+ * network: loopback, private, link-local, carrier-grade NAT or unspecified.
+ *
+ * Such an address is a proxy's, a LAN's or a carrier's, never one household's,
+ * so it never groups visitors. Anything that is not an address counts too.
+ * @param {string} ip
+ * @returns {boolean}
+ */
+export function isLocalAddress(ip) {
+  let v4 = isIP(ip) === 4 ? ip : null;
+  if (isIP(ip) === 6) {
+    const groups = expandIPv6(ip);
+    v4 = mappedIPv4(groups);
+    if (!v4) {
+      const unspecifiedOrLoopback = groups.slice(0, 7).every(group => group === 0) && groups[7] <= 1;
+      /* fc00::/7 is unique-local, fe80::/10 link-local. */
+      return unspecifiedOrLoopback || (groups[0] & 0xfe00) === 0xfc00 || (groups[0] & 0xffc0) === 0xfe80;
+    }
+  }
+  if (!v4) return true;
+  const [a, b] = v4.split('.').map(Number);
+  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) ||
+    (a === 192 && b === 168) || (a === 100 && b >= 64 && b < 128);
 }
 
 /**
@@ -161,6 +206,8 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   const sessions = new Map();
   /** @type {Map<string, Set<object>>} room key → sessions in it */
   const roomMembers = new Map();
+  /** @type {Map<string, Set<object>>} network key → sessions from it */
+  const networkMembers = new Map();
   /** @type {Map<string, {count: number, start: number}>} hashed address → joins */
   const rates = new Map();
   /* Reserved short codes and tokens, so a collision is retried rather than
@@ -191,42 +238,59 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     throw error;
   }
 
-  /* Rooms are addressed by HMAC, never by the address or link they came from. */
+  /* Rooms and networks are addressed by HMAC, never by the address or link
+     they came from. */
   const key = value => createHmac('sha256', salt).update(value).digest('hex');
 
   /* What one peer is allowed to learn about another: never the token, never the
      address, never the room. */
   const publicPeer = s => ({ id: s.id, name: s.name, device: s.device });
 
-  /** Add a session to both indexes. */
-  function remember(s) {
-    sessions.set(s.id, s);
-    let members = roomMembers.get(s.room);
-    if (!members) { members = new Set(); roomMembers.set(s.room, members); }
+  /** Add a session to a group index, creating the group. */
+  function enter(index, group, s) {
+    let members = index.get(group);
+    if (!members) { members = new Set(); index.set(group, members); }
     members.add(s);
   }
 
-  /** Drop a session from both indexes, discarding the room once it is empty. */
+  /** Drop a session from a group index, discarding the group once it is empty. */
+  function exit(index, group, s) {
+    const members = index.get(group);
+    if (!members) return;
+    members.delete(s);
+    if (!members.size) index.delete(group);
+  }
+
+  /** Add a session to every index. */
+  function remember(s) {
+    sessions.set(s.id, s);
+    enter(roomMembers, s.room, s);
+    if (s.network) enter(networkMembers, s.network, s);
+  }
+
+  /** Drop a session from every index. */
   function forget(s) {
     sessions.delete(s.id);
-    const members = roomMembers.get(s.room);
-    if (members) {
-      members.delete(s);
-      if (!members.size) roomMembers.delete(s.room);
-    }
+    exit(roomMembers, s.room, s);
+    if (s.network) exit(networkMembers, s.network, s);
   }
 
-  /** How many sessions are in a room, without walking every session. */
-  const roomSize = room => (roomMembers.get(room)?.size ?? 0);
+  /** How many sessions are in a group, without walking every session. */
+  const groupSize = (index, group) => (index.get(group)?.size ?? 0);
 
-  /** The connected peers a session may see: same room, not itself, streaming. */
-  function peers(s) {
-    const members = roomMembers.get(s.room);
-    if (!members) return [];
-    const out = [];
-    for (const p of members) if (p !== s && p.stream) out.push(p);
+  /** Whether two sessions may meet: one room, or one known network. */
+  const related = (s, p) => p.room === s.room || (!!s.network && p.network === s.network);
+
+  /** Everyone a session may meet, itself excepted, connected or not. */
+  function neighbours(s) {
+    const out = new Set(roomMembers.get(s.room));
+    if (s.network) for (const p of networkMembers.get(s.network) ?? []) out.add(p);
+    out.delete(s);
     return out;
   }
+
+  /** The connected peers a session may see: its room and network, streaming. */
+  const peers = s => [...neighbours(s)].filter(p => p.stream);
 
   /**
    * Write one server-sent event to a session's stream.
@@ -241,13 +305,11 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     s.stream.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  /** Send an event to everyone else in the room. */
+  /** Send an event to everyone else in the room and the network. */
   const broadcast = (s, type, data) => {
-    const members = roomMembers.get(s.room);
-    if (!members) return;
     const payload = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
-    for (const p of members) {
-      if (p === s || !p.stream || p.stream.destroyed) continue;
+    for (const p of neighbours(s)) {
+      if (!p.stream || p.stream.destroyed) continue;
       if (p.stream.writableLength > MAX_STREAM_BACKLOG) { p.stream.destroy(); continue; }
       p.stream.write(payload);
     }
@@ -329,19 +391,25 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   }
 
   /**
-   * The address a request's joins are counted against.
+   * The address a request's joins are counted against, and whether it is
+   * known to be the visitor's own network.
    *
-   * Behind a trusted Cloudflare proxy that is the visitor; otherwise it is the
-   * socket address, which may be the proxy's and so shared by everyone behind
-   * it. Nothing but the rate limit depends on this: an address never decides
-   * who can see whom.
+   * Behind a trusted Cloudflare proxy the address is the visitor's; otherwise
+   * it is the socket address, which may be the proxy's and so shared by
+   * everyone behind it. That is fine for a rate limit, which then only counts
+   * too many people together, but not for grouping, which would put them all
+   * in one network. So a network is known only from the trusted header, or
+   * from a request that carries no proxy header at all — and never from a
+   * loopback or private address, which is a proxy's or a LAN's.
    */
   function locate(req) {
     const address = req.socket.remoteAddress || '';
     const forwarded = req.headers['cf-connecting-ip'];
     const loopback = LOOPBACK.includes(address);
     const trusted = trustCloudflare && loopback && typeof forwarded === 'string' && isIP(forwarded);
-    return trusted ? forwarded : address;
+    const ip = trusted ? forwarded : address;
+    const own = trustCloudflare ? !!trusted : !PROXY_HEADERS.some(name => req.headers[name] !== undefined);
+    return { ip, networkKnown: own && !isLocalAddress(ip) };
   }
 
   /** The request's origin if the operator allows it cross-origin, else null. */
@@ -366,13 +434,14 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
    * POST /api/share/join — create a session and return its credentials.
    *
    * With a room, the session joins it; without one, it joins the room its own
-   * id names and hands that id back as the link to pass on.
+   * id names and hands that id back as the link to pass on. Either way it also
+   * joins its network, when that is known and not already full.
    *
    * Rate limited per address. The id, its visible four-character short code and
    * the bearer token are all allocated and reserved without an await in between,
    * so two concurrent joins cannot be handed the same one.
    */
-  async function join(req, res, ip) {
+  async function join(req, res, { ip, networkKnown }) {
     /* Rate limit per network: an IPv6 client can otherwise rotate through the
        2^64 addresses in its own /64 and never hit the limit. */
     const network = networkOf(ip);
@@ -388,14 +457,17 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     const id = allocate(12, value => sessions.has(value) || codes.has(value.slice(-4)));
     const code = body.room || id;
     const room = key('room:' + code);
-    if (sessions.size >= MAX_SESSIONS || roomSize(room) >= MAX_ROOM_MEMBERS) {
+    if (sessions.size >= MAX_SESSIONS || groupSize(roomMembers, room) >= MAX_ROOM_MEMBERS) {
       return reply(res, 429, { error: 'this room is full; try a new room link' });
     }
+    /* A full network is not refused: the newcomer still has its link. */
+    const area = networkKnown ? key('network:' + network) : null;
 
     const s = {
       id,
       token: allocate(32, value => tokens.has(value)),
       room,
+      network: area && groupSize(networkMembers, area) < MAX_ROOM_MEMBERS ? area : null,
       name: NAMES[parseInt(id.slice(0, 2), 16) % NAMES.length] + ' ' + id.slice(-4),
       device: ['phone', 'tablet', 'computer'].includes(body.device) ? body.device : 'computer',
       stream: null,
@@ -407,16 +479,16 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     remember(s);
     codes.add(id.slice(-4));
     tokens.add(s.token);
-    return reply(res, 200, { id, token: s.token, name: s.name, room: code, iceServers: iceServers(id) });
+    return reply(res, 200, { id, token: s.token, name: s.name, room: code, nearby: !!s.network, iceServers: iceServers(id) });
   }
 
   /**
    * GET /api/share/events — the session's server-sent event stream.
    *
-   * Opening it publishes the session to the room and hands back the peers
-   * already there. A reconnect supersedes the previous stream. Closing it marks
-   * the session absent but does not delete it: a reload should not lose the
-   * session, so collection is left to the sweep.
+   * Opening it publishes the session to its room and network and hands back
+   * the peers already there. A reconnect supersedes the previous stream.
+   * Closing it marks the session absent but does not delete it: a reload
+   * should not lose the session, so collection is left to the sweep.
    */
   function events(res, s) {
     if (s.stream) s.stream.end();
@@ -439,16 +511,16 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
    *
    * The payload is validated for shape and size but never interpreted: this
    * service does not need to understand an SDP to pass it along, and refusing to
-   * parse one is the safest thing it can do with it. Both parties must be in the
-   * same room and actively streaming, which is what stops the endpoint from
-   * being a general-purpose message relay between strangers.
+   * parse one is the safest thing it can do with it. Both parties must share a
+   * room or a network and be actively streaming, which is what stops the
+   * endpoint from being a general-purpose message relay between strangers.
    */
   async function signal(req, res, s) {
     if (now() - s.window > RATE_WINDOW_MS) { s.signals = 0; s.window = now(); }
     if (++s.signals > MAX_SIGNALS_PER_WINDOW) return reply(res, 429, { error: 'too many connection messages' });
 
     const body = await readBody(req), target = sessions.get(body.to);
-    if (!s.stream || !target?.stream || target.room !== s.room || target.id === s.id) {
+    if (!s.stream || !target?.stream || !related(s, target) || target.id === s.id) {
       return reply(res, 404, { error: 'that device left; ask them to reopen share' });
     }
 
