@@ -1,7 +1,7 @@
 # 𓁹𓁹
 
 [![checks](https://github.com/mzyhot/eyes.tools/actions/workflows/check.yml/badge.svg?branch=main&event=push)](https://github.com/mzyhot/eyes.tools/actions/workflows/check.yml)
-[![daily tests](https://img.shields.io/github/actions/workflow/status/mzyhot/eyes.tools/daily-tests.yml?label=daily%20tests)](https://github.com/mzyhot/eyes.tools/actions/workflows/daily-tests.yml)
+[![daily tests](https://github.com/mzyhot/eyes.tools/actions/workflows/daily-tests.yml/badge.svg)](https://github.com/mzyhot/eyes.tools/actions/workflows/daily-tests.yml)
 [![desktop](https://github.com/mzyhot/eyes.tools/actions/workflows/desktop.yml/badge.svg)](https://github.com/mzyhot/eyes.tools/actions/workflows/desktop.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
