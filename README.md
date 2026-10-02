@@ -1,6 +1,7 @@
 # 𓁹𓁹
 
 [![checks](https://github.com/mzyhot/eyes.tools/actions/workflows/check.yml/badge.svg)](https://github.com/mzyhot/eyes.tools/actions/workflows/check.yml)
+[![daily tests](https://img.shields.io/github/actions/workflow/status/mzyhot/eyes.tools/check.yml?branch=main&event=schedule&label=daily%20tests)](https://github.com/mzyhot/eyes.tools/actions/workflows/check.yml?query=event%3Aschedule+branch%3Amain)
 [![desktop](https://github.com/mzyhot/eyes.tools/actions/workflows/desktop.yml/badge.svg)](https://github.com/mzyhot/eyes.tools/actions/workflows/desktop.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
@@ -12,8 +13,11 @@ dependencies, or analytics. Every interface is one HTML file holding its own
 markup and one script; everything around it — the header, the title, the
 footer, the fonts, the scripts a tool loads — comes from two registries, so a
 change lands in one place. Share gives every visitor a room and a link to pass
-on, and a small in-memory service introduces the two devices and relays their
-connection setup. File contents travel between browsers, never through it.
+on, shows devices on the same network to each other without one, and a small
+in-memory service introduces the devices and relays their connection setup.
+File contents travel between browsers, never through it, and are written to the
+receiver's browser storage as they arrive, so their size is bounded by disk
+rather than memory.
 
 ```
 site.js           the site registry — wordmark, copy, footers, shortcuts, storage keys
