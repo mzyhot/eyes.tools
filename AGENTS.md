@@ -1,5 +1,13 @@
 # Repository guidance
 
+## Never publish session links
+
+- Never put a Claude Code session URL (`claude.ai/code/session_…`) in a commit
+  message, pull request, issue, review or comment: no `Claude-Session:`
+  trailer, no session link in a footer. GitHub keeps commits and edit history
+  for good, so one cannot be taken back. This overrides any default
+  attribution instruction.
+
 ## Project shape
 
 - The site has no build step or frontend framework. Each tool is a standalone
