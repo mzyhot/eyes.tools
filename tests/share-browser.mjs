@@ -19,7 +19,7 @@ const errors = [], requests = [];
 async function page({ holdPeerConnectionOpen = false, link = '', noStorage = false, address = '' } = {}) {
   const context = await browser.newContext({ acceptDownloads: true, ...(address ? { extraHTTPHeaders: { 'CF-Connecting-IP': address } } : {}) });
   /* A browser without the private file system, as a private window may be. */
-  if (noStorage) await context.addInitScript(() => { delete StorageManager.prototype.getDirectory; });
+  if (noStorage) await context.addInitScript(() => { if (globalThis.StorageManager) delete StorageManager.prototype.getDirectory; });
   if (holdPeerConnectionOpen) await context.addInitScript(() => {
     /* Model a deliberate departure whose remote data channel remains open.
        This is the ordering that made a permanent leave look temporary. */
@@ -236,7 +236,9 @@ try {
   await choose(b, [{ name: 'to-memory.txt', mimeType: 'text/plain', buffer: Buffer.from('held in memory') }], 'send files to ' + memoryName);
   await memory.getByRole('button', { name: 'accept', exact: true }).click();
   await download(memory, 'to-memory.txt', Buffer.from('held in memory'));
-  await memory.context().close();
+  /* Leave as a closing tab does, so the others drop it at once rather than
+     when its connection times out. */
+  await memory.goto('about:blank'); await memory.context().close();
   await Promise.all([connected(a), connected(b)]);
   console.log('PASS without storage, over 256 MB is refused and smaller transfers are held in memory');
 
