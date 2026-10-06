@@ -148,7 +148,13 @@ curl --fail http://127.0.0.1:8777/healthz
 curl --head http://127.0.0.1:8777/share
 curl --fail -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' http://127.0.0.1:8777/mcp
+curl --fail -s http://127.0.0.1:8777/qr | grep 'og:image'
 ```
+
+Link previews and the sitemap name the address in `url` in `site.js`. A copy
+served from anywhere but https://eyes.tools sets it to its own address and
+runs `node scripts/static-routes.mjs`, or previews of its pages link to
+eyes.tools.
 
 Then visit your public HTTPS site in two browsers and verify:
 

@@ -20,8 +20,8 @@ export const PUBLIC_ROOT_FILES = [
   "index.js", "redirect.js",
   /* scripts tools name in their `deps` */
   "qrcode.min.js", "drand-tools.js", "drand-client.min.js", "exif-reader.js",
-  /* crawler metadata */
-  "robots.txt", "sitemap.xml",
+  /* crawler metadata, and the picture link previews show */
+  "robots.txt", "sitemap.xml", "preview.png",
   /* notices */
   "THIRDPARTYLICENSES", "LICENSE", "ADDENDUM"
 ];

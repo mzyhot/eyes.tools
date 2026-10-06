@@ -31,6 +31,7 @@ index.js          the index — filter field and registry-driven list
 index.html        an empty page index.js fills
 redirect.js       drives the compatibility stubs (t/lines.html, t/units.html)
 favicon.svg       one eye
+preview.png       the picture a link preview shows (site.js names it)
 404.html          an empty page s.js fills from site.js
 t/*.html          one file per tool: its markup and its script, nothing else
 qrcode.min.js     vendored QR encoder; generation remains offline
@@ -87,7 +88,7 @@ cd desktop && cargo run
 
 | To change | Edit |
 | --- | --- |
-| The wordmark, footer notes, index copy, the not-found page, keyboard shortcuts, storage keys | `site.js` |
+| The wordmark, footer notes, index copy, the not-found page, keyboard shortcuts, storage keys, the address and picture link previews use | `site.js` |
 | A tool's name, lede, search aliases, meta description, scripts or footer note | its row in `tools.js` |
 | The fonts | `fonts.css`, and drop the files in if you self-host |
 | Colours, sizes, spacing, motion | `tokens.css` |
@@ -164,7 +165,9 @@ To get every feature, run the Node server behind a reverse proxy that
 terminates HTTPS; [deploy/README.md](deploy/README.md) covers the systemd
 service, proxy requirements, and release checks.
 
-Static hosts can serve the tools, but not share or the MCP server:
+Static hosts can serve the tools, but not share, the MCP server or link
+previews (the server writes each page's title, description and preview
+picture into its HTML, for apps that read a link without running scripts):
 
 - **Vercel** reads `vercel.json`: `npx vercel deploy --prod`.
 - **Cloudflare Pages** reads `_redirects`, `_routes.json`, `_headers` and `functions/`. Connect

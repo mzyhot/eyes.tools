@@ -8,7 +8,7 @@ import { mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createEyesServer } from '../dev-server.mjs';
+import { createEyesServer, previewTags, readRegistries } from '../dev-server.mjs';
 
 test('production HTTP boundaries, security headers, and graceful shutdown', async t => {
   const app = createEyesServer();
@@ -81,6 +81,42 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
     assert.equal(res.headers.get('content-encoding'), expected, offer);
     await res.arrayBuffer();
   }
+});
+
+test('pages carry their link preview in the HTML, before any script runs', async t => {
+  const app = createEyesServer();
+  await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+  t.after(() => app.close());
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const { site, tools } = await readRegistries();
+  const head = async path => { const html = await (await fetch(base + path)).text(); return html.slice(0, html.indexOf('</head>')); };
+  const meta = (html, key) => new RegExp(`<meta (?:name|property)="${key}" content="([^"]*)">`).exec(html)?.[1];
+  for (const tool of tools) {
+    const page = await head('/' + tool.slug);
+    assert.equal(page.match(/<title>/g)?.length, 1, tool.slug);
+    assert.ok(page.includes(`<title>${tool.name}${site.titleSuffix}</title>`), tool.slug);
+    assert.equal(meta(page, 'description'), tool.meta, tool.slug);
+    assert.equal(meta(page, 'og:title'), tool.name, tool.slug);
+    assert.equal(meta(page, 'og:url'), `${site.url}/${tool.slug}`, tool.slug);
+    assert.equal(meta(page, 'og:image'), `${site.url}/${site.preview.image}`, tool.slug);
+  }
+  const index = await head('/');
+  assert.equal(meta(index, 'og:title'), site.name);
+  assert.equal(meta(index, 'og:description'), site.description);
+  assert.equal(meta(index, 'og:url'), site.url + '/');
+  // A redirect stub has no row, so no preview.
+  assert.ok(!(await head('/lines')).includes('og:'));
+  const picture = await fetch(base + '/' + site.preview.image);
+  assert.equal(picture.status, 200);
+  assert.equal(picture.headers.get('content-type'), 'image/png');
+  assert.equal(picture.headers.get('cross-origin-resource-policy'), 'cross-origin');
+  assert.equal((await fetch(base + '/favicon.svg')).headers.get('cross-origin-resource-policy'), 'same-origin');
+  await picture.arrayBuffer();
+  // What the registries say is text, never markup.
+  const tags = previewTags({ ...site, url: 'https://example.test' }, { slug: 'x', name: '</title><script>', meta: '"><b>' });
+  assert.ok(!tags.includes('<script') && !tags.includes('<b>'));
+  assert.equal(tags.match(/<\/title>/g).length, 1);
+  assert.ok(tags.includes('content="&#34;&#62;&#60;b&#62;"'));
 });
 
 test('GitHub deployment webhook accepts only signed requests for this repository', async t => {
