@@ -9,7 +9,7 @@
 - `site.js` holds the site's copy and behaviour; `tools.js` is the tool
   registry, including each tool's `deps` (extra scripts) and `note` (footer
   line). `fonts.css` is the only place a font family is named. When adding or
-  removing a tool, regenerate the static-host files with
+  removing a tool, regenerate the static-host files and `sitemap.xml` with
   `node scripts/static-routes.mjs`.
 - `api-modules.mjs` lists the APIs the Node server mounts; the router matches a
   prefix and knows nothing else about them.

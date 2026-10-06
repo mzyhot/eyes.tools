@@ -47,7 +47,7 @@ _routes.json      Cloudflare Pages: sends private paths to a 404 Function (gener
 _headers          Cloudflare Pages: the server's security headers (generated)
 vercel.json       Vercel: serves each tool at /<slug>, with those headers (generated)
 .vercelignore     Vercel: leaves private files out of the deployment (generated)
-scripts/          check.mjs (static checks), static-routes.mjs (writes the five files above)
+scripts/          check.mjs (static checks), static-routes.mjs (writes the five files above, and sitemap.xml)
 tests/            Node tests and Playwright browser suites
 deploy/           systemd unit, environment example, and self-hosting notes
 desktop/          the tools as a Tauri desktop app (Rust); see desktop/README.md
@@ -103,7 +103,7 @@ cd desktop && cargo run
 2. Add one row to `tools.js`. The title, header, lede, meta description,
    footer note and any extra scripts (`deps`) all come from it.
 3. Run `node scripts/static-routes.mjs` so Vercel and Cloudflare Pages serve the
-   page at `/<slug>`. Run it too after adding any file at the top level, so the
+   page at `/<slug>` and `sitemap.xml` lists it. Run it too after adding any file at the top level, so the
    static hosts keep it private. The Node server needs nothing; `npm run check`
    fails until this is done.
 4. Follow `_dev/CONTRACT.md`. It is short and it is the whole design system.
