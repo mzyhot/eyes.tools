@@ -73,7 +73,7 @@ plus a reachable peer.
 ## Desktop app
 
 `desktop/` builds the tools into a desktop app with Tauri. It embeds the same
-pages the server publishes and works offline; share uses eyes.tools's service
+pages the server publishes and works offline; share uses the eyes.tools service
 for its rooms, so a link from the app opens on the website and the other way
 round. With Rust installed:
 

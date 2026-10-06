@@ -15,9 +15,9 @@ land before disclosing the problem publicly.
 In scope:
 
 - the share service (`share-server.mjs`): rooms and signaling, including
-  anything that lets a visitor see, reach or impersonate a device in a room
-  whose link they were not given, or makes file contents pass through the
-  server
+  anything that lets a visitor see, reach or impersonate a device whose link
+  they were not given and whose public network they do not share, or makes
+  file contents pass through the server
 - the Node server (`dev-server.mjs`): path handling, the published-file allow
   list, security headers and request limits
 - any tool that sends data off the device when it says it does not, or

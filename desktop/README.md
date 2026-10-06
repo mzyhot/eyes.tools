@@ -7,7 +7,7 @@ server. No page is loaded from eyes.tools.
 
 Differences from the site:
 
-- **Share uses eyes.tools's service** for its rooms and connection setup — the
+- **Share uses the eyes.tools service** for its rooms and connection setup — the
   one thing a server is needed for. Files still go device to device, and the
   app's link opens for browsers on the site and other copies of the app. The
   server must list the app's origins in `SHARE_ALLOWED_ORIGINS` (see
