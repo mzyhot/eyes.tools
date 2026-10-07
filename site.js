@@ -6,8 +6,8 @@
  *
  * Nothing in this file touches the DOM. `s.js` reads it and builds the header,
  * the title block and the footer from it; `theme.js` reads the storage key
- * before the first paint; `index.js` reads the index copy. A page never
- * repeats any of it.
+ * before the first paint; `index.js` reads the index copy; the Node server
+ * reads it to write each page's link preview. A page never repeats any of it.
  *
  * What each tool says about itself — its name, lede, search aliases, extra
  * scripts and network note — lives in `tools.js`, one row per tool.
@@ -25,6 +25,15 @@ window.SITE = {
   /* Address-bar colour. Matches `--color-paper` of the theme in force. */
   themeColor: { dark: "#070707", light: "#fbfbfb" },
   icon: "favicon.svg",
+
+  /* What a link preview shows, in a chat app or a search result, where the
+     page's scripts never run: the site's name in plain letters, since the
+     wordmark's hieroglyphs do not render everywhere, its public address, and
+     a picture published at the site root. A copy served from somewhere else
+     changes `url` to its own address. */
+  name: "eyes.tools",
+  url: "https://eyes.tools",
+  preview: { image: "preview.png", width: 1200, height: 630, alt: "two outlined eyes above the words eyes.tools" },
 
   /* Labels the chrome reuses on every page. */
   labels: {

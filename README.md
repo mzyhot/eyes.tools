@@ -31,6 +31,7 @@ index.js          the index — filter field and registry-driven list
 index.html        an empty page index.js fills
 redirect.js       drives the compatibility stubs (t/lines.html, t/units.html)
 favicon.svg       one eye
+preview.png       the picture a link preview shows (site.js names it)
 404.html          an empty page s.js fills from site.js
 t/*.html          one file per tool: its markup and its script, nothing else
 qrcode.min.js     vendored QR encoder; generation remains offline
@@ -47,7 +48,7 @@ _routes.json      Cloudflare Pages: sends private paths to a 404 Function (gener
 _headers          Cloudflare Pages: the server's security headers (generated)
 vercel.json       Vercel: serves each tool at /<slug>, with those headers (generated)
 .vercelignore     Vercel: leaves private files out of the deployment (generated)
-scripts/          check.mjs (static checks), static-routes.mjs (writes the five files above)
+scripts/          check.mjs (static checks), static-routes.mjs (writes the five files above, and sitemap.xml)
 tests/            Node tests and Playwright browser suites
 deploy/           systemd unit, environment example, and self-hosting notes
 desktop/          the tools as a Tauri desktop app (Rust); see desktop/README.md
@@ -73,7 +74,7 @@ plus a reachable peer.
 ## Desktop app
 
 `desktop/` builds the tools into a desktop app with Tauri. It embeds the same
-pages the server publishes and works offline; share uses eyes.tools's service
+pages the server publishes and works offline; share uses the eyes.tools service
 for its rooms, so a link from the app opens on the website and the other way
 round. With Rust installed:
 
@@ -87,7 +88,7 @@ cd desktop && cargo run
 
 | To change | Edit |
 | --- | --- |
-| The wordmark, footer notes, index copy, the not-found page, keyboard shortcuts, storage keys | `site.js` |
+| The wordmark, footer notes, index copy, the not-found page, keyboard shortcuts, storage keys, the address and picture link previews use | `site.js` |
 | A tool's name, lede, search aliases, meta description, scripts or footer note | its row in `tools.js` |
 | The fonts | `fonts.css`, and drop the files in if you self-host |
 | Colours, sizes, spacing, motion | `tokens.css` |
@@ -103,7 +104,7 @@ cd desktop && cargo run
 2. Add one row to `tools.js`. The title, header, lede, meta description,
    footer note and any extra scripts (`deps`) all come from it.
 3. Run `node scripts/static-routes.mjs` so Vercel and Cloudflare Pages serve the
-   page at `/<slug>`. Run it too after adding any file at the top level, so the
+   page at `/<slug>` and `sitemap.xml` lists it. Run it too after adding any file at the top level, so the
    static hosts keep it private. The Node server needs nothing; `npm run check`
    fails until this is done.
 4. Follow `_dev/CONTRACT.md`. It is short and it is the whole design system.
@@ -164,7 +165,9 @@ To get every feature, run the Node server behind a reverse proxy that
 terminates HTTPS; [deploy/README.md](deploy/README.md) covers the systemd
 service, proxy requirements, and release checks.
 
-Static hosts can serve the tools, but not share or the MCP server:
+Static hosts can serve the tools, but not share, the MCP server or link
+previews (the server writes each page's title, description and preview
+picture into its HTML, for apps that read a link without running scripts):
 
 - **Vercel** reads `vercel.json`: `npx vercel deploy --prod`.
 - **Cloudflare Pages** reads `_redirects`, `_routes.json`, `_headers` and `functions/`. Connect

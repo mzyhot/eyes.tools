@@ -66,7 +66,7 @@ body[data-tool="share"] [hidden] { display: none !important; }
 <main class="stack-6">
   <section aria-label="devices">
     <div class="share-toolbar">
-      <p class="lbl"><span id="device-count">devices</span> · in this room</p>
+      <p class="lbl"><span id="device-count">devices</span> · <span id="device-where">in this room</span></p>
     </div>
     <div class="share-space">
       <div id="empty" class="share-empty">
@@ -281,6 +281,7 @@ E.tool(function () {
           $('#your-name').textContent = joined.name;
           /* Say how the other device will arrive, unless a notice is showing. */
           if ([LINK_NOTE, NEARBY_NOTE].includes($('#empty-note').textContent)) $('#empty-note').textContent = joined.nearby ? NEARBY_NOTE : LINK_NOTE;
+          $('#device-where').textContent = joined.nearby ? 'nearby or in this room' : 'in this room';
           /* Arriving without a link, the service mints one from this session's
              own id. It is the page's address from here on, so a reload rejoins
              the same room rather than opening another. */

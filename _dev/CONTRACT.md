@@ -8,7 +8,8 @@ page makes no network requests unless it is a network tool (rule 4).
 Everything around the tool — the head tags, the header, the `<h1>`, the lede,
 the footer — is built by `s.js` from `site.js` (the site's copy and behaviour)
 and the tool's row in `tools.js`. That is why a page never writes them, and why
-`npm run check` fails if it does.
+`npm run check` fails if it does. The Node server writes the same title and
+description into the page as it serves it, so a link preview shows them too.
 
 **Reference implementation: [`t/case.html`](../t/case.html). Skeleton: [`_dev/TEMPLATE.html`](TEMPLATE.html).**
 When in doubt, do what `case.html` does.
@@ -55,9 +56,9 @@ Your row in `tools.js` carries the rest:
 
 | Field | Becomes |
 | --- | --- |
-| `name` | the `<h1>`, the breadcrumb, `document.title`, the index |
+| `name` | the `<h1>`, the breadcrumb, `document.title`, the index, a link preview's title |
 | `desc` | the lede under the heading, and the index's second column |
-| `meta` | the page's `<meta name="description">` |
+| `meta` | the page's `<meta name="description">`, and a link preview's description |
 | `alias` | extra words the index filter matches |
 | `deps` | scripts `s.js` loads before running your code |
 | `note` | the footer line, for a tool that reaches the network |

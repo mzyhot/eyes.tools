@@ -37,7 +37,9 @@
  * carry the server's security headers, and `.vercelignore` and `_routes.json`
  * hide exactly the files `public-files.mjs` does not publish. A stale one would
  * 404 a page, drop a header, or publish a private file on those hosts while
- * everything works locally.
+ * everything works locally. And that `sitemap.xml` names the index and every
+ * tool in the registry, so search engines hear of a new tool, and that the
+ * desktop app's content security policy still mirrors the server's.
  */
 
 import { readFile, readdir } from 'node:fs/promises';
@@ -47,7 +49,8 @@ import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PUBLIC_ROOT_FILES } from '../public-files.mjs';
-import { pageSlugs, pagesHeaders, pagesRedirects, pagesRoutes, privateEntries, vercelConfig, vercelIgnore } from './static-routes.mjs';
+import { CSP, readRegistries } from '../dev-server.mjs';
+import { pageSlugs, pagesHeaders, pagesRedirects, pagesRoutes, privateEntries, sitemap, vercelConfig, vercelIgnore } from './static-routes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const rootFiles = await readdir(root);
@@ -122,5 +125,30 @@ const entries = privateEntries();
 assert.equal(await readFile(resolve(root, '.vercelignore'), 'utf8'), vercelIgnore(entries), '.vercelignore is out of date; run node scripts/static-routes.mjs');
 assert.equal(await readFile(resolve(root, '_routes.json'), 'utf8'), pagesRoutes(entries), '_routes.json is out of date; run node scripts/static-routes.mjs');
 console.log(`PASS static-host routes cover all ${slugs.length} pages, send the server's headers, and hide ${entries.length} private entries`);
+const { site } = await readRegistries();
+assert.equal(await readFile(resolve(root, 'sitemap.xml'), 'utf8'), sitemap(site.url, [...registry.keys()]), 'sitemap.xml is out of date; run node scripts/static-routes.mjs');
+console.log(`PASS sitemap.xml lists the index and all ${registry.size} tools`);
+
+/* Link previews name the site by its address and show a published picture. */
+assert.match(site.url || '', /^https:\/\/[^/]+$/, 'site.js: url must be the https:// origin of the site, with no path or trailing slash');
+assert.ok(site.name, 'site.js: name is the plain-text name link previews show');
+if (site.preview) {
+  assert.ok(publicFiles.has(site.preview.image), `site.js: the preview image ${site.preview.image} must be listed in public-files.mjs`);
+  const png = await readFile(resolve(root, site.preview.image));
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [site.preview.width, site.preview.height], `site.js: ${site.preview.image} is not ${site.preview.width}×${site.preview.height}`);
+}
+console.log(`PASS link previews name ${site.url} and show a published ${site.preview ? site.preview.width + '×' + site.preview.height + ' picture' : 'page without a picture'}`);
+
+/* The desktop app's policy mirrors the server's. It may allow more where the
+   app needs it (its own IPC, the share service it reaches), never less. */
+{
+  const directives = csp => new Map(csp.split(';').map(d => d.trim().split(/\s+/)).map(([name, ...sources]) => [name, sources]));
+  const desktop = JSON.parse(await readFile(resolve(root, 'desktop/tauri.conf.json'), 'utf8')).app.security.csp;
+  for (const [name, sources] of directives(CSP)) {
+    const app = (desktop[name] || '').split(/\s+/);
+    assert.deepEqual(app.slice(0, sources.length), sources, `desktop/tauri.conf.json: ${name} must begin with the server's "${sources.join(' ')}"`);
+  }
+  console.log(`PASS the desktop app's content security policy mirrors the server's`);
+}
 console.log(`PASS ${pages.length} HTML pages: inline script syntax, unique IDs and local assets (${scripts} inline scripts)`);
 console.log(`PASS ${sources.length} JavaScript files parse`);

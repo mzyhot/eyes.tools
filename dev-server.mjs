@@ -29,6 +29,13 @@
  *   traversal segment, a NUL or a backslash, resolved, and then checked again
  *   after `realpath` so a symlink cannot escape the project directory.
  *
+ *   Link previews. A chat app or a search engine reads a page's head without
+ *   running its scripts, so it never sees the title and description `s.js`
+ *   builds. The index and each tool page are served with those tags already
+ *   written in, plus Open Graph tags and the preview picture, from the same
+ *   `site.js` and `tools.js`, so a page file still holds only its `<main>` and
+ *   its script. Static hosts serve the files as they are, without previews.
+ *
  * Performance is handled in three places, all of which matter for a small
  * self-hosted instance:
  *
@@ -56,6 +63,7 @@ import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url";
 import { brotliCompress, constants as zlibConstants, gzip } from "node:zlib";
 import { promisify } from "node:util";
+import { Script } from "node:vm";
 
 import { API_MODULES } from "./api-modules.mjs";
 import { PUBLIC_ROOT_FILES } from "./public-files.mjs";
@@ -137,9 +145,85 @@ function canonicalPath(pathname) {
   return null;
 }
 
+const SITE_PATH = resolve(PROJECT_ROOT, "site.js");
+const TOOLS_PATH = resolve(PROJECT_ROOT, "tools.js");
+
+/**
+ * `site.js` and `tools.js`, run as a browser runs them.
+ * @returns {Promise<{site: object, tools: object[]}>}
+ */
+export async function readRegistries() {
+  const scope = { window: {} };
+  for (const file of [SITE_PATH, TOOLS_PATH]) new Script(await readFile(file, "utf8"), { filename: file }).runInNewContext(scope);
+  return { site: scope.window.SITE, tools: scope.window.TOOLS };
+}
+
+/* The registries the previews were last written from, re-read when either
+   file changes, like any other asset. */
+let registries = null;
+async function currentRegistries() {
+  const stats = await Promise.all([stat(SITE_PATH), stat(TOOLS_PATH)]);
+  const version = stats.map(s => s.mtimeMs + ":" + s.size).join("|");
+  if (registries?.version !== version) {
+    const { site, tools } = await readRegistries();
+    registries = { version, modified: Math.max(...stats.map(s => s.mtimeMs)), site, tools: new Map(tools.map(tool => [tool.slug, tool])) };
+  }
+  return registries;
+}
+
+const escapeHtml = value => String(value).replace(/[&<>"']/g, c => "&#" + c.charCodeAt(0) + ";");
+
+/**
+ * The head tags a link preview reads, for the index or one tool.
+ *
+ * The title and description match what `s.js` sets in the browser, which
+ * then leaves them be. The Open Graph tags name the tool and point at the
+ * site's public address, so a preview of a copy served elsewhere still
+ * links to the page it describes once `url` in `site.js` is changed.
+ * @param {object} site `window.SITE`.
+ * @param {object|null} tool The page's `tools.js` row, or null for the index.
+ * @returns {string}
+ */
+export function previewTags(site, tool) {
+  const url = site.url + "/" + (tool ? tool.slug : "");
+  const description = tool ? tool.meta || tool.desc : site.description;
+  const tags = [
+    ["title", tool ? tool.name + (site.titleSuffix || "") : site.title],
+    ["meta", { name: "description", content: description }],
+    ["link", { rel: "canonical", href: url }],
+    ["link", { rel: "icon", type: "image/svg+xml", href: "/" + site.icon }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: site.name }],
+    ["meta", { property: "og:title", content: tool ? tool.name : site.name }],
+    ["meta", { property: "og:description", content: description }],
+    ["meta", { property: "og:url", content: url }],
+    ...(site.preview ? [
+      ["meta", { property: "og:image", content: site.url + "/" + site.preview.image }],
+      ["meta", { property: "og:image:width", content: site.preview.width }],
+      ["meta", { property: "og:image:height", content: site.preview.height }],
+      ["meta", { property: "og:image:alt", content: site.preview.alt }],
+      ["meta", { name: "twitter:card", content: "summary_large_image" }]
+    ] : [])
+  ];
+  return tags.map(([tag, value]) => tag === "title" ? "<title>" + escapeHtml(value) + "</title>"
+    : "<" + tag + Object.entries(value).map(([name, v]) => " " + name + '="' + escapeHtml(v) + '"').join("") + ">").join("\n") + "\n";
+}
+
+/**
+ * The page a previewed file is, or undefined for any other file: null for the
+ * index, the `tools.js` row for a tool page. Redirect stubs have no row.
+ */
+function previewedPage(filePath, previews) {
+  const name = relative(REAL_PROJECT_ROOT, filePath).split(sep).join("/");
+  if (name === "index.html") return null;
+  const slug = /^t\/([a-z0-9-]+)\.html$/.exec(name)?.[1];
+  return slug && previews.tools.has(slug) ? previews.tools.get(slug) : undefined;
+}
+
 /* Cache of parsed, hashed and compressed assets, keyed by resolved path and
-   invalidated by the file's own mtime and size. Bounded by PUBLIC_FILES, which
-   is fixed at startup, so it cannot grow with traffic. */
+   invalidated by the file's own mtime and size, and for a previewed page by
+   the registries' too. Bounded by PUBLIC_FILES, which is fixed at startup, so
+   it cannot grow with traffic. */
 const assetCache = new Map();
 
 /* Types worth compressing. Everything else the site publishes — png, webp,
@@ -318,26 +402,37 @@ function negotiateEncoding(header) {
  * Load an asset into the cache, or return the cached entry when the file on
  * disk still matches it.
  *
- * The entry holds the raw bytes, the content type, a strong ETag over the
- * bytes, the per-page CSP for HTML, and a map of encoding → compressed buffer
- * that fills in lazily as clients ask for each encoding.
+ * The entry holds the bytes to send, the content type, a strong ETag over
+ * them, the per-page CSP for HTML, and a map of encoding → compressed buffer
+ * that fills in lazily as clients ask for each encoding. A previewed page's
+ * bytes carry its link preview tags, and it changes when the registries do.
  *
  * @param {string} filePath Resolved, verified path.
  * @param {import("node:fs").Stats} fileStat Its stat, already taken.
  * @returns {Promise<object>} The cache entry.
  */
 async function loadAsset(filePath, fileStat) {
-  const cached = assetCache.get(filePath);
-  if (cached && cached.modified === fileStat.mtimeMs && cached.size === fileStat.size) return cached;
-
-  const body = await readFile(filePath);
   const type = contentType(filePath);
+  const previews = type.startsWith("text/html") ? await currentRegistries() : null;
+  const page = previews ? previewedPage(filePath, previews) : undefined;
+  const stamp = fileStat.mtimeMs + ":" + fileStat.size + (page !== undefined ? "|" + previews.version : "");
+  const cached = assetCache.get(filePath);
+  if (cached && cached.stamp === stamp) return cached;
+
+  let body = await readFile(filePath);
+  if (page !== undefined) {
+    const html = body.toString("utf8");
+    const end = html.indexOf("</head>");
+    if (end !== -1) body = Buffer.from(html.slice(0, end) + previewTags(previews.site, page) + html.slice(end));
+  }
+  /* What the client holds is as old as the newest file the body came from. */
+  const modified = page !== undefined ? Math.max(fileStat.mtimeMs, previews.modified) : fileStat.mtimeMs;
   const entry = {
     body,
     type,
-    modified: fileStat.mtimeMs,
-    size: fileStat.size,
-    lastModified: fileStat.mtime.toUTCString(),
+    stamp,
+    modified,
+    lastModified: new Date(modified).toUTCString(),
     /* Strong validator: derived from the bytes, so two deployments of identical
        content agree and a touched-but-unchanged file still revalidates. */
     etag: '"' + createHash("sha256").update(body).digest("base64url").slice(0, 27) + '"',
@@ -481,6 +576,11 @@ async function serveStatic(request, response, url) {
     "Last-Modified": entry.lastModified
   };
   if (entry.csp) headers["Content-Security-Policy"] = entry.csp;
+  /* The preview picture is there for other sites to show, so it alone may be
+     loaded from another origin. */
+  if (entry.type === "image/png" && url.pathname === "/" + (await currentRegistries()).site.preview?.image) {
+    headers["Cross-Origin-Resource-Policy"] = "cross-origin";
+  }
   /* Any response whose body depends on the request's Accept-Encoding must say
      so, or a shared cache will hand a brotli body to a client that cannot read
      it. Sent on every compressible asset, including the uncompressed answer. */
