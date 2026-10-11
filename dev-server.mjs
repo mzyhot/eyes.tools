@@ -34,7 +34,10 @@
  *   builds. The index and each tool page are served with those tags already
  *   written in, plus Open Graph tags and the preview picture, from the same
  *   `site.js` and `tools.js`, so a page file still holds only its `<main>` and
- *   its script. Static hosts serve the files as they are, without previews.
+ *   its script. The picture's address ends in a stamp of its bytes: a chat app
+ *   keeps a picture for as long as its address stays the same, so a new
+ *   picture needs a new one. Static hosts serve the files as they are, without
+ *   previews.
  *
  * Performance is handled in three places, all of which matter for a small
  * self-hosted instance:
@@ -148,25 +151,33 @@ function canonicalPath(pathname) {
 const SITE_PATH = resolve(PROJECT_ROOT, "site.js");
 const TOOLS_PATH = resolve(PROJECT_ROOT, "tools.js");
 
+const picturePath = site => site?.preview ? resolve(PROJECT_ROOT, site.preview.image) : null;
+
 /**
- * `site.js` and `tools.js`, run as a browser runs them.
+ * `site.js` and `tools.js`, run as a browser runs them. The preview picture
+ * gains its `stamp`, the start of a hash of its bytes, when the file is there.
  * @returns {Promise<{site: object, tools: object[]}>}
  */
 export async function readRegistries() {
   const scope = { window: {} };
   for (const file of [SITE_PATH, TOOLS_PATH]) new Script(await readFile(file, "utf8"), { filename: file }).runInNewContext(scope);
-  return { site: scope.window.SITE, tools: scope.window.TOOLS };
+  const { SITE: site, TOOLS: tools } = scope.window;
+  const picture = site.preview ? await readFile(picturePath(site)).catch(() => null) : null;
+  if (picture) site.preview.stamp = createHash("sha256").update(picture).digest("hex").slice(0, 8);
+  return { site, tools };
 }
 
 /* The registries the previews were last written from, re-read when either
-   file changes, like any other asset. */
+   file or the preview picture changes, like any other asset. */
 let registries = null;
 async function currentRegistries() {
-  const stats = await Promise.all([stat(SITE_PATH), stat(TOOLS_PATH)]);
-  const version = stats.map(s => s.mtimeMs + ":" + s.size).join("|");
-  if (registries?.version !== version) {
+  const sources = async site => (await Promise.all([SITE_PATH, TOOLS_PATH, picturePath(site)]
+    .map(path => path ? stat(path).catch(() => null) : null))).filter(Boolean);
+  const version = stats => stats.map(s => s.mtimeMs + ":" + s.size).join("|");
+  if (registries?.version !== version(await sources(registries?.site))) {
     const { site, tools } = await readRegistries();
-    registries = { version, modified: Math.max(...stats.map(s => s.mtimeMs)), site, tools: new Map(tools.map(tool => [tool.slug, tool])) };
+    const stats = await sources(site);
+    registries = { version: version(stats), modified: Math.max(...stats.map(s => s.mtimeMs)), site, tools: new Map(tools.map(tool => [tool.slug, tool])) };
   }
   return registries;
 }
@@ -179,8 +190,9 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, c => "&#" + c.char
  * The title and description match what `s.js` sets in the browser, which
  * then leaves them be. The Open Graph tags name the tool and point at the
  * site's public address, so a preview of a copy served elsewhere still
- * links to the page it describes once `url` in `site.js` is changed.
- * @param {object} site `window.SITE`.
+ * links to the page it describes once `url` in `site.js` is changed. The
+ * picture's address ends in its stamp, so it changes when the picture does.
+ * @param {object} site `window.SITE`, as `readRegistries` returns it.
  * @param {object|null} tool The page's `tools.js` row, or null for the index.
  * @returns {string}
  */
@@ -198,7 +210,7 @@ export function previewTags(site, tool) {
     ["meta", { property: "og:description", content: description }],
     ["meta", { property: "og:url", content: url }],
     ...(site.preview ? [
-      ["meta", { property: "og:image", content: site.url + "/" + site.preview.image }],
+      ["meta", { property: "og:image", content: site.url + "/" + site.preview.image + (site.preview.stamp ? "?" + site.preview.stamp : "") }],
       ["meta", { property: "og:image:width", content: site.preview.width }],
       ["meta", { property: "og:image:height", content: site.preview.height }],
       ["meta", { property: "og:image:alt", content: site.preview.alt }],

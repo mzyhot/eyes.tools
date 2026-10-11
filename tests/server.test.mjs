@@ -4,7 +4,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -98,7 +98,7 @@ test('pages carry their link preview in the HTML, before any script runs', async
     assert.equal(meta(page, 'description'), tool.meta, tool.slug);
     assert.equal(meta(page, 'og:title'), tool.name, tool.slug);
     assert.equal(meta(page, 'og:url'), `${site.url}/${tool.slug}`, tool.slug);
-    assert.equal(meta(page, 'og:image'), `${site.url}/${site.preview.image}`, tool.slug);
+    assert.equal(meta(page, 'og:image'), `${site.url}/${site.preview.image}?${site.preview.stamp}`, tool.slug);
   }
   const index = await head('/');
   assert.equal(meta(index, 'og:title'), site.name);
@@ -106,7 +106,9 @@ test('pages carry their link preview in the HTML, before any script runs', async
   assert.equal(meta(index, 'og:url'), site.url + '/');
   // A redirect stub has no row, so no preview.
   assert.ok(!(await head('/lines')).includes('og:'));
-  const picture = await fetch(base + '/' + site.preview.image);
+  // The picture's address follows its bytes, so a new picture is never mistaken for the old one.
+  assert.equal(site.preview.stamp, createHash('sha256').update(await readFile(new URL('../' + site.preview.image, import.meta.url))).digest('hex').slice(0, 8));
+  const picture = await fetch(`${base}/${site.preview.image}?${site.preview.stamp}`);
   assert.equal(picture.status, 200);
   assert.equal(picture.headers.get('content-type'), 'image/png');
   assert.equal(picture.headers.get('cross-origin-resource-policy'), 'cross-origin');
