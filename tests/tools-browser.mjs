@@ -21,8 +21,7 @@ await context.addInitScript(() => {
   } };
   Object.defineProperty(Document.prototype, 'modelContext', { configurable: true, get: () => registry });
 });
-// Tests never depend on font services or the public randomness relay.
-await context.route('https://fonts.googleapis.com/**', route => route.fulfill({ contentType: 'text/css', body: '' }));
+// Tests never depend on the public randomness relay.
 await context.route('https://drand.cloudflare.com/**', route => route.abort());
 const go = async name => {
   const response = await page.goto(`${base}/${name}`, { waitUntil: 'domcontentloaded' });

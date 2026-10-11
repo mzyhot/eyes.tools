@@ -105,8 +105,12 @@ export function pagesHeaders() {
   ].join('\n');
 }
 
-/* Top-level entries every host publishes. */
-const PUBLIC = new Set([...PUBLIC_ROOT_FILES, 't']);
+/* Top-level entries every host publishes whole. */
+const PUBLIC = new Set([...PUBLIC_ROOT_FILES.filter(path => !path.includes('/')), 't']);
+/* Files published from inside a folder, such as the typeface in `fonts/`. The
+   folder's other files stay private one by one. */
+const PUBLIC_IN_FOLDERS = new Set(PUBLIC_ROOT_FILES.filter(path => path.includes('/')));
+const PARTLY_PUBLIC = new Set([...PUBLIC_IN_FOLDERS].map(path => path.split('/')[0]));
 /* Private entries Vercel must still be given: its own config, which it reads
    and never serves, and npm's `package.json`, which its project detection
    reads. */
@@ -116,8 +120,8 @@ const VERCEL_KEEPS = new Set(['vercel.json', '.vercelignore', 'package.json']);
 const PAGES_SKIPS = new Set(['_redirects', '_routes.json', '_headers']);
 
 /**
- * Tracked top-level entries a visitor must not be able to fetch, sorted.
- * Read from git rather than the directory so local, ignored files never
+ * Tracked entries a visitor must not be able to fetch, sorted: top-level
+ * names, and single files in a folder that also publishes some. Read from git rather than the directory so local, ignored files never
  * change the output.
  * @returns {{name: string, dir: boolean}[]}
  */
@@ -127,7 +131,9 @@ export function privateEntries() {
   const entries = new Map();
   for (const path of listed.stdout.split('\0').filter(Boolean)) {
     const [name, ...rest] = path.split('/');
-    if (!PUBLIC.has(name)) entries.set(name, entries.get(name) || rest.length > 0);
+    if (PUBLIC.has(name) || PUBLIC_IN_FOLDERS.has(path)) continue;
+    const key = PARTLY_PUBLIC.has(name) ? path : name;
+    entries.set(key, entries.get(key) || (key === name && rest.length > 0));
   }
   return [...entries].sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, dir]) => ({ name, dir }));
 }

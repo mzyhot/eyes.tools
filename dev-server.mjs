@@ -238,7 +238,7 @@ const COMPRESS_MAX_BYTES = 4 * 1024 * 1024;
 /* `script-src` stays last: each page's inline-script hashes are appended to
    it (see pagePolicy), and the static hosts append 'unsafe-inline' instead. */
 export const CSP = "default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; " +
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; " +
+  "style-src 'self' 'unsafe-inline'; font-src 'self'; " +
   "img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self' https://drand.cloudflare.com; " +
   "worker-src 'self' blob:; script-src 'self'";
 

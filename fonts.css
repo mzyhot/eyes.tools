@@ -1,25 +1,111 @@
 /* 𓁹𓁹: typography, the whole of it.
  *
- * Every page loads this file and nothing else about fonts. To change the
- * site's type, change this file alone: point the @import (or an @font-face
- * block) at the faces you want, and name them in the two tokens below.
+ * The chosen typeface is Geist, by Vercel, in two cuts:
  *
- * To self-host instead of using Google Fonts:
- *   1. Put the files in `fonts/` and add each one to `public-files.mjs`.
- *   2. Replace the @import with @font-face rules that use `url("fonts/…")`,
- *      with `font-display: swap`.
- *   3. Drop `https://fonts.googleapis.com` and `https://fonts.gstatic.com`
- *      from `style-src` and `font-src` in the CSP in `dev-server.mjs` and
- *      in `desktop/tauri.conf.json`, then run `node scripts/static-routes.mjs`
- *      so the static hosts' headers follow.
- * Nothing else in the site refers to a font by name.
+ *   Geist        prose, headings and the index, at 400 and 500
+ *   Geist Mono   labels, buttons, fields and anything meant to be copied, at 400
+ *
+ * Both ship with the site, in `fonts/`, so no page asks another server for
+ * them and the desktop app has them offline. Each cut is split by script, as
+ * Google Fonts splits it, and a browser fetches a file only when the page shows
+ * a character in that file's `unicode-range`: an English page loads the two
+ * latin files, about 40 KB together, once. Latin comes last in each list
+ * because where ranges overlap the last rule wins. Licensed under the SIL Open
+ * Font License 1.1; see THIRDPARTYLICENSES.
+ *
+ * Every page links this file and nothing else about fonts, and nothing else in
+ * the site names a font. To change the type, change this file alone: put the
+ * new files in `fonts/` and list each one in `public-files.mjs`, point the
+ * rules below at them, and name the families in the two tokens.
  */
-
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap");
 
 :root {
   /* Prose, headings, and the index. */
   --font-ui: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   /* Labels, buttons, fields, and anything meant to be copied. */
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ═══ Geist ═════════════════════════════════════════════ */
+/* One variable file per script serves both weights. */
+
+@font-face {
+  font-family: "Geist";
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("fonts/geist-cyrillic-ext.woff2") format("woff2");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "Geist";
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("fonts/geist-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Geist";
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("fonts/geist-vietnamese.woff2") format("woff2");
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: "Geist";
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("fonts/geist-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist";
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("fonts/geist-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ═══ Geist Mono ════════════════════════════════════════ */
+
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/geist-mono-cyrillic-ext.woff2") format("woff2");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/geist-mono-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/geist-mono-symbols2.woff2") format("woff2");
+  unicode-range: U+2000-2001, U+2004-2008, U+200A, U+23B8-23BD, U+2500-259F;
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/geist-mono-vietnamese.woff2") format("woff2");
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/geist-mono-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/geist-mono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }

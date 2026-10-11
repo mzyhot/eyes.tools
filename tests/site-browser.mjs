@@ -8,7 +8,6 @@ await mkdir(output, { recursive: true });
 const failures = [], inventory = [];
 const context = await browser.newContext();
 await context.addInitScript(() => document.addEventListener('securitypolicyviolation', e => { throw new Error('CSP blocked ' + e.blockedURI); }));
-await context.route('https://fonts.googleapis.com/**', route => route.fulfill({ contentType: 'text/css', body: '' }));
 const page = await context.newPage();
 page.on('pageerror', error => failures.push(`${page.url()}: ${error.message}`));
 try {
@@ -44,6 +43,23 @@ try {
       }
     }
     console.log('checked ' + route);
+  }
+  /* The typeface ships with the site: both cuts load, and only from `fonts/`.
+     A fresh context, so no cached face hides a request. */
+  {
+    const fresh = await browser.newContext();
+    const fontPage = await fresh.newPage();
+    const requested = [];
+    fontPage.on('request', request => { if (request.resourceType() === 'font') requested.push(request.url()); });
+    await fontPage.goto(base + '/hash', { waitUntil: 'load' });
+    const loaded = await fontPage.evaluate(async () => {
+      await document.fonts.ready;
+      return [...new Set([...document.fonts].filter(face => face.status === 'loaded').map(face => face.family.replace(/"/g, '')))].sort();
+    });
+    await fresh.close();
+    assert.deepEqual(loaded, ['Geist', 'Geist Mono'], 'both cuts of the typeface load');
+    assert.ok(requested.length && requested.every(url => url.startsWith(base + '/fonts/')), 'fonts load from the site alone: ' + requested.join(', '));
+    console.log(`PASS the typeface loads from the site itself (${requested.length} files on /hash)`);
   }
   await writeFile(output + '/inventory.json', JSON.stringify(inventory, null, 2));
   await writeFile(output + '/failures.json', JSON.stringify(failures, null, 2));

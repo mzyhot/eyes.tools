@@ -2,8 +2,8 @@
 
 Read this in full before writing a tool page. Every tool on the site is one
 HTML file in `t/` holding two things: its `<main>` and its script. There is no
-build step, no framework, and no runtime package. Beyond the shared fonts, a
-page makes no network requests unless it is a network tool (rule 4).
+build step, no framework, and no runtime package. Beyond the site's own files,
+a page makes no network requests unless it is a network tool (rule 4).
 
 Everything around the tool (the head tags, the header, the `<h1>`, the lede,
 the footer) is built by `s.js` from `site.js` (the site's copy and behaviour)
@@ -24,8 +24,8 @@ When in doubt, do what `case.html` does.
    doesn't offer, implement it locally inside your file.
 2. **No CDN runtime dependencies.** No remote scripts, npm runtime, or `import`.
    QR and metadata parsing use vendored browser builds, named in your row's
-   `deps`, never in a `<script src>` on the page. The font stylesheet in
-   `fonts.css` is the one remote file every page loads. Network tools are
+   `deps`, never in a `<script src>` on the page. The typeface ships with the
+   site too, in `fonts/`, named once in `fonts.css`. Network tools are
    explicit exceptions: verified randomness contacts Cloudflare's drand relay,
    and share uses the same-origin `/api/share/*` endpoints plus WebRTC.
 3. **Classic scripts only.** No `<script type="module">`. The site must work when

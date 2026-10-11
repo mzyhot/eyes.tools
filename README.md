@@ -22,7 +22,8 @@ rather than memory.
 ```
 site.js           the site registry: wordmark, copy, footers, shortcuts, storage keys
 tools.js          the tool registry. one row per tool: name, lede, aliases, deps, note.
-fonts.css         the two font families. the one file to change to change the type.
+fonts.css         the typeface, Geist and Geist Mono. the one file to change to change the type.
+fonts/            the typeface's files, one per script, self-hosted
 tokens.css        design tokens (colour, size, space, motion). the only place values live.
 s.css             shared stylesheet: every class a tool page may use
 theme.js          applies the saved theme before the first paint
@@ -40,7 +41,7 @@ drand-tools.js    shared PRNG, drand TRNG and Web Crypto randomness helpers
 exif-reader.js    vendored ExifReader browser build for image metadata
 dev-server.mjs    the Node server, for development and self-hosting
 api-modules.mjs   the API registry: one row per same-origin endpoint the server mounts
-public-files.mjs  the root files the site publishes; everything else stays private
+public-files.mjs  the files the site publishes; everything else stays private
 share-server.mjs  ephemeral rooms and WebRTC signaling
 functions/[[path]].js  Cloudflare Pages: answers private paths with the 404 page
 _redirects        Cloudflare Pages: serves each tool at /<slug> (generated)
@@ -90,7 +91,7 @@ cd desktop && cargo run
 | --- | --- |
 | The wordmark, footer notes, index copy, the not-found page, keyboard shortcuts, storage keys, the address and picture link previews use | `site.js` |
 | A tool's name, lede, search aliases, meta description, scripts or footer note | its row in `tools.js` |
-| The fonts | `fonts.css`, and drop the files in if you self-host |
+| The typeface | `fonts.css`, with its files in `fonts/` listed in `public-files.mjs` |
 | Colours, sizes, spacing, motion | `tokens.css` |
 | The header, title block or footer markup itself | `s.js`, once, for every page |
 | What a tool does | its file in `t/` |
@@ -119,8 +120,9 @@ walks through it in detail.
 
 Black, white and greys only, with square corners, thin borders, and no
 shadows, gradients or icons. Hover, selection and primary buttons invert the
-colours rather than adding an accent. Text is set in Geist; anything meant to
-be copied uses Geist Mono, both named in `fonts.css`, which is the whole of
+colours rather than adding an accent. The chosen typeface is Geist: Geist for
+text, and Geist Mono for anything meant to be copied. Both ship with the site,
+so no page asks another server for its fonts, and `fonts.css` is the whole of
 the site's typography. There is a light and a dark theme, and the choice is
 saved in the browser.
 
@@ -229,5 +231,6 @@ including attribution for any copy offered over a network. Read
 before publishing a copy.
 
 The vendored `qrcode.min.js` (MIT, with a local UTF-8 fix),
-`drand-client.min.js` (MIT/Apache-2.0), and `exif-reader.js` (MPL-2.0) keep
-their own licenses, collected in [THIRDPARTYLICENSES](THIRDPARTYLICENSES).
+`drand-client.min.js` (MIT/Apache-2.0), `exif-reader.js` (MPL-2.0), and the
+Geist fonts in `fonts/` (SIL OFL 1.1) keep their own licenses, collected in
+[THIRDPARTYLICENSES](THIRDPARTYLICENSES).

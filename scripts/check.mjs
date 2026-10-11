@@ -38,8 +38,9 @@
  * hide exactly the files `public-files.mjs` does not publish. A stale one would
  * 404 a page, drop a header, or publish a private file on those hosts while
  * everything works locally. And that `sitemap.xml` names the index and every
- * tool in the registry, so search engines hear of a new tool, and that the
- * desktop app's content security policy still mirrors the server's.
+ * tool in the registry, so search engines hear of a new tool, that every font
+ * file `fonts.css` names exists and is published, and that the desktop app's
+ * content security policy still mirrors the server's.
  */
 
 import { readFile, readdir } from 'node:fs/promises';
@@ -138,6 +139,18 @@ if (site.preview) {
   assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [site.preview.width, site.preview.height], `site.js: ${site.preview.image} is not ${site.preview.width}×${site.preview.height}`);
 }
 console.log(`PASS link previews name ${site.url} and show a published ${site.preview ? site.preview.width + '×' + site.preview.height + ' picture' : 'page without a picture'}`);
+
+/* The typeface ships with the site: every file `fonts.css` names is on disk and
+   published, or a static host would 404 it while the Node server serves it. */
+{
+  const css = await readFile(resolve(root, 'fonts.css'), 'utf8');
+  const files = [...css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(m => m[1]).filter(url => !url.startsWith('data:'));
+  for (const file of files) {
+    assert.ok(publicFiles.has(file), `fonts.css: ${file} must be listed in public-files.mjs`);
+    await readFile(resolve(root, file)).catch(() => assert.fail(`fonts.css: ${file} does not exist`));
+  }
+  console.log(`PASS fonts.css names ${files.length} font files, all published`);
+}
 
 /* The desktop app's policy mirrors the server's. It may allow more where the
    app needs it (its own IPC, the share service it reaches), never less. */
