@@ -33,7 +33,7 @@ window.SITE = {
      changes `url` to its own address. */
   name: "eyes.tools",
   url: "https://eyes.tools",
-  preview: { image: "preview.png", width: 1200, height: 630, alt: "two outlined eyes above the words eyes.tools" },
+  preview: { image: "preview.png", width: 2400, height: 1260, alt: "two outlined eyes side by side, a light one on dark and a dark one on light" },
 
   /* Labels the chrome reuses on every page. */
   labels: {
