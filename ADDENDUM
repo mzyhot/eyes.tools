@@ -10,7 +10,7 @@ version 3 (AGPL-3.0), with the following additional terms under
 Section 7 of that license. These terms apply to this project and to
 all modified versions of it.
 
-## 1. Attribution — Section 7(b)
+## 1. Attribution, Section 7(b)
 
 Any version of this work, modified or not, that is conveyed to others
 or made available to users over a network must display the following
@@ -27,7 +27,7 @@ placed only in source code, comments, or metadata.
 You must also preserve all copyright notices and author credits
 contained in the source files of this work.
 
-## 2. Origin — Section 7(c)
+## 2. Origin, Section 7(c)
 
 You may not misrepresent the origin of this work or claim that you
 are its original author. Modified versions must be clearly marked as
@@ -35,20 +35,20 @@ modified and must state, in the same location as the notices in
 term 1, that they are not affiliated with, operated by, or endorsed
 by eyes.tools.
 
-## 3. Names and Publicity — Section 7(d)
+## 3. Names and Publicity, Section 7(d)
 
 You may not use the name "mzyhot" or the names of any other
 contributors to promote or endorse modified versions of this work
 without prior written permission.
 
-## 4. Trademarks — Section 7(e)
+## 4. Trademarks, Section 7(e)
 
 No rights are granted to use the name "eyes.tools" or any associated
 logos or trademarks, except as required to give the attribution in
 term 1. You may not use them as the name of a modified version or in
 any way that suggests your version is the official eyes.tools.
 
-## 5. Additional Permission — Redirect Exception
+## 5. Additional Permission, Redirect Exception
 
 Domains that permanently redirect (HTTP 301) all traffic to
 https://eyes.tools are exempt from terms 1 and 2.

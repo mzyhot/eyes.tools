@@ -1,12 +1,12 @@
-# 𓁹𓁹 — tool contract
+# 𓁹𓁹: tool contract
 
 Read this in full before writing a tool page. Every tool on the site is one
 HTML file in `t/` holding two things: its `<main>` and its script. There is no
 build step, no framework, and no runtime package. Beyond the shared fonts, a
 page makes no network requests unless it is a network tool (rule 4).
 
-Everything around the tool — the head tags, the header, the `<h1>`, the lede,
-the footer — is built by `s.js` from `site.js` (the site's copy and behaviour)
+Everything around the tool (the head tags, the header, the `<h1>`, the lede,
+the footer) is built by `s.js` from `site.js` (the site's copy and behaviour)
 and the tool's row in `tools.js`. That is why a page never writes them, and why
 `npm run check` fails if it does. The Node server writes the same title and
 description into the page as it serves it, so a link preview shows them too.
@@ -24,7 +24,7 @@ When in doubt, do what `case.html` does.
    doesn't offer, implement it locally inside your file.
 2. **No CDN runtime dependencies.** No remote scripts, npm runtime, or `import`.
    QR and metadata parsing use vendored browser builds, named in your row's
-   `deps` — never in a `<script src>` on the page. The font stylesheet in
+   `deps`, never in a `<script src>` on the page. The font stylesheet in
    `fonts.css` is the one remote file every page loads. Network tools are
    explicit exceptions: verified randomness contacts Cloudflare's drand relay,
    and share uses the same-origin `/api/share/*` endpoints plus WebRTC.
@@ -75,7 +75,7 @@ The site's one job is: **the visitor leaves holding a result.**
   a "Convert" button. A button is fine when the work is genuinely expensive or
   genuinely destructive.
 - **Show every useful form at once** rather than making the user pick one from a
-  dropdown, when the outputs are small (see `case.html` — eleven results, no
+  dropdown, when the outputs are small (see `case.html`: eleven results, no
   mode switch). Use a mode switch only when outputs are large or mutually exclusive.
 - **Every result is one click from being taken away.** Copy button (`E.copy`) for
   text; download button (`E.download`) for files and images.
@@ -119,32 +119,32 @@ no fake testimonials. Buttons are verbs: `copy`, `download png`, `swap`,
 ## 5. CSS you may use
 
 All of these exist in `s.css`. **Do not invent new class names** unless the
-markup genuinely has no equivalent — and if you do, scope the style in a
+markup genuinely has no equivalent, and if you do, scope the style in a
 `<style>` block in your own file, still using tokens.
 
-**Layout** — `.stack` (column, 1rem gap) · `.stack-2` · `.stack-6` ·
+**Layout**: `.stack` (column, 1rem gap) · `.stack-2` · `.stack-6` ·
 `.row` (wrapping flex row, centre-aligned) · `.row--between` · `.row--end` ·
 `.row__spacer` · `.grid2` · `.grid3` (both are one column below 640px) ·
 `.section` · `.section--ruled` · `.sep` · `.mt-2` `.mt-3` `.mt-4` `.mt-6` · `.w-full`
 
-**Type** — `.h1` · `.display` · `.lede` · `.lbl` (field label, mono, dim) ·
+**Type**: `.h1` · `.display` · `.lede` · `.lbl` (field label, mono, dim) ·
 `.hint` (small dim note) · `.err` (alert-coloured, hidden when empty) ·
 `.mono` · `.dim` · `.num` (tabular figures) · `.kbd` · `.vh` (visually hidden)
 
-**Form** — `.field` on every `input`, `textarea`, `select`, `input[type=file]` ·
+**Form**: `.field` on every `input`, `textarea`, `select`, `input[type=file]` ·
 `input[type=range]` is already styled bare · `.seg` segmented radio control ·
 `.check` checkbox row
 
-**Action** — `.btn` (inverted block) · `.btn.-ghost` (hairline outline) ·
+**Action**: `.btn` (inverted block) · `.btn.-ghost` (hairline outline) ·
 `.btn.-sm` · `.btn.-block` · `.tbtn` (bare text button, for row-level affordances)
 
-**Output** — `.out` (mono block, preserves whitespace) · `.out--scroll`
+**Output**: `.out` (mono block, preserves whitespace) · `.out--scroll`
 (max-height + scroll) · `.out-head` (label row above an output) ·
-`.res` / `.res__k` / `.res__v` (label · value · copy row — the workhorse) ·
+`.res` / `.res__k` / `.res__v` (label · value · copy row, the workhorse) ·
 `.kv` / `dt` / `dd` (definition readout; `.kv.-stack` puts long values under their labels on phones) · `.figure` (frame for canvas/svg/img) ·
 `.reveal` (140ms fade-in; add on newly-computed output, never on page load)
 
-Segmented control markup — the radio must live **inside** its label:
+Segmented control markup. The radio must live **inside** its label:
 
 ```html
 <div class="seg" role="radiogroup" aria-label="format">
@@ -153,7 +153,7 @@ Segmented control markup — the radio must live **inside** its label:
 </div>
 ```
 
-## 6. JS you may use — the `E` global
+## 6. JS you may use: the `E` global
 
 ```
 E.tool(fn)                   your whole script; runs after `deps` have loaded
@@ -214,7 +214,7 @@ Must render with no horizontal scroll at **320 / 375 / 414 / 768 px**.
   on the container that changes.
 - Font size for text inputs is at least 16px so iOS does not zoom on focus.
   `.field` already uses `--text-input`; do not shrink it.
-- Respect `prefers-reduced-motion` — `s.css` already neutralises transitions;
+- Respect `prefers-reduced-motion`: `s.css` already neutralises transitions;
   don't add JS-driven motion that ignores it.
 
 ## 9. Definition of done

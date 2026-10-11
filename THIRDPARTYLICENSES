@@ -6,20 +6,20 @@ retain their respective licenses. Full upstream license texts follow.
 Existing license comments in vendored code are preserved.
 
 Vendored components:
-- qrcode.min.js: QRCode.js 1.0.0 — https://github.com/davidshimjs/qrcodejs
+- qrcode.min.js: QRCode.js 1.0.0, https://github.com/davidshimjs/qrcodejs
   Includes QRCode for JavaScript, Copyright (c) 2009 Kazuhiko Arase,
   http://www.d-project.com/, licensed under MIT (text below).
   Locally modified to encode Unicode with TextEncoder and count UTF-8 bytes.
-- exif-reader.js: ExifReader 4.44.0 — https://github.com/mattiasw/ExifReader
+- exif-reader.js: ExifReader 4.44.0, https://github.com/mattiasw/ExifReader
   Source: https://www.npmjs.com/package/exifreader/v/4.44.0
-- drand-client.min.js: drand-client 1.4.2 — https://github.com/drand/drand-client/tree/v1.4.2
+- drand-client.min.js: drand-client 1.4.2, https://github.com/drand/drand-client/tree/v1.4.2
   Includes @noble/curves, @noble/hashes, @kevincharm/noble-bn254-drand,
   buffer, base64-js, and ieee754; their notices are reproduced below.
 
 Adapted work:
 - t/share.html and share-server.mjs: finding devices on the same network, and
-  receiver-paced transfers written to disk as they arrive, follow ShareDrop —
-  https://github.com/szimek/sharedrop — Copyright (c) 2014-2024 Szymon Nowak,
+  receiver-paced transfers written to disk as they arrive, follow ShareDrop,
+  https://github.com/szimek/sharedrop, Copyright (c) 2014-2024 Szymon Nowak,
   licensed under MIT (text below). The design is adapted; no ShareDrop code is
   vendored.
 

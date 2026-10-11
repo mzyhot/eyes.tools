@@ -128,11 +128,11 @@
               "host    " + url.host
             ], url.port ? ["port    " + url.port] : [], [
               "path    " + url.path,
-              "query   " + (url.query || "—"),
-              "hash    " + (url.fragment || "—"),
+              "query   " + (url.query || "-"),
+              "hash    " + (url.fragment || "-"),
               "",
               "parameters",
-              url.parameters.map(function (p) { return p.name + " = " + p.value; }).join("\n") || "—"
+              url.parameters.map(function (p) { return p.name + " = " + p.value; }).join("\n") || "-"
             ]).join("\n"));
           } catch (e) {
             error.textContent = e.message;

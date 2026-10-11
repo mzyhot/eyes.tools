@@ -75,7 +75,7 @@ E.tool(function () {
      answers. AGENT_TOOLS is what the page and the server both offer. */
 
   /* ═══ data ══════════════════════════════════════════════
-     One array. Add, remove or reorder freely — everything below
+     One array. Add, remove or reorder freely: everything below
      is derived from it, including the host shown on each row.   */
 
   var DIR = [
@@ -272,7 +272,7 @@ E.tool(function () {
       out.push("## " + groups[i].group, "");
       for (var j = 0; j < groups[i].sites.length; j++) {
         var s = groups[i].sites[j];
-        out.push("- [" + s.name + "](" + s.url + ") — " + s.desc);
+        out.push("- [" + s.name + "](" + s.url + "): " + s.desc);
       }
       out.push("");
     }

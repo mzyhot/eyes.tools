@@ -7,12 +7,12 @@ server. No page is loaded from eyes.tools.
 
 Differences from the site:
 
-- **Share uses the eyes.tools service** for its rooms and connection setup — the
+- **Share uses the eyes.tools service** for its rooms and connection setup, the
   one thing a server is needed for. Files still go device to device, and the
   app's link opens for browsers on the site and other copies of the app. The
   server must list the app's origins in `SHARE_ALLOWED_ORIGINS` (see
   `deploy/README.md`).
-- **Links for other people** — dump's text links, share's room links — point at
+- **Links for other people** (dump's text links, share's room links) point at
   eyes.tools, so anyone can open them in a browser.
 - **User agent** is `eyes-desktop/<version>`, not a browser's, so a bot check
   that challenges browsers leaves share's requests alone without the site
@@ -103,6 +103,6 @@ EYES_PUBLIC_ORIGIN=http://127.0.0.1:8880 TAURI_CONFIG="{\"app\":{\"security\":{\
 ```
 
 and open <http://127.0.0.1:8880/share#room=0123456789abcdef01234567> in a
-browser — the same link the app is in — and send the app "hello".
+browser, the same link the app is in, and send the app "hello".
 The app sends "from the app" back and passes once both arrive. Keep the screen
 awake: WebKit suspends a hidden window's page, connections included.

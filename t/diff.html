@@ -46,7 +46,7 @@
 
    Prefix trimming. While the two texts agree from the top, the backtrack can
    only match those lines, so they are emitted directly and never enter the
-   table. Editing the end of a file — the normal case — therefore shrinks the
+   table. Editing the end of a file, the normal case, therefore shrinks the
    table to the part that actually differs. Trailing agreement is deliberately
    *not* trimmed: when a line repeats, forcing the match to the end picks a
    different, equally valid alignment than this backtrack produces, and the

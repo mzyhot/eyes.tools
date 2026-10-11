@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — the Node server.
+/* 𓁹𓁹: the Node server.
  *
  * Despite the filename this is the production server for self-hosted
  * deployments (see `deploy/README.md`): static hosts can serve the pages, but
@@ -12,17 +12,17 @@
  *   content security policy, framing and sniffing refusals, and a permissions
  *   policy. HTML additionally gets `'sha256-…'` entries for its own inline
  *   scripts, computed from the file, so the pages need no `'unsafe-inline'`.
- *   Rewriting HTML in front of this server — an edge "optimizer", an injected
- *   analytics tag — invalidates those hashes and breaks the page.
+ *   Rewriting HTML in front of this server (an edge "optimizer", an injected
+ *   analytics tag) invalidates those hashes and breaks the page.
  *
  *   Routing. `/healthz`, then the API modules, then pages and static files.
  *   Anything that is not a GET or HEAD past the APIs is refused. Pages have clean
- *   addresses — `/share`, not `/t/share.html` — and the old spellings redirect.
+ *   addresses (`/share`, not `/t/share.html`) and the old spellings redirect.
  *
  *   Publication by allow list. `PUBLIC_FILES` is built at startup from the
  *   root assets in `public-files.mjs` plus the tool pages found in `t/`.
  *   Source modules, tests, dotfiles, backups and deployment configuration are
- *   not public, and stay that way when new ones are added — there is no deny
+ *   not public, and stay that way when new ones are added; there is no deny
  *   list to maintain.
  *
  *   Path containment. The request path is decoded, rejected if it contains a
@@ -43,15 +43,15 @@
  *   mtime and size, so a page is read and its CSP hashed once per edit rather
  *   than once per request.
  *
- *   Text assets are compressed once — brotli and gzip — and the result is
+ *   Text assets are compressed once (brotli and gzip) and the result is
  *   cached alongside the original. The vendored libraries the tool pages load
  *   are the bulk of the bytes this server sends, and they compress to roughly a
  *   quarter of their size. Compression runs on the thread pool, so a cold file
  *   never blocks the event loop.
  *
  *   Every asset carries an ETag and `Last-Modified`, and conditional requests
- *   are answered with 304. Combined with `Cache-Control: no-cache` — revalidate
- *   always, but reuse the cached copy when unchanged — a repeat visit transfers
+ *   are answered with 304. Combined with `Cache-Control: no-cache` (revalidate
+ *   always, but reuse the cached copy when unchanged), a repeat visit transfers
  *   headers only.
  */
 
@@ -103,7 +103,7 @@ const MIME_TYPES = new Map([
 ]);
 
 /* The three published files with no extension. Typed explicitly so a browser
-   shows them instead of downloading them — `nosniff` means an unknown type is
+   shows them instead of downloading them: `nosniff` means an unknown type is
    never guessed at. */
 const EXTENSIONLESS_TYPES = new Map([
   ["LICENSE", "text/plain; charset=utf-8"],
@@ -226,8 +226,8 @@ function previewedPage(filePath, previews) {
    it cannot grow with traffic. */
 const assetCache = new Map();
 
-/* Types worth compressing. Everything else the site publishes — png, webp,
-   woff2 — is already compressed, and running deflate over it costs CPU to make
+/* Types worth compressing. Everything else the site publishes (png, webp,
+   woff2) is already compressed, and running deflate over it costs CPU to make
    the response marginally larger. */
 const COMPRESSIBLE_TYPE = /^(?:text\/|image\/svg|application\/(?:json|wasm))/;
 /* Below roughly one packet the framing overhead outweighs any saving. */
@@ -312,8 +312,8 @@ function sendText(response, status, message, method = "GET", extraHeaders = {}) 
  *
  * Every inline `<script>` without a `src` is hashed and added to the policy, so
  * the pages get the protection of a strict CSP while staying single files that
- * also open from `file://`. A page with no inline script — the index, the 404,
- * a redirect stub — keeps the base policy unchanged.
+ * also open from `file://`. A page with no inline script (the index, the 404,
+ * a redirect stub) keeps the base policy unchanged.
  * @param {Buffer} body The HTML.
  * @returns {string} The full policy for that page.
  */
@@ -325,7 +325,7 @@ function pagePolicy(body) {
 }
 
 /* The 404 body never changes, so hash its inline scripts once at startup rather
-   than on every miss — and misses are the requests most likely to arrive in
+   than on every miss, and misses are the requests most likely to arrive in
    bulk. */
 const NOT_FOUND_POLICY = pagePolicy(NOT_FOUND_BODY);
 
@@ -448,7 +448,7 @@ async function loadAsset(filePath, fileStat) {
  * The asset's body in one encoding, compressing and caching on first request.
  *
  * Concurrent requests for the same encoding share one compression: the promise
- * is stored in the map before it settles. A compression failure is not fatal —
+ * is stored in the map before it settles. A compression failure is not fatal:
  * the caller falls back to the identity encoding.
  *
  * @param {object} entry A cache entry from loadAsset.
@@ -479,7 +479,7 @@ function encodedBody(entry, encoding) {
  * Answer a conditional request when the client's copy is current.
  *
  * `If-None-Match` wins over `If-Modified-Since` per RFC 9110, and the ETag
- * comparison is weak — it ignores a `W/` prefix — because that is what a
+ * comparison is weak (it ignores a `W/` prefix) because that is what a
  * cache-revalidation comparison calls for.
  *
  * @returns {boolean} True when a 304 was sent and the caller should stop.
@@ -604,7 +604,7 @@ async function serveStatic(request, response, url) {
 
 /**
  * Route one request. Order matters: liveness, then the API modules, then the
- * method gate, then static files — the gate sits after the APIs because share
+ * method gate, then static files; the gate sits after the APIs because share
  * and the MCP server use POST and the static tree does not.
  */
 async function route(request, response, apis) {
@@ -688,7 +688,7 @@ function isEntryPoint() {
   catch { return false; }
 }
 
-/* Run directly — `node dev-server.mjs [port]` — rather than imported by a test
+/* Run directly (`node dev-server.mjs [port]`) rather than imported by a test
    or by the service wrapper. */
 if (isEntryPoint()) {
   const port = parsePort(process.argv[2] ?? process.env.PORT);

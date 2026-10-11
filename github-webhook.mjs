@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — the signed GitHub deployment webhook.
+/* 𓁹𓁹: the signed GitHub deployment webhook.
  *
  * GitHub sends the request body exactly as it was signed, so verification has
  * to happen over the raw bytes before JSON parsing. A valid request only asks

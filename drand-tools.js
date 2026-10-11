@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — shared randomness sources.
+/* 𓁹𓁹: shared randomness sources.
  *
  * Three tools (rng, dice, coin) draw their randomness through this module, and
  * each lets the visitor choose where it comes from. It exposes a single
@@ -29,8 +29,8 @@
  *   returning one it has seen, under a hard timeout in case the chain stalls.
  *
  *   Expansion. A beacon is 32 bytes. A request for more is not answered by
- *   asking for more beacons — that would leak how much is wanted and multiply
- *   the network cost — but by a domain-separated SHA-256 counter stream keyed
+ *   asking for more beacons, which would leak how much is wanted and multiply
+ *   the network cost, but by a domain-separated SHA-256 counter stream keyed
  *   by the beacon and its round, which is deterministic from the verified
  *   value and therefore still checkable.
  *
@@ -45,7 +45,7 @@
 
   /* The League of Entropy quicknet chain: 3-second rounds, unchained, with
      signatures on G1. Both values are pinned here so a compromised or
-     substituted relay cannot serve a different chain unnoticed — the client
+     substituted relay cannot serve a different chain unnoticed: the client
      checks what it fetches against them. */
   var CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971";
   var PUBLIC_KEY = "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a";
@@ -77,7 +77,7 @@
   })();
 
   /**
-   * Decode hex from the relay, refusing anything that is not hex — a truncated
+   * Decode hex from the relay, refusing anything that is not hex: a truncated
    * or HTML response must fail loudly rather than become "randomness".
    * @param {string} hex
    * @returns {Uint8Array}
@@ -142,7 +142,7 @@
    * The verifying drand client, built once per page.
    *
    * The chain is reused across draws because it caches the chain's immutable
-   * parameters — public key, period, genesis — after fetching them once.
+   * parameters (public key, period, genesis) after fetching them once.
    * Rebuilding it per draw costs an extra network round trip before every roll.
    * Beacon freshness is unaffected: `noCache` puts a cache-busting parameter on
    * each beacon request, and the round check below is what actually enforces it.
@@ -151,7 +151,7 @@
    * `User-Agent` header with every beacon request. Chrome drops that header,
    * but Safari, the desktop app's WebKit and Firefox send it, which turns a
    * plain cross-origin GET into one that needs a CORS preflight, and the relay
-   * does not approve that header — so the draw failed there with "Load failed".
+   * does not approve that header, so the draw failed there with "Load failed".
    */
   function client() {
     if (chainClient) return chainClient;
@@ -234,7 +234,7 @@
    *
    * SHA-256 over `domain ‖ 0 ‖ beacon ‖ round ‖ counter`, with the counter
    * incrementing per block. Deterministic given the verified beacon, so anyone
-   * holding the round number can reproduce every byte — which is the point: the
+   * holding the round number can reproduce every byte, which is the point: the
    * expansion must not weaken the claim that the result was not chosen later.
    *
    * A request that fits in the beacon itself is answered from it directly, and
@@ -328,7 +328,7 @@
    * would favour the low end of any range that does not divide 2^64 evenly.
    * Values at or above the largest exact multiple of `max` are discarded and the
    * next eight bytes tried, which is exactly unbiased at the cost of consuming a
-   * little more entropy — hence the headroom `byteCount` allows for.
+   * little more entropy, hence the headroom `byteCount` allows for.
    *
    * @param {Uint8Array} bytes Buffer to draw from.
    * @param {number|bigint} max Exclusive upper bound, 1…2^64.

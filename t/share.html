@@ -173,7 +173,7 @@ E.tool(function () {
     severedTimer = setTimeout(() => {
       severedTimer = null;
       if (connected() || activity() || stopped) return;
-      newLink('that connection dropped. this link is new — the old one no longer works.');
+      newLink('that connection dropped. this link is new; the old one no longer works.');
     }, SEVERED_MS);
   }
   /**
@@ -219,7 +219,7 @@ E.tool(function () {
     if (initiator(p)) p.connect().catch(e => p.fail(e.message));
   }
   /* A peer that left discovery but still has an open data channel has only lost
-     its signaling connection — a backgrounded phone, a Wi-Fi blip. The direct
+     its signaling connection (a backgrounded phone, a Wi-Fi blip). The direct
      connection does not depend on the server, so keep it; if the peer really is
      gone, that channel closes within seconds and the tile goes with it. */
   function peerLeft(id) {
@@ -255,8 +255,8 @@ E.tool(function () {
   /**
    * Join discovery and stay joined.
    *
-   * The session outlives its event stream. When the stream drops — a phone
-   * backgrounded, a Wi-Fi blip, a proxy recycling a connection — the same
+   * The session outlives its event stream. When the stream drops (a phone
+   * backgrounded, a Wi-Fi blip, a proxy recycling a connection), the same
    * session reopens it, so this device keeps its name and every peer keeps its
    * direct connection and any transfer in flight. Only when the server has
    * already expired the session (it holds one for about 45 seconds without a
@@ -343,8 +343,8 @@ E.tool(function () {
    *
    * A tab holds a lock named after its folder for as long as it lives, so a
    * new tab can clear the folders that closed ones left behind without
-   * touching a live one. Where the storage is missing or refuses to write —
-   * private windows, older browsers, some webviews — `disk` is false and
+   * touching a live one. Where the storage is missing or refuses to write
+   * (private windows, older browsers, some webviews), `disk` is false and
    * received files are held in memory instead, within LIMIT and RETAIN.
    */
   function storageWorker() {
@@ -594,7 +594,7 @@ E.tool(function () {
      * Reconnect after a failure, backing off 1, 2, 4, 8 then 15 seconds.
      * Only the initiator makes the offer; the other side waits to receive one,
      * but counts the same attempts so both give up together. A peer that has
-     * left discovery is not retried — `joined` brings it back if it returns.
+     * left discovery is not retried; `joined` brings it back if it returns.
      */
     retry() {
       clearTimeout(this.retryTimer);

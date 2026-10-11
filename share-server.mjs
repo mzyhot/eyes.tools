@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — share discovery and WebRTC signaling.
+/* 𓁹𓁹: share discovery and WebRTC signaling.
  *
  * File bytes never pass through this service. It does three things and nothing
  * else: it tells two browsers that they are in the same place, it relays the
@@ -8,7 +8,7 @@
  * The model
  *
  *   A *session* is one open share tab. It holds an id, a bearer token, a room,
- *   a display name, and — while the tab is open — a server-sent event stream.
+ *   a display name, and, while the tab is open, a server-sent event stream.
  *
  *   A *room* is a hashed string that decides who can see whom. A session joins
  *   the room its link names, or, with no link, the room named by its own id,
@@ -18,7 +18,7 @@
  *   minted it has gone.
  *
  *   A *network* is the second way to meet, as ShareDrop did it: sessions that
- *   arrive from one public network — one IPv4 address, or one IPv6 /64 — see
+ *   arrive from one public network (one IPv4 address, or one IPv6 /64) see
  *   each other too, link or not. It is only used when the address is the
  *   visitor's own; a loopback, private or proxy address leaves the session to
  *   its link alone. It misses whenever Private Relay, a VPN or IPv6 on one
@@ -46,7 +46,7 @@
  *   by link alone.
  *
  *   Requests must be same-origin, or come from an origin the operator has
- *   listed in `SHARE_ALLOWED_ORIGINS` — the desktop app's, which serves its
+ *   listed in `SHARE_ALLOWED_ORIGINS`: the desktop app's, which serves its
  *   pages itself and uses this service only for discovery and signaling. Only
  *   those origins get CORS headers, and the list is empty unless set, so a
  *   page on another domain cannot enumerate anyone.
@@ -87,7 +87,7 @@ const MAX_RATE_KEYS = 10000;
 const MAX_STREAM_BACKLOG = 262144;
 const MAX_BODY_BYTES = 65536;
 /* SDP and ICE candidates are relayed unread, so they are bounded by length
-   alone — enough for a real offer, far short of useful as a message channel. */
+   alone: enough for a real offer, far short of useful as a message channel. */
 const MAX_SDP_LENGTH = 60000;
 const MAX_CANDIDATE_LENGTH = 4096;
 
@@ -317,8 +317,8 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
 
   /**
    * Retire a session: release its reserved code and token, tell the room it
-   * left, and close its stream. Guarded so a stale reference — a delayed close
-   * for a session whose id has since been reused — cannot remove a live one.
+   * left, and close its stream. Guarded so a stale reference, a delayed close
+   * for a session whose id has since been reused, cannot remove a live one.
    */
   function remove(s) {
     if (sessions.get(s.id) !== s) return;
@@ -355,7 +355,7 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
 
   /**
    * Read a JSON request body, refusing anything oversized before it is parsed.
-   * Only a plain object is accepted — an array or a bare value is not a message.
+   * Only a plain object is accepted; an array or a bare value is not a message.
    * @throws {Error} On the wrong content type, an oversized body, or bad JSON.
    */
   async function readBody(req) {
@@ -376,8 +376,8 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
    * The ICE servers a session should use.
    *
    * STUN is enough for most pairs. TURN is only offered when an operator has
-   * configured a relay, and then with an ephemeral credential — a username that
-   * expires in an hour and an HMAC of it — so the shared secret never reaches
+   * configured a relay, and then with an ephemeral credential, a username that
+   * expires in an hour and an HMAC of it, so the shared secret never reaches
    * the browser.
    */
   function iceServers(id) {
@@ -399,7 +399,7 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
    * everyone behind it. That is fine for a rate limit, which then only counts
    * too many people together, but not for grouping, which would put them all
    * in one network. So a network is known only from the trusted header, or
-   * from a request that carries no proxy header at all — and never from a
+   * from a request that carries no proxy header at all, and never from a
    * loopback or private address, which is a proxy's or a LAN's.
    */
   function locate(req) {
@@ -431,7 +431,7 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   /* ── endpoints ───────────────────────────────────────── */
 
   /**
-   * POST /api/share/join — create a session and return its credentials.
+   * POST /api/share/join: create a session and return its credentials.
    *
    * With a room, the session joins it; without one, it joins the room its own
    * id names and hands that id back as the link to pass on. Either way it also
@@ -483,7 +483,7 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   }
 
   /**
-   * GET /api/share/events — the session's server-sent event stream.
+   * GET /api/share/events: the session's server-sent event stream.
    *
    * Opening it publishes the session to its room and network and hands back
    * the peers already there. A reconnect supersedes the previous stream.
@@ -507,7 +507,7 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   }
 
   /**
-   * POST /api/share/signal — relay one WebRTC message to a peer in the room.
+   * POST /api/share/signal: relay one WebRTC message to a peer in the room.
    *
    * The payload is validated for shape and size but never interpreted: this
    * service does not need to understand an SDP to pass it along, and refusing to

@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — shared stylesheet. Tokens live in tokens.css; never inline a raw colour here. */
+/* 𓁹𓁹: shared stylesheet. Tokens live in tokens.css; never inline a raw colour here. */
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -29,7 +29,7 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
-  /* never animated — must appear the instant focus lands */
+  /* never animated: must appear the instant focus lands */
 }
 :focus:not(:focus-visible) { outline: none; }
 
@@ -59,7 +59,7 @@ hr { border: 0; border-top: var(--rule) solid var(--color-rule); margin: 0; }
 
 .top__spacer { flex: 1 1 auto; min-width: var(--space-2); }
 
-/* the eyes — literal U+13079 glyphs */
+/* the eyes, literal U+13079 glyphs */
 .eyes {
   display: inline-flex;
   align-items: center;
@@ -268,7 +268,7 @@ input[type="range"]::-moz-range-thumb {
   border-radius: var(--radius);
 }
 
-/* ═══ buttons — inversion is the only accent ════════════ */
+/* ═══ buttons (inversion is the only accent) ════════════ */
 
 .btn {
   display: inline-flex;
@@ -309,7 +309,7 @@ input[type="range"]::-moz-range-thumb {
 .btn.-sm { padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
 .btn.-block { width: 100%; }
 
-/* bare text button — for corner affordances */
+/* bare text button, for corner affordances */
 .tbtn {
   background: none;
   border: 0;
@@ -410,7 +410,7 @@ input[type="range"]::-moz-range-thumb {
   margin: 0;
 }
 .out--scroll { max-height: 26rem; overflow: auto; }
-.out:empty::before { content: "—"; color: var(--color-dim); }
+.out:empty::before { content: "-"; color: var(--color-dim); }
 
 .out-head {
   display: flex;
@@ -437,7 +437,7 @@ input[type="range"]::-moz-range-thumb {
   to   { opacity: 1; transform: none; }
 }
 
-/* result row: label · value · copy — the workhorse readout */
+/* result row: label · value · copy, the workhorse readout */
 .res {
   display: grid;
   grid-template-columns: 7.5rem minmax(0, 1fr) auto;
@@ -462,7 +462,7 @@ input[type="range"]::-moz-range-thumb {
   user-select: text;
   min-width: 0;
 }
-.res__v:empty::before { content: "—"; color: var(--color-dim); }
+.res__v:empty::before { content: "-"; color: var(--color-dim); }
 @media (max-width: 520px) {
   .res { grid-template-columns: minmax(0, 1fr) auto; }
   .res__k { grid-column: 1 / -1; }
@@ -478,7 +478,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .kv dt { color: var(--color-dim); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
-.kv dd:empty::before { content: "—"; color: var(--color-dim); }
+.kv dd:empty::before { content: "-"; color: var(--color-dim); }
 /* For values too long to share a phone's width with their labels: each sits
    under its label there, and beside it on a wider screen. */
 .kv.-stack { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-1); }

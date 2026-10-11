@@ -250,7 +250,7 @@
         var swatch = E.qs("#swatch");
         var readout = E.qs("#readout");
 
-        /* Anything else the browser calls a color — hwb(), lab(), oklch() —
+        /* Anything else the browser calls a color, such as hwb(), lab() or oklch(),
            is painted onto one pixel and read back as sRGB. Keywords that only
            mean something in a document are refused. */
         var probe = null;

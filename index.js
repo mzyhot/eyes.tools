@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — the index.
+/* 𓁹𓁹: the index.
  *
  * Builds the filter field, the keyboard hint and the tool list from
  * `window.TOOLS`, and the words around them from `SITE.index`. The page itself

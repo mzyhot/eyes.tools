@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — the site configuration.
+/* 𓁹𓁹: the site configuration.
  *
  * Everything the shared chrome says or does, in one object. Change a value
  * here and every page follows: the wordmark, the tab title, the footer notes,
@@ -9,8 +9,8 @@
  * before the first paint; `index.js` reads the index copy; the Node server
  * reads it to write each page's link preview. A page never repeats any of it.
  *
- * What each tool says about itself — its name, lede, search aliases, extra
- * scripts and network note — lives in `tools.js`, one row per tool.
+ * What each tool says about itself (its name, lede, search aliases, extra
+ * scripts and network note) lives in `tools.js`, one row per tool.
  *
  * Loaded in the head, before `theme.js`, so the theme can read its key.
  */
@@ -38,7 +38,7 @@ window.SITE = {
   /* Labels the chrome reuses on every page. */
   labels: {
     home: "← all tools",
-    homeAria: "𓁹𓁹 — all tools",
+    homeAria: "𓁹𓁹, all tools",
     theme: "theme",
     themeSwitch: "Switch to {next} mode",       /* {next} is "dark" or "light" */
     themeCurrent: ". Current theme: {current}.",
@@ -54,7 +54,7 @@ window.SITE = {
 
   /* The index page, built by `index.js`. */
   index: {
-    heading: "𓁹𓁹 — tools",
+    heading: "𓁹𓁹, tools",
     filterLabel: "filter tools",
     filterPlaceholder: "filter",
     clearLabel: "clear",
@@ -83,8 +83,8 @@ window.SITE = {
   },
 
   /* The site's public address, for a copy of the pages served from somewhere
-     else, such as the desktop app. Links the pages make for other people —
-     dump's text links, share's room links — point here, and share's rooms and
+     else, such as the desktop app. Links the pages make for other people
+     (dump's text links, share's room links) point here, and share's rooms and
      connection setup go through the service here; file contents still travel
      device to device. Empty means wherever the page itself is. */
   publicOrigin: "",

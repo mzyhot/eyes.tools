@@ -31,7 +31,7 @@ fn main() {
         fs::copy(&from, &to).unwrap_or_else(|e| panic!("copy {name}: {e}"));
     }
 
-    // slug:tool pairs for the smoke test — the tool a page should end up on,
+    // slug:tool pairs for the smoke test: the tool a page should end up on,
     // which differs from the slug only for the compatibility redirects.
     let mut pages = Vec::new();
     let tools = site.join("t");

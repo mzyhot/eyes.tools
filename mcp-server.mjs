@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — the site's MCP server.
+/* 𓁹𓁹: the site's MCP server.
  *
  * One endpoint, POST /mcp, speaking the Model Context Protocol's Streamable
  * HTTP transport: JSON-RPC in, JSON out, one message per request, no session
@@ -13,7 +13,7 @@
  * scripts the page's registry row names in `deps`. So a tool's behaviour is
  * written once, in its page, and an agent gets the same answer, and the same
  * refusal, wherever it asks. Tools that work on something only the visitor
- * has — a chosen file, the scratchpad, a share room — are not in any core and
+ * has (a chosen file, the scratchpad, a share room) are not in any core and
  * are not offered here.
  *
  * Unlike the pages, which run in the visitor's browser, a call here sends its

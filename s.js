@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — shared runtime.
+/* 𓁹𓁹: shared runtime.
  *
  * A classic script: no bundler, no modules, no dependencies. Every page loads
  * this file directly and the site must keep working from `file://`, so nothing
@@ -15,8 +15,8 @@
  *   3. Randomness and URL-state helpers (`rand`, `param`, `b64url`).
  *   4. Theme persistence, applied before paint by `theme.js` and kept in sync
  *      across tabs here.
- *   5. `boot()`, which builds every page's chrome — the head tags, the header,
- *      the title block and the footer — from `site.js` and `tools.js`, then
+ *   5. `boot()`, which builds every page's chrome (the head tags, the header,
+ *      the title block and the footer) from `site.js` and `tools.js`, then
  *      loads the scripts the registry lists for this tool and runs the page's
  *      own code through `E.tool`.
  *
@@ -145,7 +145,7 @@
 
   /**
    * Temporarily replace a button's label, then restore it. This is the site's
-   * only success signal — the contract forbids toasts.
+   * only success signal; the contract forbids toasts.
    *
    * Re-entrant calls are ignored while a flash is in flight so a double click
    * cannot capture the temporary label as the permanent one.
@@ -168,7 +168,7 @@
    * Write text to the clipboard and confirm on the button that asked for it.
    *
    * Tries the async Clipboard API first, then falls back to a hidden textarea
-   * and `execCommand("copy")` — still the only path that works from `file://`
+   * and `execCommand("copy")`, still the only path that works from `file://`
    * and in browsers that refuse clipboard permission to insecure origins.
    * @param {*} text Value to copy; coerced with String().
    * @param {HTMLElement} [btn] Button to relabel with the outcome.
@@ -294,7 +294,7 @@
   /* ── url state: ?q= / #payload ───────────────────────── */
 
   /**
-   * Read one query-string parameter. Never throws — a malformed URL simply has
+   * Read one query-string parameter. Never throws: a malformed URL simply has
    * no parameters. Tools prefill from this; they never write to it automatically.
    * @param {string} k Parameter name.
    * @returns {string|null}
@@ -339,7 +339,7 @@
 
   /* ── where the site's own files are ──────────────────── */
 
-  /* One page may sit at `/case`, at `t/case.html` on disk, or — for the 404 —
+  /* One page may sit at `/case`, at `t/case.html` on disk, or, for the 404,
      at any address at all. Everything the chrome links to is resolved through
      these two values rather than written into thirty files. */
   var FROM_DISK = location.protocol === "file:";
@@ -367,7 +367,7 @@
     return set === "light" || set === "dark" ? set : DEFAULT_THEME;
   }
 
-  /* Keep every theme button describing what it will do, not what is selected —
+  /* Keep every theme button describing what it will do, not what is selected:
      the label is the same on both themes, so only the accessible name carries
      the state. */
   function syncThemeControls() {
@@ -381,7 +381,7 @@
   }
 
   /* Apply a stored preference. With none stored the attribute is removed, which
-     leaves the default palette tokens.css defines on :root — the site does not
+     leaves the default palette tokens.css defines on :root. The site does not
      follow the system setting. */
   function applyTheme(value) {
     if (value === "dark" || value === "light") document.documentElement.setAttribute("data-theme", value);
@@ -779,7 +779,7 @@
 
     /* Escape returns to the index from any tool page. Typing takes precedence:
        the first Escape leaves a field, a second one leaves the tool. Dialogs and
-       fullscreen own the key outright — they have their own dismissal. */
+       fullscreen own the key outright; they have their own dismissal. */
     if (kind === "tool" && (SITE.shortcuts || {}).escapeToIndex) {
       E.on(document, "keydown", function (e) {
         if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;

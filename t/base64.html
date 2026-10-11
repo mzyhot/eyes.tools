@@ -35,7 +35,7 @@
 <script src="../tools.js"></script>
 <script src="../s.js"></script>
 <script>
-/* base64, both directions, over UTF-8 rather than over code units — `btoa`
+/* base64, both directions, over UTF-8 rather than over code units: `btoa`
    alone throws on anything above U+00FF, which is most of the text people
    actually paste. The file field produces a data URI instead, read by the
    browser rather than rebuilt here.

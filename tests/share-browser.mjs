@@ -13,7 +13,7 @@ await mkdir(output, { recursive: true });
 const errors = [], requests = [];
 /* Every page opens a room of its own; a second device joins by opening the
    first one's link. Devices on one network also find each other, but only
-   when the service knows the network — never from loopback, which is all
+   when the service knows the network, never from loopback, which is all
    this suite connects from, so here every meeting is by link except the one
    test that sets a trusted visitor address. */
 async function page({ holdPeerConnectionOpen = false, link = '', noStorage = false, address = '' } = {}) {
@@ -107,10 +107,10 @@ try {
   console.log('PASS batched binary + zero-byte file, exact SHA-256, sender receipt');
 
   await b.getByRole('button', { name: /^send text to / }).click();
-  await b.locator('#text').fill('hello from the other device — 𓁹 <script>not executable</script>');
+  await b.locator('#text').fill('hello from the other device, 𓁹 <script>not executable</script>');
   await b.locator('#send-text').click(); await a.getByRole('button', { name: 'accept', exact: true }).click();
   await a.locator('.received-files pre').waitFor();
-  assert.equal(await a.locator('.received-files pre').textContent(), 'hello from the other device — 𓁹 <script>not executable</script>');
+  assert.equal(await a.locator('.received-files pre').textContent(), 'hello from the other device, 𓁹 <script>not executable</script>');
   console.log('PASS reverse text transfer and literal HTML');
 
   await choose(a, [{ name: 'decline.txt', mimeType: 'text/plain', buffer: Buffer.from('decline') }]);

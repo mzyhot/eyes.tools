@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — static checks.
+/* 𓁹𓁹: static checks.
  *
  * The site has no build step, so nothing compiles the pages and nothing would
  * otherwise notice a typo in an inline script until a visitor hit it. These are
@@ -25,10 +25,10 @@
  *
  *   Local assets resolve. Every `src`/`href` that is not remote, a data URI or a
  *   fragment must exist on disk at the path the page asks for. A tool page that
- *   references `../s.js` incorrectly still renders — it just stops working.
+ *   references `../s.js` incorrectly still renders; it just stops working.
  *
- * And for every JavaScript file — the root modules and vendored builds, the
- * Pages function, these scripts and the tests: that Node itself can parse it,
+ * And for every JavaScript file (the root modules and vendored builds, the
+ * Pages function, these scripts and the tests): that Node itself can parse it,
  * via `node --check`. The Pages function runs only on its hosting platform, so
  * nothing else here would load it.
  *

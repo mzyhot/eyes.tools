@@ -10,8 +10,8 @@ tool catalog, architecture, contributing, APIs, deployment and troubleshooting.
 
 A directory of small, mostly local tools. No build step, framework, runtime npm
 dependencies, or analytics. Every interface is one HTML file holding its own
-markup and one script; everything around it — the header, the title, the
-footer, the fonts, the scripts a tool loads — comes from two registries, so a
+markup and one script; everything around it (the header, the title, the
+footer, the fonts, the scripts a tool loads) comes from two registries, so a
 change lands in one place. Share gives every visitor a room and a link to pass
 on, shows devices on the same network to each other without one, and a small
 in-memory service introduces the devices and relays their connection setup.
@@ -20,14 +20,14 @@ receiver's browser storage as they arrive, so their size is bounded by disk
 rather than memory.
 
 ```
-site.js           the site registry — wordmark, copy, footers, shortcuts, storage keys
+site.js           the site registry: wordmark, copy, footers, shortcuts, storage keys
 tools.js          the tool registry. one row per tool: name, lede, aliases, deps, note.
 fonts.css         the two font families. the one file to change to change the type.
 tokens.css        design tokens (colour, size, space, motion). the only place values live.
-s.css             shared stylesheet — every class a tool page may use
+s.css             shared stylesheet: every class a tool page may use
 theme.js          applies the saved theme before the first paint
-s.js              shared runtime — the `E` global, and the chrome built from the registries
-index.js          the index — filter field and registry-driven list
+s.js              shared runtime: the `E` global, and the chrome built from the registries
+index.js          the index: filter field and registry-driven list
 index.html        an empty page index.js fills
 redirect.js       drives the compatibility stubs (t/lines.html, t/units.html)
 favicon.svg       one eye
@@ -52,7 +52,7 @@ scripts/          check.mjs (static checks), static-routes.mjs (writes the five 
 tests/            Node tests and Playwright browser suites
 deploy/           systemd unit, environment example, and self-hosting notes
 desktop/          the tools as a Tauri desktop app (Rust); see desktop/README.md
-_dev/             the contract and the page skeleton — reference material, not shipped code
+_dev/             the contract and the page skeleton: reference material, not shipped code
 THIRDPARTYLICENSES  licenses and copyright notices for vendored dependencies
 ```
 
@@ -109,7 +109,7 @@ cd desktop && cargo run
    fails until this is done.
 4. Follow `_dev/CONTRACT.md`. It is short and it is the whole design system.
 
-Removing a tool takes two deletions — the row and the file — plus that script.
+Removing a tool takes two deletions, the row and the file, plus that script.
 Nothing else refers to it.
 
 The wiki's [Adding a tool](https://github.com/mzyhot/eyes.tools/wiki/Adding-a-tool)
@@ -120,7 +120,7 @@ walks through it in detail.
 Black, white and greys only, with square corners, thin borders, and no
 shadows, gradients or icons. Hover, selection and primary buttons invert the
 colours rather than adding an accent. Text is set in Geist; anything meant to
-be copied uses Geist Mono — both named in `fonts.css`, which is the whole of
+be copied uses Geist Mono, both named in `fonts.css`, which is the whole of
 the site's typography. There is a light and a dark theme, and the choice is
 saved in the browser.
 

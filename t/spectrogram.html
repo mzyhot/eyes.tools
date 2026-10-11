@@ -21,7 +21,7 @@
 <script src="../s.js"></script>
 <script>
 /* Spectrogram: decode an audio file locally, run a short-time Fourier
-   transform over it, and draw magnitude as brightness — time left to right,
+   transform over it, and draw magnitude as brightness, time left to right,
    frequency bottom to top.
 
    Nothing leaves the browser. The file is read with the File API and decoded by
@@ -31,7 +31,7 @@
    usable, so three things are deliberate:
 
      · The transform is iterative and in place, and both the bit-reversal
-       permutation and the twiddle factors depend only on N — they are built
+       permutation and the twiddle factors depend only on N; they are built
        once at load and reused by every one of the ~960 × channels transforms a
        render performs, instead of calling Math.cos and Math.sin inside the
        innermost loop.

@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — the server's API modules.
+/* 𓁹𓁹: the server's API modules.
  *
  * Every same-origin endpoint the Node server mounts, one row each. The router
  * knows nothing about what they do: it matches the prefix and hands the request

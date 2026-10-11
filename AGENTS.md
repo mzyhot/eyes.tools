@@ -63,7 +63,7 @@ npm run test:browser
   joins, counted per IPv6 `/64` and per IPv4 address, with IPv4-mapped IPv6
   agreeing with its plain form. An untrusted or missing proxy header must fall
   back to the socket address rather than be believed, and a network is only
-  known from a trusted header or from a request with no proxy header at all —
+  known from a trusted header or from a request with no proxy header at all,
   never from a loopback, private, link-local or carrier-grade NAT address, which
   would put strangers together. A network holds no more sessions than a room.
 - Preserve same-origin checks (cross-origin only for origins an operator lists in

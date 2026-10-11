@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — the tool registry.
+/* 𓁹𓁹: the tool registry.
  *
  * One entry per tool, and the single source of truth for every place a tool
  * appears. `index.html` renders this list and filters it; `s.js` looks up the
@@ -7,7 +7,7 @@
  * scripts the tool needs before running it.
  *
  * Adding a tool is two edits: one file in `t/`, one row here. Removing one is
- * the same two deletions. Nothing else registers a page — there is no build
+ * the same two deletions. Nothing else registers a page: there is no build
  * step and no manifest. (`node scripts/static-routes.mjs` regenerates the
  * static-host files afterwards, and `npm run check` fails until it is run.)
  *
@@ -21,7 +21,7 @@
  *          with. Not a feature list. Also the index's second column.
  *   meta   The page's `<meta name="description">`, for search results and
  *          previews. One sentence; may name formats the lede leaves out.
- *   alias  Extra search terms, space separated — synonyms, older names, related
+ *   alias  Extra search terms, space separated: synonyms, older names, related
  *          jargon, and the words someone would type who does not know the tool
  *          exists. Never shown; it only widens the filter on the index.
  *   deps   Optional. Scripts the tool needs, in load order, published at the
@@ -58,7 +58,7 @@ window.TOOLS = [
     alias: "pretty print beautify parse lint format minify validate escape unescape" },
   { slug: "url",         name: "url",               desc: "take a link apart and see what's inside",            meta: "encode, decode, and inspect urls.",
     alias: "uri query param encode decode parse urls" },
-  { slug: "case",        name: "case",              desc: "fix the capitals without retyping everything",       meta: "camel, snake, kebab, title, constant — and back.",
+  { slug: "case",        name: "case",              desc: "fix the capitals without retyping everything",       meta: "camel, snake, kebab, title, constant, and back.",
     alias: "text transform slug capitalize capitalise upper lower change case" },
   { slug: "color",       name: "color",             desc: "see how well two colors work together",              meta: "convert colors and check contrast.",
     alias: "colour hex rgb hsl a11y contrast picker convert check" },

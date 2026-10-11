@@ -72,7 +72,7 @@ from loopback connections. It decides the join rate limit, which counts per
 visitor network, and which network a visitor's devices find each other on.
 Enable it only when every request reaching Node passes through a trusted local
 proxy that sets or preserves the real header. Without it, behind a proxy, every
-visitor's joins count against one limit — the proxy's own address — so a busy
+visitor's joins count against one limit (the proxy's own address), so a busy
 site needs the flag, and devices meet by link only, because the proxy's address
 is never used as a network. Never expose a trusted proxy or origin port directly
 to the internet.

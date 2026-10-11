@@ -1,4 +1,4 @@
-/* 𓁹𓁹 — compatibility redirects.
+/* 𓁹𓁹: compatibility redirects.
  *
  * One file for every page that only exists to forward an old address to a
  * current one. The page says where it goes with data attributes, so adding a

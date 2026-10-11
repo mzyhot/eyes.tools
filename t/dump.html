@@ -84,7 +84,7 @@
       <dt>words</dt><dd class="num" id="k-words">0</dd>
       <dt>lines</dt><dd class="num" id="k-lines">0</dd>
       <dt>utf-8</dt><dd class="num" id="k-bytes">0 B</dd>
-      <dt>saved</dt><dd class="num" id="k-saved">—</dd>
+      <dt>saved</dt><dd class="num" id="k-saved">-</dd>
     </dl>
   </div>
 
@@ -134,7 +134,7 @@ E.tool(function () {
     return { chars: chars, words: words, lines: lines, bytes: bytes };
   }
 
-  /* length of unpadded base64 for n bytes — lets us size the link
+  /* length of unpadded base64 for n bytes; lets us size the link
      without building it */
   function b64len(n) {
     var r = n % 3;
@@ -283,9 +283,9 @@ E.tool(function () {
       renderSaved();
     } catch (e) {
       if (isQuota(e)) {
-        setErr("this browser's storage is full — the autosaved copy is still the older, smaller one. download the .txt to be safe.", "quota");
+        setErr("this browser's storage is full; the autosaved copy is still the older, smaller one. download the .txt to be safe.", "quota");
       } else {
-        setErr("autosave failed (" + ((e && e.name) || "unknown error") + ") — the pad still works, but it will not be restored.", "quota");
+        setErr("autosave failed (" + ((e && e.name) || "unknown error") + "); the pad still works, but it will not be restored.", "quota");
       }
     }
   }
@@ -300,7 +300,7 @@ E.tool(function () {
 
   function renderSaved() {
     if (!storeOK) { kSaved.textContent = "unavailable"; return; }
-    if (!savedAt) { kSaved.textContent = "—"; return; }
+    if (!savedAt) { kSaved.textContent = "-"; return; }
     var d = new Date(savedAt), n = new Date();
     var today = d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() &&
                 d.getDate() === n.getDate();
@@ -319,11 +319,11 @@ E.tool(function () {
       ? num(s.bytes) + " B"
       : E.bytes(s.bytes) + " · " + num(s.bytes) + " B";
 
-    var note = "the text rides inside the link itself — nothing is stored on a server.";
+    var note = "the text rides inside the link itself; nothing is stored on a server.";
     if (!s.bytes) { info.textContent = note; return; }
     var len = BASE.length + 3 + b64len(s.bytes);
     info.textContent = "link would be " + num(len) + " characters" +
-      (len > LINK_SOFT ? " — past about 2,000 some clients truncate urls. " : ". ") + note;
+      (len > LINK_SOFT ? "; past about 2,000 some clients truncate urls. " : ". ") + note;
   }
 
   function queueUpdate() {
@@ -517,7 +517,7 @@ E.tool(function () {
     if (!v) { E.flash(btn, "nothing to share"); return; }
     var bytes = scan(v).bytes;
     if (bytes > LINK_MAX_BYTES) {
-      setErr(E.bytes(bytes) + " is far too much text for a url — download the .txt instead.", "link");
+      setErr(E.bytes(bytes) + " is far too much text for a url; download the .txt instead.", "link");
       return;
     }
     var url;
@@ -565,7 +565,7 @@ E.tool(function () {
 
   function offerText(text) {
     if (!text || text === pad.value) return;
-    if (!pad.value) { setText(text); return; }   /* pad empty — nothing to destroy */
+    if (!pad.value) { setText(text); return; }   /* pad empty, nothing to destroy */
 
     offer.textContent = "";
     offer.appendChild(document.createTextNode(

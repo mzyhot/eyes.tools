@@ -84,8 +84,8 @@ E.tool(function () {
   /* Expanded tags → sorted [label, value] rows. A group is either a tag itself
      (shown as "metadata · group") or a map of tags ("group · tag"). */
   function flatten(tags) {
-    /* ExifReader can report one fact under two groups — a png's header
-       appears as both "png" and "pngFile" — so a tag already listed with the
+    /* ExifReader can report one fact under two groups (a png's header
+       appears as both "png" and "pngFile"), so a tag already listed with the
        same value is not listed again. */
     var rows = [], seen = new Set();
     function add(group, key, value) {
@@ -188,7 +188,7 @@ E.tool(function () {
       render(base);
       er.textContent = e && (e.name === "MetadataMissingError" || /no exif data|no metadata blocks found/i.test(e.message || ""))
         ? "no readable metadata fields were found"
-        : "metadata could not be read — the file may be unsupported or malformed";
+        : "metadata could not be read; the file may be unsupported or malformed";
     });
   });
 

@@ -68,14 +68,14 @@
     </div>
     <div id="tout"></div>
     <p class="err" id="terr" role="alert"></p>
-    <p class="hint">md5 is fine for checksums against accidental corruption but broken for security — collisions are cheap to manufacture. encoding and case apply to every digest on this page.</p>
+    <p class="hint">md5 is fine for checksums against accidental corruption but broken for security: collisions are cheap to manufacture. encoding and case apply to every digest on this page.</p>
   </section>
 
   <section class="section--ruled">
     <p class="lbl">file</p>
     <div class="drop" id="drop">
       <input class="field" type="file" id="file" aria-label="file to hash">
-      <p class="hint">or drop a file anywhere on this page — it is read locally and never uploaded.</p>
+      <p class="hint">or drop a file anywhere on this page; it is read locally and never uploaded.</p>
     </div>
 
     <div class="row mt-3">
@@ -159,7 +159,7 @@ E.tool(function () {
      loop with a branch chain in it: the round function, the message-word order
      and the rotation cycle are all constant within a round, so separating them
      removes four comparisons and two table lookups from every one of the 64
-     steps — and this runs once per 64 bytes of a file that may be gigabytes. */
+     steps, and this runs once per 64 bytes of a file that may be gigabytes. */
   MD5.prototype._block = function (d, off) {
     var M = this.M, h = this.h, i, j;
     for (i = 0; i < 16; i++) {
@@ -326,9 +326,9 @@ E.tool(function () {
 
   function subtleMsg(e) {
     if (e && e.message === "nosubtle") {
-      return "crypto.subtle is unavailable in this context — sha digests need https, localhost or file://. md5 above is still exact.";
+      return "crypto.subtle is unavailable in this context: sha digests need https, localhost or file://. md5 above is still exact.";
     }
-    return "crypto.subtle refused the digest — " + ((e && e.name) || "unknown error") + ".";
+    return "crypto.subtle refused the digest (" + ((e && e.name) || "unknown error") + ").";
   }
 
   var TEXT_CAP = 64 * 1024 * 1024;
@@ -436,7 +436,7 @@ E.tool(function () {
     tmeta.textContent = E.bytes(bytes.length) + " utf-8";
     if (bytes.length > TEXT_CAP) {
       textD = {};
-      terr.textContent = "text is " + E.bytes(bytes.length) + " — over the " + E.bytes(TEXT_CAP) + " live limit. use the file section.";
+      terr.textContent = "text is " + E.bytes(bytes.length) + ", over the " + E.bytes(TEXT_CAP) + " live limit. use the file section.";
       paint();
       return;
     }
@@ -528,7 +528,7 @@ E.tool(function () {
         setTimeout(step, 0);              /* yield so the page keeps painting */
       }, function (e) {
         if (seq !== fileSeq) return;
-        ferr.textContent = "could not read " + f.name + " — " + ((e && e.name) || "read error") + ". it may have moved or changed on disk.";
+        ferr.textContent = "could not read " + f.name + " (" + ((e && e.name) || "read error") + "). it may have moved or changed on disk.";
         busy(false);
       });
     }
@@ -660,7 +660,7 @@ E.tool(function () {
     if (!p) {
       ckind.textContent = ""; ctext.textContent = ""; cfile.textContent = "";
       cmp.setAttribute("aria-invalid", "true");
-      cerr.textContent = "not a digest of a known length — expected 32, 40, 64, 96, or 128 hex characters, or the same bytes in base64.";
+      cerr.textContent = "not a digest of a known length: expected 32, 40, 64, 96, or 128 hex characters, or the same bytes in base64.";
       return;
     }
     cmp.removeAttribute("aria-invalid");

@@ -84,7 +84,7 @@
       <dt>ulid</dt>
       <dd>48-bit millisecond in 10 crockford base32 characters, 80 random bits in 16 more. Within one millisecond the random field is incremented, keeping the run ordered.</dd>
       <dt>short</dt>
-      <dd>Characters drawn uniformly from the alphabet by rejection sampling over random bytes — no modulo bias.</dd>
+      <dd>Characters drawn uniformly from the alphabet by rejection sampling over random bytes, no modulo bias.</dd>
     </dl>
   </div>
 
@@ -120,7 +120,7 @@ E.tool(function () {
     return out;
   }
 
-  /* unbiased integer in [0, n) — rejection sampling, never a bare modulo */
+  /* unbiased integer in [0, n): rejection sampling, never a bare modulo */
   function below(n) {
     if (n <= 1) return 0;
     var k = 1, span = 256;

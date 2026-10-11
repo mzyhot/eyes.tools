@@ -1,9 +1,9 @@
-/* 𓁹𓁹 — what the site publishes.
+/* 𓁹𓁹: what the site publishes.
  *
  * The root files a visitor's browser may fetch. Tool pages in `t/` are added to
  * this by whoever reads it, because they are discovered rather than listed.
- * Everything else in the repository — server modules, tests, deployment notes,
- * the contract — is private, and stays private when new files are added,
+ * Everything else in the repository (server modules, tests, deployment notes,
+ * the contract) is private, and stays private when new files are added,
  * because nothing publishes a file this list does not name.
  *
  * Two readers keep every host in step:
