@@ -21,7 +21,7 @@ window.SITE = {
   titleSuffix: " · 𓁹𓁹",
   /* The index's own title and meta description. */
   title: "𓁹𓁹",
-  description: "Small, local-first tools for text, code, images, and everyday tasks. Open a tool and get a result. Network tools explain their connections.",
+  description: "small tools for text, code, images and everyday use",
   /* Address-bar colour. Matches `--color-paper` of the theme in force. */
   themeColor: { dark: "#070707", light: "#fbfbfb" },
   icon: "favicon.svg",
