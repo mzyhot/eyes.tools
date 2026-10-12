@@ -10,9 +10,13 @@ publish = false
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+# Tauri's defaults less `dynamic-acl`, which keeps every permission manifest in
+# the binary for capabilities granted at run time. The pages are granted none.
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
+tauri = { version = "2", default-features = false, features = ["wry", "compression", "common-controls-v6", "x11", "dbus"] }
+# Opens outside links in the system browser, as Tauri's opener plugin does with
+# this same crate, without the plugin's D-Bus and file manager code.
+open = { version = "5", features = ["shellexecute-on-windows"] }
 
 # WebKitGTK's settings, to switch on WebRTC for share. The version Tauri's
 # webview already uses.

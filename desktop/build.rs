@@ -1,14 +1,20 @@
 //! Copies the site into `dist/` before Tauri embeds it.
 //!
-//! The app publishes exactly what the Node server does: the root files named
-//! in `public-files.mjs`, and every page in `t/`. Pages are written to the top
-//! of `dist/` as `<slug>.html` because Tauri resolves `/json` to `json.html`,
-//! which gives the app the same clean addresses as the site.
+//! The app publishes what the Node server does: the root files named in
+//! `public-files.mjs`, and every page in `t/`, less the few only the web reads
+//! (see `WEB_ONLY`). Pages are written to the top of `dist/` as `<slug>.html`
+//! because Tauri resolves `/json` to `json.html`, which gives the app the same
+//! clean addresses as the site.
 //!
 //! Nothing here needs editing when a tool is added or removed.
 
 use std::fs;
 use std::path::Path;
+
+/// Published files the app never serves, kept out of the binary: crawlers'
+/// files, the picture link previews show, and the not-found page, since Tauri
+/// answers an address with nothing at it with the index.
+const WEB_ONLY: [&str; 4] = ["robots.txt", "sitemap.xml", "preview.png", "404.html"];
 
 fn main() {
     let desktop = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -21,6 +27,9 @@ fn main() {
     let list = site.join("public-files.mjs");
     println!("cargo:rerun-if-changed={}", list.display());
     for name in public_root_files(&fs::read_to_string(&list).expect("read public-files.mjs")) {
+        if WEB_ONLY.contains(&name.as_str()) {
+            continue;
+        }
         let from = site.join(&name);
         let to = dist.join(&name);
         println!("cargo:rerun-if-changed={}", from.display());

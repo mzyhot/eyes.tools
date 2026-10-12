@@ -62,10 +62,12 @@ tauri.conf.json  app name, bundle settings, and the page CSP
 icon.svg         the source for icons/ (cargo tauri icon icon.svg)
 ```
 
-`build.rs` publishes exactly what the Node server does: the root files in
+`build.rs` publishes what the Node server does: the root files in
 `public-files.mjs` and every page in `t/`, which it writes to the top of
 `dist/` as `<slug>.html` so `/json` finds `json.html`. A new tool needs nothing
-here; rebuild and it is in the app.
+here; rebuild and it is in the app. It leaves out the few files only the web
+reads, named in `WEB_ONLY`: crawlers' files, the link preview picture, and the
+not-found page, since an address with nothing at it opens the index here.
 
 The CSP in `tauri.conf.json` mirrors the one in `dev-server.mjs`, plus
 `https://eyes.tools` for share. Keep them in step. Tauri adds hashes for inline

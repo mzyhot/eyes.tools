@@ -21,7 +21,6 @@ use std::path::{Path, PathBuf};
 use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::window::Color;
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_opener::OpenerExt;
 
 /// The origin Tauri serves embedded pages from.
 #[cfg(debug_assertions)]
@@ -63,7 +62,6 @@ fn public_origin_script() -> String {
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             open_window(app.handle())?;
             Ok(())
@@ -73,7 +71,9 @@ fn main() {
 }
 
 fn open_window(app: &AppHandle) -> tauri::Result<()> {
-    let (on_nav, on_new, on_download) = (app.clone(), app.clone(), app.clone());
+    #[cfg(debug_assertions)]
+    let on_nav = app.clone();
+    let on_download = app.clone();
     #[allow(unused_mut)]
     let mut window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
         .title("𓁹𓁹")
@@ -92,12 +92,12 @@ fn open_window(app: &AppHandle) -> tauri::Result<()> {
             if probe::intercept(&on_nav, url) {
                 return false;
             }
-            follow(&on_nav, url)
+            follow(url)
         })
-        .on_new_window(move |url, _| {
+        .on_new_window(|url, _| {
             // Only the directory opens links in a new tab; they belong in the
             // system browser, like every other outside link.
-            follow(&on_new, &url);
+            follow(&url);
             NewWindowResponse::Deny
         })
         .on_download(move |_, event| {
@@ -143,12 +143,12 @@ fn enable_webrtc(window: &tauri::WebviewWindow) {
 
 /// The navigation handler: `true` lets the webview load `url`. The app's own
 /// pages load here, other sites open in the system browser.
-fn follow(app: &AppHandle, url: &Url) -> bool {
+fn follow(url: &Url) -> bool {
     match url.scheme() {
         _ if is_local(url) => true,
         "about" | "blob" | "data" => true,
         "http" | "https" | "mailto" => {
-            let _ = app.opener().open_url(url.as_str(), None::<&str>);
+            let _ = open::that_detached(url.as_str());
             false
         }
         _ => false,
