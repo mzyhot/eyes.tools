@@ -85,13 +85,8 @@ for (const file of sources) {
   assert.equal(result.status, 0, result.stderr);
 }
 /* The registry and `t/` must agree, and a page must keep to the shared shape. */
-const registry = new Map();
-{
-  const source = await readFile(resolve(root, 'tools.js'), 'utf8');
-  const scope = { window: {} };
-  new Script(source, { filename: 'tools.js' }).runInNewContext(scope);
-  for (const tool of scope.window.TOOLS) registry.set(tool.slug, tool);
-}
+const { site, tools } = await readRegistries();
+const registry = new Map(tools.map(tool => [tool.slug, tool]));
 const publicFiles = new Set(PUBLIC_ROOT_FILES);
 const pagesInTools = (await readdir(resolve(root, 't'))).filter(f => f.endsWith('.html')).map(f => f.slice(0, -'.html'.length));
 for (const slug of registry.keys()) {
@@ -126,7 +121,6 @@ const entries = privateEntries();
 assert.equal(await readFile(resolve(root, '.vercelignore'), 'utf8'), vercelIgnore(entries), '.vercelignore is out of date; run node scripts/static-routes.mjs');
 assert.equal(await readFile(resolve(root, '_routes.json'), 'utf8'), pagesRoutes(entries), '_routes.json is out of date; run node scripts/static-routes.mjs');
 console.log(`PASS static-host routes cover all ${slugs.length} pages, send the server's headers, and hide ${entries.length} private entries`);
-const { site } = await readRegistries();
 assert.equal(await readFile(resolve(root, 'sitemap.xml'), 'utf8'), sitemap(site.url, [...registry.keys()]), 'sitemap.xml is out of date; run node scripts/static-routes.mjs');
 console.log(`PASS sitemap.xml lists the index and all ${registry.size} tools`);
 
