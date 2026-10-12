@@ -22,6 +22,9 @@ Differences from the site:
   and share can only fall back to the long way round or a relay. The reason
   shown in the prompt is in `Info.plist`; the answer is in System Settings →
   Privacy & Security → Local Network.
+- **Share on Linux needs a WebKitGTK built with WebRTC.** Ubuntu's is built
+  without it, so there share says so and offers to open the same room in the
+  system browser.
 - **Links to other sites** open in the system browser.
 - **Downloads** go to the Downloads folder, renamed `name (2).ext` if the name
   is taken.

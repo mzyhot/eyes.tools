@@ -281,6 +281,30 @@ try {
   } finally { await nearby.close(); }
   console.log('PASS devices on one known network meet without a link, others do not');
 
+  // A web view without WebRTC, as Ubuntu's WebKitGTK is. The site
+  // says what share needs; a copy served elsewhere, as the desktop app is,
+  // names the site the way the app does and offers the same room there.
+  const room = '0123456789abcdef01234567';
+  for (const publicOrigin of ['', 'https://eyes.example']) {
+    const context = await browser.newContext();
+    await context.addInitScript(origin => {
+      delete window.RTCPeerConnection;
+      let site;
+      if (origin) Object.defineProperty(window, 'SITE', { configurable: true, get: () => site, set: value => { site = value; if (value) value.publicOrigin = origin; } });
+    }, publicOrigin);
+    const p = await context.newPage();
+    p.on('pageerror', e => errors.push(e.message));
+    await p.goto(base + '/share#room=' + room);
+    await p.waitForFunction(() => document.querySelector('#status').textContent === 'unavailable');
+    if (publicOrigin) assert.equal(await p.locator('#err a').getAttribute('href'), publicOrigin + '/share#room=' + room);
+    else {
+      assert.equal(await p.locator('#err a').count(), 0);
+      assert.match(await p.locator('#err').textContent(), /browser that supports WebRTC/);
+    }
+    await context.close();
+  }
+  console.log('PASS without WebRTC, a copy served elsewhere offers the room on the site');
+
   assert.deepEqual(errors, []);
   assert.ok(requests.every(r => r.bytes < 65536));
   console.log('PASS no page errors or file payloads in signaling requests');

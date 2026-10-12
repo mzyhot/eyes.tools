@@ -870,7 +870,16 @@ E.tool(function () {
   });
   window.addEventListener('online', hurry);
   window.addEventListener('hashchange', () => { if (readRoom()) { showRoom(); discover(); } });
-  if (!window.isSecureContext || !window.RTCPeerConnection || !window.crypto?.subtle) { error('open share over https in a browser that supports WebRTC.'); $('#status').textContent = 'unavailable'; }
+  if (!window.isSecureContext || !window.RTCPeerConnection || !window.crypto?.subtle) {
+    $('#status').textContent = 'unavailable';
+    /* A copy served elsewhere, such as the desktop app, may run in a web view
+       built without WebRTC, as Ubuntu's WebKitGTK is. The site's own share
+       still works in the visitor's browser, and the room goes too. */
+    if (SERVICE) {
+      error('this window cannot make WebRTC connections: ');
+      $('#err').append(E.el('a', { href: SERVICE + '/share' + location.hash, text: 'open share in your browser' }));
+    } else error('open share over https in a browser that supports WebRTC.');
+  }
   else if (location.protocol === 'file:' && !SERVICE) { error('open share on the website to find other devices.'); $('#status').textContent = 'offline'; }
   else if (readRoom()) { showRoom(); discover(); }
 });
