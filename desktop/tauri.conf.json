@@ -32,6 +32,7 @@
     "category": "DeveloperTool",
     "shortDescription": "Small, local-first tools",
     "longDescription": "Small, local-first tools for text, code, images, and everyday tasks. Open a tool and get a result.",
+    "publisher": "mzyhot",
     "copyright": "Copyright (c) 2026 mzyhot",
     "license": "AGPL-3.0-only",
     "homepage": "https://eyes.tools",
