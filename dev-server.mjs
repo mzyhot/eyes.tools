@@ -307,8 +307,6 @@ function sendBuffer(response, status, type, body, method = "GET", extraHeaders =
     "Cache-Control": "no-store",
     "Content-Length": body.byteLength,
     "Content-Type": type,
-    "Referrer-Policy": "no-referrer",
-    "X-Content-Type-Options": "nosniff",
     ...extraHeaders
   });
   if (method === "HEAD") response.end();
@@ -565,9 +563,7 @@ async function serveStatic(request, response, url) {
     setHeaders(response, {
       ...validators,
       "Content-Length": fileStat.size,
-      "Content-Type": type,
-      "Referrer-Policy": "no-referrer",
-      "X-Content-Type-Options": "nosniff"
+      "Content-Type": type
     });
     if (request.method === "HEAD") return response.end();
 
