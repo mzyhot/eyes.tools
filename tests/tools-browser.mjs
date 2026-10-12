@@ -136,9 +136,11 @@ try {
     await page.waitForFunction(() => localStorage.getItem('eyes.dump') === ' b \na\nb\n');
     await page.reload(); assert.equal(await page.locator('#pad').inputValue(), ' b \na\nb\n');
   });
-  await check('color contrast and invalid input', async () => {
-    await go('color'); await fill('#fg', '#000'); await fill('#bg', '#fff'); await has('#ratio', '21'); await has('#hex', '#000000');
-    await fill('#fg', 'broken'); assert.ok(await text('#err')); assert.equal(await page.locator('#copy-report').isDisabled(), true);
+  await check('color picking, every format and invalid input', async () => {
+    await go('color'); await fill('#color', 'tomato'); await has('#hex', '#ff6347'); await has('#rgb', 'rgb(255 99 71)'); await has('#hsl', 'hsl(9 100% 64%)'); await has('#oklch', 'oklch(');
+    await page.locator('#pick').fill('#00ff00'); await has('#hex', '#00ff00'); assert.equal(await page.locator('#color').inputValue(), '#00ff00');
+    await fill('#color', 'hwb(240 0% 0%)'); await has('#hex', '#0000ff'); assert.equal(await page.locator('#pick').inputValue(), '#0000ff');
+    await fill('#color', 'broken'); assert.ok(await text('#err')); assert.equal(await page.locator('#copy-hex').isDisabled(), true);
   });
   await check('lorem word count and password/PIN generation', async () => {
     await go('lorem'); await page.locator('#unit').selectOption('words'); await fill('#n', '7'); await page.waitForFunction(() => document.querySelector('#out').textContent.trim().split(/\s+/).length === 7);
@@ -228,7 +230,7 @@ try {
     await go('calc'); assert.equal((await call('calculate', { expression: '2^3^2' })).result, 512); assert.equal((await call('convert_units', { value: 0, from: 'celsius', to: '°F' })).result, 32);
     assert.match((await call('calculate', { expression: '1/0' })).error, /zero/);
     await go('json'); assert.ok((await call('format_json', { json: '{bad}' })).error); assert.equal((await call('format_json', { json: '{ "a" : 1 }', indent: 'minify' })).json, '{"a":1}');
-    await go('color'); assert.equal((await call('check_contrast', { foreground: 'black', background: 'white' })).ratio, '21.00:1');
+    await go('color'); assert.equal((await call('convert_color', { color: 'rebeccapurple' })).hex, '#663399');
     await go('uuid'); assert.equal((await call('generate_ids', { kind: 'ulid', count: 3 })).ids.length, 3);
     await go('dump'); await call('add_to_scratchpad', { text: 'from an agent' }); assert.ok((await page.locator('#pad').inputValue()).endsWith('from an agent'));
     await go('tz'); assert.equal((await call('convert_time_zone', { dateTime: '2026-11-01T01:30', from: 'America/New_York', to: 'UTC', occurrence: 'later' })).instant, '2026-11-01T06:30:00.000Z');
@@ -244,7 +246,7 @@ try {
       ['hash', 'hash_text', { text: 'abc', encoding: 'base64' }], ['json', 'format_json', { json: '{"b":[1,{"c":null}]}', indent: '4' }],
       ['url', 'parse_url', { url: 'https://a.example:8080/p/q?x=1&y=%20#f' }], ['count', 'count_text', { text: 'one two\nthree' }],
       ['char', 'look_up_character', { query: '&copy;' }], ['inspect', 'inspect_text', { text: 'a\u200bb', set: 'ascii' }],
-      ['diff', 'diff_text', { before: 'a\nb\nc', after: 'a\nc\nd' }], ['color', 'check_contrast', { foreground: '#777', background: 'white' }],
+      ['diff', 'diff_text', { before: 'a\nb\nc', after: 'a\nc\nd' }], ['color', 'convert_color', { color: '#777' }],
       ['calc', 'calculate', { expression: 'sqrt(2) * 3!' }], ['calc', 'convert_units', { value: 5, from: 'mi', to: 'km' }],
       ['barcode', 'make_ean13_barcode', { digits: '590123412345' }], ['qr', 'make_qr_code', { text: 'eyes', errorCorrection: 'high', size: 128 }],
       ['dump', 'clean_up_lines', { text: 'b\na\nb', sort: 'asc', unique: true }], ['dir', 'search_directory', { query: 'github' }],

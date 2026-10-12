@@ -7,69 +7,50 @@
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../s.css">
 <style>
-      /* a text field and the browser's own picker, side by side */
-      .pick { display: flex; gap: var(--space-2); }
-      .pick .field { flex: 1 1 auto; }
-      .pick input[type="color"] {
-        flex: 0 0 auto;
-        width: var(--control-size);
-        height: var(--control-size);
-        padding: var(--space-1);
+      /* The big swatch is the browser's own picker: choosing a color is one
+         click on it. Its hex is written across it in whichever ink reads. */
+      .picker { position: relative; }
+      .picker input[type="color"] {
+        display: block;
+        width: 100%;
+        height: calc(var(--space-16) * 3);
+        padding: 0;
         border: var(--rule) solid var(--color-rule);
         border-radius: var(--radius);
         background: var(--color-paper);
         cursor: pointer;
         transition: border-color var(--dur-1) var(--ease-out);
       }
-      .pick input[type="color"]:hover { border-color: var(--color-dim); }
-      .pick input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-      .pick input[type="color"]::-webkit-color-swatch { border: 0; border-radius: var(--radius); }
-      .pick input[type="color"]::-moz-color-swatch { border: 0; border-radius: var(--radius); }
-      .swatch {
+      .picker input[type="color"]:hover { border-color: var(--color-dim); }
+      .picker input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+      .picker input[type="color"]::-webkit-color-swatch { border: 0; border-radius: var(--radius); }
+      .picker input[type="color"]::-moz-color-swatch { border: 0; border-radius: var(--radius); }
+      .picker__hex {
+        position: absolute;
+        inset: 0;
         display: grid;
         place-items: center;
-        align-content: center;
-        gap: var(--space-3);
-        min-height: calc(var(--space-16) * 3);
-        padding: var(--space-6);
-        text-align: center;
-        border: var(--rule) solid var(--color-rule);
-        background: var(--swatch, var(--color-paper-2));
-      }
-      .swatch__big {
+        pointer-events: none;
         font-size: var(--text-display);
-        font-weight: 500;
         line-height: var(--lh-tight);
-        letter-spacing: var(--track-tight);
+        color: var(--color-ink);
       }
-      .swatch__small { font-size: var(--text-base); line-height: var(--lh-snug); }
+      .picker[data-ink="dark"] .picker__hex { color: var(--color-paper); }
     </style>
 <script src="../site.js"></script>
 </head>
 <body data-tool="color">
 
 <main class="stack-6">
-      <section class="grid2">
-        <div>
-          <label class="lbl" for="fg">foreground</label>
-          <div class="pick">
-            <input class="field" id="fg" value="#111111" autocomplete="off" spellcheck="false" aria-describedby="err">
-            <input type="color" id="fg-pick" value="#111111" aria-label="pick the foreground color">
-          </div>
-        </div>
-        <div>
-          <label class="lbl" for="bg">background</label>
-          <div class="pick">
-            <input class="field" id="bg" value="#ffffff" autocomplete="off" spellcheck="false" aria-describedby="err">
-            <input type="color" id="bg-pick" value="#ffffff" aria-label="pick the background color">
-          </div>
-        </div>
-      </section>
-      <div class="row">
-        <button class="btn -ghost" id="swap" type="button">swap</button>
+      <div class="picker" id="picker">
+        <input type="color" id="pick" value="#1e90ff" aria-label="pick a color">
+        <span class="picker__hex mono" id="swatch-hex" aria-hidden="true"></span>
       </div>
+      <section>
+        <label class="lbl" for="color">or type one</label>
+        <input class="field" id="color" value="#1e90ff" placeholder="#1e90ff, rgb(30 144 255), tomato" autocomplete="off" spellcheck="false" aria-describedby="err">
+      </section>
       <p class="err" id="err" role="alert"></p>
-      <div class="swatch" id="swatch" role="img" aria-label="color sample"></div>
       <div id="readout" aria-live="polite"></div>
     </main>
 
@@ -107,8 +88,7 @@
           }
           var hex = match[1];
           if (hex.length <= 4) hex = hex.replace(/./g, function (c) { return c + c; });
-          /* A see-through color has no single contrast until you know what
-             lies beneath it. */
+          /* A see-through color is a different color on every background. */
           if (hex.length === 8 && hex.slice(6) !== "ff") return "translucent";
           return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
         }
@@ -152,6 +132,9 @@
           return parseExact(lower) || (Object.prototype.hasOwnProperty.call(NAMED, lower) ? NAMED[lower] : null) || (parseMore ? parseMore(value) : null);
         }
 
+        /* A number with at most `digits` decimals and no trailing zeros. */
+        function trim(n, digits) { return String(Number(n.toFixed(digits))); }
+
         function cssHex(color) {
           return "#" + color.map(function (value) {
             return value.toString(16).padStart(2, "0");
@@ -159,17 +142,6 @@
         }
 
         function rgb(color) { return "rgb(" + color.join(" ") + ")"; }
-
-        function luminance(color) {
-          return color.map(function (value) {
-            value /= 255;
-            return value <= 0.04045
-              ? value / 12.92
-              : Math.pow((value + 0.055) / 1.055, 2.4);
-          }).reduce(function (sum, value, index) {
-            return sum + value * [0.2126, 0.7152, 0.0722][index];
-          }, 0);
-        }
 
         function hsl(color) {
           var r = color[0] / 255;
@@ -192,61 +164,65 @@
             Math.round(saturation * 100) + "% " + Math.round(lightness * 100) + "%)";
         }
 
-        /* Why a field's value is not a usable color, in the page's words. */
-        function problem(name, parsed) {
-          if (parsed === "translucent") return name + " is see-through, so its contrast depends on what is behind it. use an opaque color.";
-          return name + ": use hex, rgb(255 0 0), hsl(0 100% 50%), or a css color name";
+        /* sRGB to OKLCH, by way of linear light and Björn Ottosson's OKLab. A
+           grey has no hue, so it is written as 0. */
+        function oklch(color) {
+          var lin = color.map(function (value) {
+            value /= 255;
+            return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+          });
+          var l = Math.cbrt(0.4122214708 * lin[0] + 0.5363325363 * lin[1] + 0.0514459929 * lin[2]);
+          var m = Math.cbrt(0.2119034982 * lin[0] + 0.6806995451 * lin[1] + 0.1073969566 * lin[2]);
+          var s = Math.cbrt(0.0883024619 * lin[0] + 0.2817188376 * lin[1] + 0.6299787005 * lin[2]);
+          var lightness = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+          var a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+          var b = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+          var chroma = Math.sqrt(a * a + b * b);
+          var hue = chroma < 0.0001 ? 0 : (Math.atan2(b, a) * 180 / Math.PI + 360) % 360;
+          /* Precise enough that a color read back from this comes within one step
+             of where it started. */
+          return "oklch(" + trim(lightness * 100, 2) + "% " + trim(chroma < 0.0001 ? 0 : chroma, 4) + " " + trim(hue, 2) + ")";
         }
 
-        /** Everything the readout shows about a pair of opaque colors. */
-        function compare(foreground, background) {
-          var ratio = (Math.max(luminance(foreground), luminance(background)) + 0.05) /
-            (Math.min(luminance(foreground), luminance(background)) + 0.05);
-          var verdict = ratio >= 7 ? "AAA text" : ratio >= 4.5 ? "AA text" : ratio >= 3 ? "AA large text only" : "fail";
-          /* Rounded down, so a pair that only reaches 4.5 after rounding up is
-             never shown as passing. */
-          var shown = (Math.floor(ratio * 100) / 100).toFixed(2) + ":1";
-          return {
-            ratio: shown,
-            wcag: verdict,
-            foreground: { hex: cssHex(foreground), rgb: rgb(foreground), hsl: hsl(foreground) },
-            background: { hex: cssHex(background), rgb: rgb(background), hsl: hsl(background) }
-          };
+        /* Why a value is not a usable color, in the page's words. */
+        function problem(parsed) {
+          if (parsed === "translucent") return "that color is see-through, so it changes with whatever is behind it. use an opaque one.";
+          return "use hex, rgb(30 144 255), hsl(210 100% 56%), or a css color name";
+        }
+
+        /** One opaque color in every format the readout shows. */
+        function describe(color) {
+          return { hex: cssHex(color), rgb: rgb(color), hsl: hsl(color), oklch: oklch(color) };
         }
 
         var AGENT_TOOLS = [{
-          name: "check_contrast",
-          title: "check two colors' contrast",
-          description: "Give the WCAG contrast ratio of a text color on a background and whether it passes " +
-            "AA or AAA, with both colors as hex, rgb and hsl. Accepts opaque hex, rgb(), hsl() and CSS " +
-            "color names such as rebeccapurple; the color page also reads oklch() and every other CSS color.",
+          name: "convert_color",
+          title: "convert a color",
+          description: "Give a color as hex, rgb, hsl and oklch, each ready to paste into CSS. Accepts opaque " +
+            "hex, rgb(), hsl() and CSS color names such as rebeccapurple; the color page also reads oklch() " +
+            "and every other CSS color.",
           input: {
             type: "object",
             properties: {
-              foreground: { type: "string", description: "The text color." },
-              background: { type: "string", description: "The color behind it." }
+              color: { type: "string", description: "The color, such as #1e90ff, rgb(30 144 255) or tomato." }
             },
-            required: ["foreground", "background"]
+            required: ["color"]
           },
           readOnly: true,
           compute: function (args) {
-            var fg = parse(args.foreground == null ? "" : args.foreground), bg = parse(args.background == null ? "" : args.background);
-            var problems = [];
-            if (!Array.isArray(fg)) problems.push(problem("foreground", fg));
-            if (!Array.isArray(bg)) problems.push(problem("background", bg));
-            if (problems.length) throw new Error(problems.join(" · "));
-            return compare(fg, bg);
+            var color = parse(args.color == null ? "" : args.color);
+            if (!Array.isArray(color)) throw new Error(problem(color));
+            return describe(color);
           }
         }];
 
         /* ── end core ──────────────────────────────────────────────── */
 
-        var f = E.qs("#fg");
-        var b = E.qs("#bg");
-        var fPick = E.qs("#fg-pick");
-        var bPick = E.qs("#bg-pick");
+        var field = E.qs("#color");
+        var pick = E.qs("#pick");
+        var picker = E.qs("#picker");
+        var swatchHex = E.qs("#swatch-hex");
         var er = E.qs("#err");
-        var swatch = E.qs("#swatch");
         var readout = E.qs("#readout");
 
         /* Anything else the browser calls a color, such as hwb(), lab() or oklch(),
@@ -271,98 +247,65 @@
           return d[3] === 255 ? [d[0], d[1], d[2]] : "translucent";
         };
 
-        /* One result row: label, value, and its copy button. */
-        function row(label, id, copyLabel, buttonId) {
-          var v = E.el("div", { class: "res__v", id: id });
-          var button = E.el("button", { class: "tbtn", type: "button", text: "copy", "aria-label": "copy " + copyLabel, disabled: true });
-          if (buttonId) button.id = buttonId;
-          E.on(button, "click", function () { E.copy(button.dataset.value || v.textContent, button); });
-          readout.appendChild(E.el("div", { class: "res" }, [E.el("div", { class: "res__k", text: label }), v, button]));
-          return { v: v, button: button };
+        /* Relative luminance, to pick the ink the hex is written in on the swatch. */
+        function luminance(color) {
+          return color.map(function (value) {
+            value /= 255;
+            return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+          }).reduce(function (sum, value, index) {
+            return sum + value * [0.2126, 0.7152, 0.0722][index];
+          }, 0);
         }
 
-        var rows = {
-          ratio: row("contrast", "ratio", "the contrast report", "copy-report"),
-          hex: row("foreground hex", "hex", "the foreground hex"),
-          rgb: row("foreground rgb", "rgb", "the foreground rgb"),
-          hsl: row("foreground hsl", "hsl", "the foreground hsl"),
-          bgHex: row("background hex", "bg-hex", "the background hex"),
-          bgRgb: row("background rgb", "bg-rgb", "the background rgb"),
-          bgHsl: row("background hsl", "bg-hsl", "the background hsl")
-        };
+        /* One result row: format, value, and its copy button. */
+        var rows = {};
+        ["hex", "rgb", "hsl", "oklch"].forEach(function (format) {
+          var v = E.el("div", { class: "res__v mono", id: format });
+          var button = E.el("button", { class: "tbtn", type: "button", id: "copy-" + format, text: "copy", "aria-label": "copy the " + format, disabled: true });
+          E.on(button, "click", function () { E.copy(v.textContent, button); });
+          readout.appendChild(E.el("div", { class: "res" }, [E.el("div", { class: "res__k", text: format }), v, button]));
+          rows[format] = { v: v, button: button };
+        });
 
-        function show(key, text, copyText) {
-          var r = rows[key];
-          r.v.textContent = text;
-          r.button.disabled = !text;
-          if (copyText) r.button.dataset.value = copyText;
-          else delete r.button.dataset.value;
-        }
-
-        function clearReadout() {
-          Object.keys(rows).forEach(function (key) { show(key, ""); });
-          swatch.removeAttribute("style");
-          swatch.textContent = "";
-          swatch.setAttribute("aria-label", "color sample");
+        function show(format, text) {
+          rows[format].v.textContent = text;
+          rows[format].button.disabled = !text;
         }
 
         function run() {
-          var foreground = parse(f.value);
-          var background = parse(b.value);
+          var color = parse(field.value);
           er.textContent = "";
-          f.removeAttribute("aria-invalid");
-          b.removeAttribute("aria-invalid");
-          clearReadout();
+          field.removeAttribute("aria-invalid");
 
-          if (!Array.isArray(foreground) || !Array.isArray(background)) {
-            var messages = [];
-            if (f.value.trim() && !Array.isArray(foreground)) { f.setAttribute("aria-invalid", "true"); messages.push(problem("foreground", foreground)); }
-            if (b.value.trim() && !Array.isArray(background)) { b.setAttribute("aria-invalid", "true"); messages.push(problem("background", background)); }
-            er.textContent = messages.join(" · ");
+          if (!Array.isArray(color)) {
+            Object.keys(rows).forEach(function (format) { show(format, ""); });
+            swatchHex.textContent = "";
+            if (field.value.trim()) {
+              field.setAttribute("aria-invalid", "true");
+              er.textContent = problem(color);
+            }
             return;
           }
 
-          fPick.value = cssHex(foreground);
-          bPick.value = cssHex(background);
-
-          var result = compare(foreground, background);
-          show("ratio", result.ratio + " · " + result.wcag, result.foreground.hex + " on " + result.background.hex + " · " + result.ratio + " · " + result.wcag);
-          show("hex", result.foreground.hex);
-          show("rgb", result.foreground.rgb);
-          show("hsl", result.foreground.hsl);
-          show("bgHex", result.background.hex);
-          show("bgRgb", result.background.rgb);
-          show("bgHsl", result.background.hsl);
-          swatch.setAttribute(
-            "style",
-            "--swatch:" + result.background.hex + ";color:" + result.foreground.hex
-          );
-          swatch.setAttribute("aria-label", "sample text in " + result.foreground.hex + " on " + result.background.hex);
-          swatch.appendChild(E.el("span", { class: "swatch__big", text: "Aa" }));
-          swatch.appendChild(E.el("span", { class: "swatch__small", text: "the quick brown fox jumps over the lazy dog" }));
+          var result = describe(color);
+          Object.keys(rows).forEach(function (format) { show(format, result[format]); });
+          pick.value = result.hex;
+          swatchHex.textContent = result.hex;
+          /* Above this luminance black text reads better than white. */
+          picker.dataset.ink = luminance(color) > 0.179 ? "dark" : "light";
         }
 
-        E.on(f, "input", run);
-        E.on(b, "input", run);
-        E.on(fPick, "input", function () { f.value = fPick.value; run(); });
-        E.on(bPick, "input", function () { b.value = bPick.value; run(); });
-        E.on(E.qs("#swap"), "click", function () {
-          var value = f.value;
-          f.value = b.value;
-          b.value = value;
-          run();
-        });
-        var query = E.param("t"); if (query !== null) f.value = query;
-        var backgroundQuery = E.param("bg"); if (backgroundQuery !== null) b.value = backgroundQuery;
+        E.on(field, "input", run);
+        E.on(pick, "input", function () { field.value = pick.value; run(); });
+        var query = E.param("t"); if (query !== null) field.value = query;
         run();
 
-        /* For agents in the browser: the core's tool, with the pair in the
-           page's fields where the visitor can see it. */
+        /* For agents in the browser: the core's tool, with the color in the
+           page's field where the visitor can see it. */
         E.agentTools(AGENT_TOOLS, {
-          check_contrast: function (args) {
+          convert_color: function (args) {
             var result = AGENT_TOOLS[0].compute(args);
-            f.value = String(args.foreground);
-            b.value = String(args.background);
+            field.value = String(args.color);
             run();
             return result;
           }

@@ -45,7 +45,7 @@ test('MCP: initialize, list and call the pages\' tools over Streamable HTTP', as
   const names = tools.map(tool => tool.name);
   assert.equal(new Set(names).size, names.length, 'tool names are unique');
   assert.ok(names.length >= 25, 'only ' + names.length + ' tools');
-  for (const name of ['hash_text', 'convert_case', 'calculate', 'check_contrast', 'roll_dice', 'make_qr_code']) assert.ok(names.includes(name), name);
+  for (const name of ['hash_text', 'convert_case', 'calculate', 'convert_color', 'roll_dice', 'make_qr_code']) assert.ok(names.includes(name), name);
   // What needs a visitor's own file, scratchpad or share room stays on the pages.
   for (const name of ['hash_chosen_file', 'resize_image', 'read_image_metadata', 'read_scratchpad', 'add_to_scratchpad', 'find_tool']) assert.ok(!names.includes(name), name);
   for (const tool of tools) {
@@ -67,7 +67,7 @@ test('MCP: initialize, list and call the pages\' tools over Streamable HTTP', as
   assert.equal((await call('convert_case', { text: 'hello World' })).structuredContent.snake, 'hello_world');
   assert.equal((await call('calculate', { expression: '2^3^2' })).structuredContent.result, 512);
   assert.equal((await call('convert_units', { value: 0, from: 'celsius', to: '°F' })).structuredContent.result, 32);
-  assert.equal((await call('check_contrast', { foreground: 'black', background: 'white' })).structuredContent.ratio, '21.00:1');
+  assert.deepEqual((await call('convert_color', { color: 'red' })).structuredContent, { hex: '#ff0000', rgb: 'rgb(255 0 0)', hsl: 'hsl(0 100% 50%)', oklch: 'oklch(62.8% 0.2577 29.23)' });
   assert.equal((await call('base64_decode', { base64: 'aGk' })).structuredContent.text, 'hi');
   assert.equal((await call('convert_time_zone', { dateTime: '2026-11-01T01:30', from: 'America/New_York', to: 'UTC', occurrence: 'later' })).structuredContent.instant, '2026-11-01T06:30:00.000Z');
   assert.equal((await call('make_ean13_barcode', { digits: '400638133393' })).structuredContent.number, '4006381333931');

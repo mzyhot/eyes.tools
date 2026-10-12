@@ -145,7 +145,7 @@ curl -s https://eyes.tools/mcp -H 'Content-Type: application/json' \
 ```
 
 `tools/list` names them all: `hash_text`, `convert_case`, `calculate`,
-`check_contrast`, `convert_time_zone`, `generate_passwords`, `roll_dice`,
+`convert_color`, `convert_time_zone`, `generate_passwords`, `roll_dice`,
 `make_qr_code` and the rest. A call sends its input to the server, which uses it
 for the one answer and keeps nothing.
 
