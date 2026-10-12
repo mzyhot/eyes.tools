@@ -3,8 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security problems privately, not in a public issue or
-discussion. Please:
-- email mzyhot@tuta.com with the subject line "Security Report".
+discussion: email mzyhot@tuta.com with the subject line "Security Report".
 
 Include what you found, how to reproduce it, and what an attacker could do with
 it. You will get a reply within a week. Please give a fix a reasonable time to

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security problem
-    url: https://github.com/mzyhot/eyes.tools/security/advisories/new
-    about: Please report vulnerabilities privately, not in an issue.
+    url: https://github.com/mzyhot/eyes.tools/security/policy
+    about: Please report vulnerabilities privately by email, not in an issue.
   - name: Ask a question or share an idea
     url: https://github.com/mzyhot/eyes.tools/discussions
     about: Questions and open-ended ideas belong in Discussions.
