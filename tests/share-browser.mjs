@@ -144,17 +144,14 @@ try {
   await download(a, 'from-b.txt', Buffer.from('beta')); await download(b, 'from-a.txt', Buffer.from('alpha'));
   console.log('PASS simultaneous bidirectional transfers');
 
-  for (const theme of ['dark', 'light']) {
-    await a.evaluate(t => document.documentElement.dataset.theme = t, theme);
-    for (const width of [320, 375, 414, 768, 1280]) {
-      await a.setViewportSize({ width, height: 900 });
-      const overflow = await a.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
-      assert.ok(overflow.scroll <= overflow.client, `${theme} overflow at ${width}: ${JSON.stringify(overflow)}`);
-      await a.evaluate(() => window.scrollTo(0, 0));
-      await a.screenshot({ path: `${output}/${theme}-${width}.png`, fullPage: true });
-    }
+  for (const width of [320, 375, 414, 768, 1280]) {
+    await a.setViewportSize({ width, height: 900 });
+    const overflow = await a.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
+    assert.ok(overflow.scroll <= overflow.client, `overflow at ${width}: ${JSON.stringify(overflow)}`);
+    await a.evaluate(() => window.scrollTo(0, 0));
+    await a.screenshot({ path: `${output}/share-${width}.png`, fullPage: true });
   }
-  console.log('PASS responsive layout in dark/light at 320, 375, 414, 768, 1280px');
+  console.log('PASS responsive layout at 320, 375, 414, 768, 1280px');
   await b.reload(); await Promise.all([connected(a), connected(b)]);
   console.log('PASS reload reconnect');
 

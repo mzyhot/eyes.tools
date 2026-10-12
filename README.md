@@ -20,13 +20,12 @@ receiver's browser storage as they arrive, so their size is bounded by disk
 rather than memory.
 
 ```
-site.js           the site registry: wordmark, copy, footers, shortcuts, storage keys
+site.js           the site registry: wordmark, copy, footers, shortcuts
 tools.js          the tool registry. one row per tool: name, lede, aliases, deps, note.
 fonts.css         the typeface, Geist and Geist Mono. the one file to change to change the type.
 fonts/            the typeface's files, one per script, self-hosted
 tokens.css        design tokens (colour, size, space, motion). the only place values live.
 s.css             shared stylesheet: every class a tool page may use
-theme.js          applies the saved theme before the first paint
 s.js              shared runtime: the `E` global, and the chrome built from the registries
 index.js          the index: filter field and registry-driven list
 index.html        an empty page index.js fills
@@ -92,7 +91,7 @@ cd desktop && cargo run
 
 | To change | Edit |
 | --- | --- |
-| The wordmark, footer notes, index copy, the not-found page, keyboard shortcuts, storage keys, the address and picture link previews use | `site.js` |
+| The wordmark, footer notes, index copy, the not-found page, keyboard shortcuts, the address and picture link previews use | `site.js` |
 | A tool's name, lede, search aliases, meta description, scripts or footer note | its row in `tools.js` |
 | The typeface | `fonts.css`, with its files in `fonts/` listed in `public-files.mjs` |
 | Colours, sizes, spacing, motion | `tokens.css` |
@@ -126,8 +125,7 @@ shadows, gradients or icons. Hover, selection and primary buttons invert the
 colours rather than adding an accent. The chosen typeface is Geist: Geist for
 text, and Geist Mono for anything meant to be copied. Both ship with the site,
 so no page asks another server for its fonts, and `fonts.css` is the whole of
-the site's typography. There is a light and a dark theme, and the choice is
-saved in the browser.
+the site's typography. There is one theme, dark.
 
 Keyboard: `/` focuses the filter on the index, `↑↓` move, `↵` opens, `Esc`
 clears the filter there and returns to the index from any tool.

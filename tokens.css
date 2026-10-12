@@ -1,4 +1,4 @@
-/* 𓁹𓁹: shared design tokens. Dark by default.
+/* 𓁹𓁹: shared design tokens. The site has one theme, dark.
  *
  * Every value the site draws with, and the only place any of them is written.
  * Typography families are the exception: they live in `fonts.css`. */
@@ -48,7 +48,7 @@
   --color-alert:   oklch(72% 0.17 27);
   --color-sel:     oklch(93% 0 0);
   --color-sel-ink: oklch(13% 0 0);
-  /* QR codes must remain theme-independent for reliable scanning. */
+  /* QR codes stay black on white, whatever the page's colours, so they scan. */
   --color-qr-paper: oklch(100% 0 0);
   --color-qr-ink:   oklch(0% 0 0);
 
@@ -64,17 +64,4 @@
   /* ── measure ────────────────────────────────────────── */
   --measure: 46rem;
   --control-size: 2.75rem;
-}
-
-:root[data-theme="light"] {
-  color-scheme: light;
-  --color-paper:   oklch(98.8% 0 0);
-  --color-paper-2: oklch(95.5% 0 0);
-  --color-ink:     oklch(17% 0 0);
-  --color-dim:     oklch(49% 0 0);
-  --color-rule:    oklch(87% 0 0);
-  --color-focus:   oklch(17% 0 0);
-  --color-alert:   oklch(52% 0.20 27);
-  --color-sel:     oklch(17% 0 0);
-  --color-sel-ink: oklch(98.8% 0 0);
 }

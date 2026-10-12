@@ -16,7 +16,7 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
   t.after(() => app.close());
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const get = path => fetch(base + path);
-  for (const path of ['/', '/share', '/json', '/s.js', '/site.js', '/theme.js', '/fonts.css', '/index.js', '/robots.txt', '/sitemap.xml', '/THIRDPARTYLICENSES', '/LICENSE', '/ADDENDUM']) {
+  for (const path of ['/', '/share', '/json', '/s.js', '/site.js', '/fonts.css', '/index.js', '/robots.txt', '/sitemap.xml', '/THIRDPARTYLICENSES', '/LICENSE', '/ADDENDUM']) {
     const res = await get(path);
     assert.equal(res.status, 200, path);
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');

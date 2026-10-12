@@ -176,7 +176,6 @@ E.fill(template, values)     "{count} tools" + {count: 3} → "3 tools"
 E.base                       prefix that reaches a published root file
 E.home                       the index's address from this page
 E.toolHref(slug)             another tool's address from this page
-E.theme.toggle()             already wired to [data-theme-toggle]
 E.agentTool(tool[, run])     offer an action to AI agents via WebMCP: name,
                              title, description, input (JSON Schema),
                              readOnly, run(input, signal). Throw to refuse;
@@ -235,5 +234,4 @@ Must render with no horizontal scroll at **320 / 375 / 414 / 768 px**.
       where the input can be written as JSON, so `/mcp` offers them too.
 - [ ] Keyboard-only operation works end to end; focus is always visible.
 - [ ] No horizontal scroll at 320px.
-- [ ] Light and dark both look deliberate.
 - [ ] No raw colour, no radius, no shadow, no emoji, no invented numbers.

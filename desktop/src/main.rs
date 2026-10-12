@@ -41,8 +41,7 @@ const PUBLIC_ORIGIN: &str = match option_env!("EYES_PUBLIC_ORIGIN") {
 /// through as any other is, and no rule has to open the service to everyone.
 const USER_AGENT: &str = concat!("eyes-desktop/", env!("CARGO_PKG_VERSION"), " (+https://github.com/mzyhot/eyes.tools)");
 
-/// `--color-paper` of the dark theme, the default, so the window never
-/// flashes white before the first paint.
+/// `--color-paper`, so the window never flashes white before the first paint.
 const PAPER: Color = Color(7, 7, 7, 255);
 
 /// Runs before each page's own scripts: sets the configuration's

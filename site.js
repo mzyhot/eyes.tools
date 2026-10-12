@@ -2,17 +2,17 @@
  *
  * Everything the shared chrome says or does, in one object. Change a value
  * here and every page follows: the wordmark, the tab title, the footer notes,
- * the keyboard shortcuts, the storage keys, the not-found page.
+ * the keyboard shortcuts, the not-found page.
  *
  * Nothing in this file touches the DOM. `s.js` reads it and builds the header,
- * the title block and the footer from it; `theme.js` reads the storage key
- * before the first paint; `index.js` reads the index copy; the Node server
- * reads it to write each page's link preview. A page never repeats any of it.
+ * the title block and the footer from it; `index.js` reads the index copy; the
+ * Node server reads it to write each page's link preview. A page never repeats
+ * any of it.
  *
  * What each tool says about itself (its name, lede, search aliases, extra
  * scripts and network note) lives in `tools.js`, one row per tool.
  *
- * Loaded in the head, before `theme.js`, so the theme can read its key.
+ * Loaded in the head, ahead of every script that reads it.
  */
 window.SITE = {
   /* The wordmark is the literal Unicode text, not an image: U+13079 twice. */
@@ -22,8 +22,8 @@ window.SITE = {
   /* The index's own title and meta description. */
   title: "𓁹𓁹",
   description: "small tools for text, code, images and everyday use",
-  /* Address-bar colour. Matches `--color-paper` of the theme in force. */
-  themeColor: { dark: "#070707", light: "#fbfbfb" },
+  /* Address-bar colour. Matches `--color-paper`; the site has one theme, dark. */
+  themeColor: "#070707",
   icon: "favicon.svg",
 
   /* What a link preview shows, in a chat app or a search result, where the
@@ -39,9 +39,6 @@ window.SITE = {
   labels: {
     home: "← all tools",
     homeAria: "𓁹𓁹, all tools",
-    theme: "theme",
-    themeSwitch: "Switch to {next} mode",       /* {next} is "dark" or "light" */
-    themeCurrent: ". Current theme: {current}.",
     skipToTool: "skip to tool",
     skipToTools: "skip to tools"
   },
@@ -86,11 +83,5 @@ window.SITE = {
      (dump's text links, share's room links) point here, and share's rooms and
      connection setup go through the service here; file contents still travel
      device to device. Empty means wherever the page itself is. */
-  publicOrigin: "",
-
-  /* Browser storage keys. Tools add their own; these belong to the chrome. */
-  storage: {
-    theme: "eyes.theme",
-    themeDefault: "dark"
-  }
+  publicOrigin: ""
 };

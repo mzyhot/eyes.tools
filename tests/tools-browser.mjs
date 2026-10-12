@@ -262,9 +262,8 @@ try {
       }
     }
   });
-  await check('directory filtering and theme persistence', async () => {
+  await check('directory filtering', async () => {
     await go('dir'); await fill('#q', 'github'); assert.ok((await text('main')).toLowerCase().includes('github')); await enabled('#copy-urls');
-    const theme = await page.locator('html').getAttribute('data-theme'); await click('[data-theme-toggle]'); const next = await page.locator('html').getAttribute('data-theme'); assert.notEqual(next, theme); await page.reload(); assert.equal(await page.locator('html').getAttribute('data-theme'), next);
   });
   assert.deepEqual(errors, [], 'browser exceptions / CSP violations');
   assert.deepEqual(failures, [], 'functional failures');

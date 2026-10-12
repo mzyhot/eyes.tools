@@ -13,9 +13,7 @@
  *   1. DOM helpers (`qs`, `qsa`, `on`, `el`, `esc`, `debounce`).
  *   2. Feedback and export helpers (`flash`, `copy`, `download`, `fail`, `bytes`).
  *   3. Randomness and URL-state helpers (`rand`, `param`, `b64url`).
- *   4. Theme persistence, applied before paint by `theme.js` and kept in sync
- *      across tabs here.
- *   5. `boot()`, which builds every page's chrome (the head tags, the header,
+ *   4. `boot()`, which builds every page's chrome (the head tags, the header,
  *      the title block and the footer) from `site.js` and `tools.js`, then
  *      loads the scripts the registry lists for this tool and runs the page's
  *      own code through `E.tool`.
@@ -352,69 +350,6 @@
   /** A tool's address from wherever this page is. */
   E.toolHref = function (slug) { return FROM_DISK ? E.base + "t/" + slug + ".html" : E.base + slug; };
 
-  /* ── theme ───────────────────────────────────────────── */
-
-  /* `theme.js` has already applied the stored choice in the head, before the
-     first paint. The code below owns everything after that: toggling, the
-     address-bar colour, and mirroring a change made in another tab. */
-  var KEY = (SITE.storage && SITE.storage.theme) || "eyes.theme";
-  var DEFAULT_THEME = (SITE.storage && SITE.storage.themeDefault) || "dark";
-  var THEME_COLOR = SITE.themeColor || {};
-
-  /** @returns {"dark"|"light"} The theme in force right now. */
-  function currentTheme() {
-    var set = document.documentElement.getAttribute("data-theme");
-    return set === "light" || set === "dark" ? set : DEFAULT_THEME;
-  }
-
-  /* Keep every theme button describing what it will do, not what is selected:
-     the label is the same on both themes, so only the accessible name carries
-     the state. */
-  function syncThemeControls() {
-    var current = currentTheme(), next = current === "dark" ? "light" : "dark";
-    var label = E.fill(LABELS.themeSwitch || "Switch to {next} mode", { next: next });
-    E.qsa("[data-theme-toggle]").forEach(function (b) {
-      b.textContent = LABELS.theme || "theme";
-      b.setAttribute("aria-label", label + E.fill(LABELS.themeCurrent || "", { current: current }));
-      b.title = label;
-    });
-  }
-
-  /* Apply a stored preference. With none stored the attribute is removed, which
-     leaves the default palette tokens.css defines on :root. The site does not
-     follow the system setting. */
-  function applyTheme(value) {
-    if (value === "dark" || value === "light") document.documentElement.setAttribute("data-theme", value);
-    else document.documentElement.removeAttribute("data-theme");
-    var meta = E.qsa('meta[name="theme-color"]');
-    if (!meta.length) {
-      meta.push(E.el("meta", { name: "theme-color" }));
-      document.head.appendChild(meta[0]);
-    }
-    /* Any `media` condition is dropped so a browser never picks a colour for a
-       theme that is not shown. */
-    meta.forEach(function (m) {
-      m.removeAttribute("media");
-      m.content = THEME_COLOR[currentTheme()] || "";
-    });
-    syncThemeControls();
-  }
-
-  /** Theme preference, persisted in localStorage under `SITE.storage.theme`. */
-  E.theme = {
-    /** @returns {"dark"|"light"|null} The stored choice, or null for the default. */
-    get: function () { try { return localStorage.getItem(KEY); } catch (e) { return null; } },
-    /** @param {"dark"|"light"|null} v Choice to store; falsy clears it. */
-    set: function (v) {
-      try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY); } catch (e) {}
-      applyTheme(v);
-    },
-    /** Flip between dark and light, storing the result. */
-    toggle: function () {
-      E.theme.set(currentTheme() === "dark" ? "light" : "dark");
-    }
-  };
-
   /* The wordmark stays as the literal Unicode text from `site.js`. Redrawing or
      animating it would make it differ from U+13079. This hook only marks the
      element as processed and names it for assistive technology. */
@@ -435,7 +370,7 @@
     return window.TOOLS.filter(function (t) { return t.slug === slug; })[0] || null;
   }
 
-  /** Title, description and icon, from the registry or `site.js`. */
+  /** Title, description, icon and address-bar colour, from the registry or `site.js`. */
   function buildHead(entry, kind) {
     var copy = kind === "not-found" ? SITE.notFound || {} : null;
     document.title = entry ? entry.name + (SITE.titleSuffix || "")
@@ -447,9 +382,12 @@
     if (SITE.icon && !E.qs('link[rel="icon"]')) {
       document.head.appendChild(E.el("link", { rel: "icon", type: "image/svg+xml", href: E.base + SITE.icon }));
     }
+    if (SITE.themeColor && !E.qs('meta[name="theme-color"]')) {
+      document.head.appendChild(E.el("meta", { name: "theme-color", content: SITE.themeColor }));
+    }
   }
 
-  /** The wordmark, breadcrumb and theme toggle. */
+  /** The wordmark and, on a tool, the breadcrumb. */
   function buildHeader(entry, kind) {
     var wordmark = E.el("a", { class: kind === "tool" ? "eyes" : "eyes eyes--lg", href: E.home, "data-eyes": "", text: SITE.wordmark || "" });
     var parts = [wordmark];
@@ -458,8 +396,6 @@
       crumb.appendChild(E.el("b", { text: entry.name }));
       parts.push(crumb);
     }
-    parts.push(E.el("span", { class: "top__spacer" }));
-    parts.push(E.el("button", { class: "tbtn", type: "button", "data-theme-toggle": "", text: LABELS.theme || "theme" }));
     return E.el("header", { class: kind === "index" ? "top directory-top" : "top" }, parts);
   }
 
@@ -751,18 +687,8 @@
 
     buildHead(entry, kind);
     buildChrome(entry, kind);
-    applyTheme(E.theme.get());
 
     E.qsa("[data-eyes]").forEach(E.eyes);
-    E.qsa("[data-theme-toggle]").forEach(function (b) {
-      E.on(b, "click", function () { E.theme.toggle(); });
-    });
-
-    /* A storage event fires only in the *other* tabs, so this mirrors a toggle
-       across every open page without a broadcast channel. */
-    E.on(window, "storage", function (e) {
-      if (e.key === KEY || e.key === null) applyTheme(E.theme.get());
-    });
 
     /* Declarative copy buttons: <button data-copy="#selector">. The selector is
        resolved at click time so it still works for output rendered later. */

@@ -28,19 +28,16 @@ try {
     }));
     inventory.push({ route, ...controls });
     if (route !== '/' && !controls.title?.trim()) failures.push(`${route}: missing title`);
-    for (const theme of ['dark', 'light']) {
-      await page.evaluate(t => document.documentElement.dataset.theme = t, theme);
-      for (const width of [320, 375, 414, 768, 1280]) {
-        await page.setViewportSize({ width, height: 900 });
-        const over = await page.evaluate(() => {
-          const width = document.documentElement.clientWidth;
-          return [...document.querySelectorAll('main *, .top *, .foot *')].filter(e => {
-            const r = e.getBoundingClientRect();
-            return r.width > 0 && (r.right > width + 1 || r.left < -1) && getComputedStyle(e).position !== 'fixed' && !e.closest('[hidden]');
-          }).slice(0, 5).map(e => `${e.tagName.toLowerCase()}#${e.id}.${String(e.className)}`);
-        });
-        if (over.length) failures.push(`${route}: ${theme} ${width}px overflow: ${over.join(', ')}`);
-      }
+    for (const width of [320, 375, 414, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const over = await page.evaluate(() => {
+        const width = document.documentElement.clientWidth;
+        return [...document.querySelectorAll('main *, .top *, .foot *')].filter(e => {
+          const r = e.getBoundingClientRect();
+          return r.width > 0 && (r.right > width + 1 || r.left < -1) && getComputedStyle(e).position !== 'fixed' && !e.closest('[hidden]');
+        }).slice(0, 5).map(e => `${e.tagName.toLowerCase()}#${e.id}.${String(e.className)}`);
+      });
+      if (over.length) failures.push(`${route}: ${width}px overflow: ${over.join(', ')}`);
     }
     console.log('checked ' + route);
   }
@@ -64,5 +61,5 @@ try {
   await writeFile(output + '/inventory.json', JSON.stringify(inventory, null, 2));
   await writeFile(output + '/failures.json', JSON.stringify(failures, null, 2));
   assert.deepEqual(failures, []);
-  console.log('PASS every page loads without JavaScript errors or overflow at five widths in both themes');
+  console.log('PASS every page loads without JavaScript errors or overflow at five widths');
 } finally { await browser.close(); }
