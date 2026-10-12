@@ -43,6 +43,9 @@ dev-server.mjs    the Node server, for development and self-hosting
 api-modules.mjs   the API registry: one row per same-origin endpoint the server mounts
 public-files.mjs  the files the site publishes; everything else stays private
 share-server.mjs  ephemeral rooms and WebRTC signaling
+mcp-server.mjs    the tools for AI agents, at /mcp, run from each page's own code
+github-webhook.mjs  the signed deployment hook, at /api/github/sync
+request-origin.mjs  which pages may call share and the MCP server
 functions/[[path]].js  Cloudflare Pages: answers private paths with the 404 page
 _redirects        Cloudflare Pages: serves each tool at /<slug> (generated)
 _routes.json      Cloudflare Pages: sends private paths to a 404 Function (generated)

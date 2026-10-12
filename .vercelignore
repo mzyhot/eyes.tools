@@ -17,6 +17,7 @@
 /mcp-server.mjs
 /package-lock.json
 /public-files.mjs
+/request-origin.mjs
 /scripts/
 /share-server.mjs
 /tests/

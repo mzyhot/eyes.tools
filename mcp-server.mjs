@@ -44,6 +44,8 @@ import { webcrypto } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
+import { originPolicy } from "./request-origin.mjs";
+
 const ENDPOINT = "/mcp";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 /* Newest first: the first is offered to a client asking for one we lack. */
@@ -150,7 +152,7 @@ function describe({ spec }) {
  *   site's, that may call from a browser.
  */
 export function createMcpService({ root = ROOT, allowedOrigins = process.env.MCP_ALLOWED_ORIGINS } = {}) {
-  const crossOrigins = new Set(allowedOrigins ? allowedOrigins.split(",").map(v => v.trim()).filter(Boolean) : []);
+  const { allowedCrossOrigin, sameOrigin } = originPolicy(allowedOrigins);
   let tools = null, version = "", pending = 0;
   const ready = loadTools(root).then(loaded => { tools = loaded.tools; version = loaded.version; });
   /* A page whose core cannot load is a bug to see at startup, not a quiet gap
@@ -166,22 +168,6 @@ export function createMcpService({ root = ROOT, allowedOrigins = process.env.MCP
       ...headers
     });
     response.end(bytes);
-  }
-
-  /** The request's origin if the operator allows it cross-origin, else null. */
-  function allowedCrossOrigin(request) {
-    const origin = request.headers.origin;
-    return typeof origin === "string" && crossOrigins.has(origin) ? origin : null;
-  }
-
-  /** Whether the request came from this site, or from no browser page at all. */
-  function sameOrigin(request) {
-    const site = request.headers["sec-fetch-site"];
-    if (site && site !== "same-origin" && site !== "none") return false;
-    const origin = request.headers.origin;
-    if (!origin) return true;
-    try { return new URL(origin).host === request.headers.host; }
-    catch { return false; }
   }
 
   async function readBody(request) {

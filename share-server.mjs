@@ -67,6 +67,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
 
+import { originPolicy } from './request-origin.mjs';
+
 /* Display names. Two words plus the session's short code, so a visitor can tell
    which device in the list is theirs without anything identifying appearing. */
 const NAMES = ['quiet fox', 'silver heron', 'little owl', 'calm otter', 'swift finch', 'still deer', 'pale moth', 'soft lynx'];
@@ -218,7 +220,7 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
   /* TURN URLs and allowed origins are fixed for the process; parse them once
      rather than per request. */
   const turnUrlList = turnUrls ? turnUrls.split(',').map(v => v.trim()).filter(Boolean) : [];
-  const crossOrigins = new Set(allowedOrigins ? allowedOrigins.split(',').map(v => v.trim()).filter(Boolean) : []);
+  const { allowedCrossOrigin, sameOrigin } = originPolicy(allowedOrigins);
 
   /**
    * Draw a unique random hex value, retrying on collision and failing closed.
@@ -410,22 +412,6 @@ export function createShareService({ trustCloudflare = process.env.SHARE_TRUST_C
     const ip = trusted ? forwarded : address;
     const own = trustCloudflare ? !!trusted : !PROXY_HEADERS.some(name => req.headers[name] !== undefined);
     return { ip, networkKnown: own && !isLocalAddress(ip) };
-  }
-
-  /** The request's origin if the operator allows it cross-origin, else null. */
-  function allowedCrossOrigin(req) {
-    const origin = req.headers.origin;
-    return typeof origin === 'string' && crossOrigins.has(origin) ? origin : null;
-  }
-
-  /** Whether the request came from this site rather than another origin. */
-  function sameOrigin(req) {
-    const site = req.headers['sec-fetch-site'];
-    if (site && site !== 'same-origin' && site !== 'none') return false;
-    const origin = req.headers.origin;
-    if (!origin) return true;
-    try { return new URL(origin).host === req.headers.host; }
-    catch { return false; }
   }
 
   /* ── endpoints ───────────────────────────────────────── */
