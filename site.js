@@ -63,7 +63,6 @@ window.SITE = {
     help: "Type to filter. Use the up and down arrow keys to select a tool, then enter to open.",
     emptyText: "nothing by that name.",
     emptyAction: "clear filter",
-    noscript: "These tools need JavaScript to run.",
     /* {count} tools, or {count} of {total} while filtering. */
     count: "{count} tools",
     countFiltered: "{count} of {total}"

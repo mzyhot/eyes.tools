@@ -2,7 +2,8 @@
  *
  * Builds the filter field, the keyboard hint and the tool list from
  * `window.TOOLS`, and the words around them from `SITE.index`. The page itself
- * is an empty `<main>`: add a row to `tools.js` and it appears here, with no
+ * is an empty `<main>`, but for the note shown without JavaScript, which no
+ * script can write: add a row to `tools.js` and it appears here, with no
  * markup to touch.
  *
  * Everything the visitor types runs on the keystroke, so the work per keystroke
@@ -56,12 +57,6 @@
     E.el("p", { class: "hint", text: COPY.emptyText || "" }), reset
   ]);
   main.appendChild(empty);
-
-  if (COPY.noscript) {
-    var noscript = document.createElement("noscript");
-    noscript.appendChild(E.el("p", { class: "hint", text: COPY.noscript }));
-    main.appendChild(noscript);
-  }
 
   /* The footer's count sits before the shared note. */
   var count = E.el("span", { class: "num", id: "count" });
