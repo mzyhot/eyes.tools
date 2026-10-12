@@ -127,6 +127,11 @@ SHA-256 signature GitHub computes with `GITHUB_SECRET`, and only for
 `eyes-updater.service`, which checks out the verified `main` release. The
 webhook body is never used as a command or as a Git ref.
 
+The updater unit is not in this repository: it is the host's own, holds the
+GitHub credentials the web service never sees, and runs the release steps
+above. Without it a valid request is answered 503 and nothing changes. With
+`GITHUB_SECRET` unset the hook is off and answers every request with 503.
+
 Set the same random value in the service environment on the host:
 
 ```
