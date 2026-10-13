@@ -190,8 +190,19 @@ E.tool(function () {
       "sqrt, abs, round, floor, ceil, pi and e. A percent divides by 100, so 200 * 10% is 20.",
     input: {
       type: "object",
-      properties: { expression: { type: "string", description: "Such as (125 + 75) * 1.08." } },
-      required: ["expression"]
+      properties: { expression: { type: "string", minLength: 1, maxLength: 1000, description: "Such as (125 + 75) * 1.08, 2^10 or sqrt(2)." } },
+      required: ["expression"],
+      additionalProperties: false,
+      examples: [{ expression: "(125 + 75) * 1.08" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        result: { type: "number", description: "Rounded to 15 significant digits, which hides binary floating point's last-digit noise." },
+        exact: { type: "number", description: "The value as computed." }
+      },
+      required: ["result", "exact"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {
@@ -210,11 +221,23 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        value: { type: "number" },
-        from: { type: "string", description: "Unit symbol or name, such as km or kilometers." },
-        to: { type: "string", description: "Unit symbol or name." }
+        value: { type: "number", description: "The amount to convert." },
+        from: { type: "string", minLength: 1, maxLength: 40, description: "Unit symbol or name, such as km or kilometers." },
+        to: { type: "string", minLength: 1, maxLength: 40, description: "A unit of the same quantity, by symbol or name." }
       },
-      required: ["value", "from", "to"]
+      required: ["value", "from", "to"],
+      additionalProperties: false,
+      examples: [{ value: 5, from: "km", to: "mi" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        result: { type: "number" },
+        unit: { type: "string", description: "The symbol of the unit converted to." },
+        text: { type: "string", description: "The result and its unit, ready to read." }
+      },
+      required: ["result", "unit", "text"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {

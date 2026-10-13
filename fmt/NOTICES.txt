@@ -2,11 +2,11 @@ Notices for the formatters in fmt/
 ==================================
 
 clean code loads these files the first time a language needs one.
-scripts/vendor-formatters.mjs makes them from the npm packages named
-below; a WebAssembly build also compiles the projects and Rust crates named
-with it. Each keeps its own license. The license texts follow the list,
-each once, headed by everything that ships it, and each component's source
-is at the address given with it.
+scripts/vendor.mjs makes them from the npm packages named below; a
+WebAssembly build also compiles the projects and Rust crates named with
+it. Each keeps its own license. The license texts follow the list, each
+once, headed by everything that ships it, and each component's source is
+at the address given with it.
 
 
 What each file contains

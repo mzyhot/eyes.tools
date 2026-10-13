@@ -76,11 +76,14 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        text: { type: "string", description: "The text to encode." },
+        text: { type: "string", maxLength: 5000000, description: "The text to encode, as its UTF-8 bytes." },
         urlSafe: { type: "boolean", description: "Use - and _ and drop the = padding.", default: false }
       },
-      required: ["text"]
+      required: ["text"],
+      additionalProperties: false,
+      examples: [{ text: "héllo" }, { text: "subjects?_d", urlSafe: true }]
     },
+    output: { type: "object", properties: { base64: { type: "string" } }, required: ["base64"], additionalProperties: false },
     readOnly: true,
     compute: function (args) { return { base64: encode(text(args.text), !!args.urlSafe) }; }
   }, {
@@ -90,9 +93,12 @@ E.tool(function () {
       "or does not decode to UTF-8 text.",
     input: {
       type: "object",
-      properties: { base64: { type: "string", description: "The base64 to decode; spaces and line breaks are ignored." } },
-      required: ["base64"]
+      properties: { base64: { type: "string", maxLength: 7000000, description: "Standard or url-safe base64; spaces, line breaks and missing padding are fine." } },
+      required: ["base64"],
+      additionalProperties: false,
+      examples: [{ base64: "aMOpbGxv" }]
     },
+    output: { type: "object", properties: { text: { type: "string" } }, required: ["text"], additionalProperties: false },
     readOnly: true,
     compute: function (args) { return { text: decode(text(args.base64)) }; }
   }];

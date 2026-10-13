@@ -130,10 +130,28 @@
           input: {
             type: "object",
             properties: {
-              query: { type: "string", description: "One character, or a code or name for one." },
+              query: { type: "string", minLength: 1, maxLength: 100, description: "One character, or a code or name for one: é, 233, U+00E9, 0xE9, &eacute;, &#233; or LF." },
               set: { type: "string", enum: ["unicode", "ascii"], default: "unicode", description: "ascii refuses anything past 127." }
             },
-            required: ["query"]
+            required: ["query"],
+            additionalProperties: false,
+            examples: [{ query: "U+00E9" }, { query: "LF", set: "ascii" }]
+          },
+          output: {
+            type: "object",
+            properties: {
+              character: { type: "string", description: "The character itself." },
+              shownAs: { type: "string", description: "How to show it: itself, or a name such as LF or space for one that does not show." },
+              forms: {
+                type: "object",
+                description: "The character written each way: \"decimal\", \"code point\" (U+…), \"utf-8\" (bytes in hex), \"html\", \"html hex\", \"javascript\", \"css\" and \"url\".",
+                properties: { "decimal": { type: "string" }, "code point": { type: "string" }, "utf-8": { type: "string" }, "html": { type: "string" }, "html hex": { type: "string" }, "javascript": { type: "string" }, "css": { type: "string" }, "url": { type: "string" } },
+                required: ["decimal", "code point", "utf-8", "html", "html hex", "javascript", "css", "url"],
+                additionalProperties: false
+              }
+            },
+            required: ["character", "shownAs", "forms"],
+            additionalProperties: false
           },
           readOnly: true,
           compute: function (args) {

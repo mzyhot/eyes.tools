@@ -99,19 +99,30 @@ The site's one job is: **the visitor leaves holding a result.**
   the tool's logic in a block marked `/* ── core` … `/* ── end core` at the top
   of the script: no DOM and no `E`, only the page's `deps` and any published
   script it loads on demand through the `eyesLoadScript` the server hands it
-  (the page swaps in `E.load`; see `code.html`), ending with
-  `var AGENT_TOOLS = [...]` (name, title, description, input as JSON Schema,
-  readOnly, network if it can leave the site, and compute(input) returning, or
-  resolving to, the answer). The page offers them in the browser with
-  `E.agentTools` (WebMCP), usually through a run that fills the page's own
-  fields first, so the visitor sees what the agent did; `mcp-server.mjs` runs
-  the same block for agents at `/mcp`. Either way the agent gets the same
-  answer, and the same error, a person would. A tool that needs what only the
-  visitor has, such as the file they chose, stays out of the core and uses
-  `E.agentTool`; it reads a file only once the visitor has chosen it, and never
-  sends one anywhere. Leave anything that sends data off the device, or
-  discards what the visitor wrote, to the visitor; share offers agents
-  nothing, since a transfer needs a person at each end.
+  (the page swaps in `E.load`; see `code.html`, or let `Media.codec` do it),
+  ending with `var AGENT_TOOLS = [...]`. Each entry has a name, title and
+  description; `input`, a JSON Schema whose every property is described, with
+  `additionalProperties: false` and an `examples` list; `output`, the JSON
+  Schema of its answer; `readOnly`; `network` if it can leave the site; and
+  `compute(input)`, returning, or resolving to, the answer. agent-schema.js
+  checks an input against the schema before compute sees it, on the page and
+  at `/mcp` alike, and the tests run every example and hold each answer to its
+  output schema. The page offers them in the browser with `E.agentTools`
+  (WebMCP), usually through a run that fills the page's own fields first, so
+  the visitor sees what the agent did; the MCP server runs the same block for
+  agents at `/mcp`. Either way the agent gets the same answer, and the same
+  error, a person would.
+- **Files come as base64.** A tool that works on a file takes it as one
+  string, base64 or a data: URL, read with `Media.bytes` (media.js, named in
+  `deps`), and answers a file it makes as `Media.file(…)`, which `/mcp` sends
+  as image content. On the page, an agent's file goes in the page's file
+  field with `E.giveFile`, as if the visitor had chosen it, and a file input
+  the page can supply from the visitor's own choice is named in
+  `E.agentTools`' third argument. What only the visitor has, such as their
+  scratchpad, stays out of the core and uses `E.agentTool`. Leave anything
+  that sends data off the device, or discards what the visitor wrote, to the
+  visitor; share offers agents nothing, since a transfer needs a person at
+  each end.
 
 ## 4. Voice
 
@@ -184,11 +195,17 @@ E.home                       the index's address from this page
 E.toolHref(slug)             another tool's address from this page
 E.agentTool(tool[, run])     offer an action to AI agents via WebMCP: name,
                              title, description, input (JSON Schema),
-                             readOnly, run(input, signal). Throw to refuse;
+                             readOnly, run(input, signal). Input the schema
+                             refuses never reaches run. Throw to refuse;
                              the message reaches the agent as { error }.
                              Does nothing where the browser has no WebMCP.
-E.agentTools(list, runs)     offer a core's AGENT_TOOLS, each through
-                             runs[name] if given, else its own compute
+E.agentTools(list, runs[, fromPage])
+                             offer a core's AGENT_TOOLS, each through
+                             runs[name] if given, else its own compute;
+                             inputs named in fromPage are optional here
+E.giveFile(field, file)      put a File in a file field as if chosen there,
+                             and fire change: how a drop or an agent's file
+                             arrives
 ```
 
 Never hardcode a path to another page or to a root file: `file://` and the web
@@ -237,7 +254,8 @@ Must render with no horizontal scroll at **320 / 375 / 414 / 768 px**.
       and a deliberately malformed input.
 - [ ] Every result can be copied or downloaded.
 - [ ] Its actions are offered to agents from a `core` block's `AGENT_TOOLS`,
-      where the input can be written as JSON, so `/mcp` offers them too.
+      where the input can be written as JSON, so `/mcp` offers them too, each
+      with described input, an example, and an output schema.
 - [ ] Keyboard-only operation works end to end; focus is always visible.
 - [ ] No horizontal scroll at 320px.
 - [ ] No raw colour, no radius, no shadow, no emoji, no invented numbers.

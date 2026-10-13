@@ -170,12 +170,25 @@
           input: {
             type: "object",
             properties: {
-              dateTime: { type: "string", description: "Local date and time in the from zone, as YYYY-MM-DDTHH:MM." },
-              from: { type: "string", description: "IANA zone such as America/Chicago, or UTC." },
-              to: { type: "string", description: "IANA zone such as Asia/Tokyo." },
+              dateTime: { type: "string", maxLength: 40, description: "Local date and time in the from zone, as YYYY-MM-DDTHH:MM. Now when left out." },
+              from: { type: "string", minLength: 1, maxLength: 64, description: "IANA zone such as America/Chicago, or UTC." },
+              to: { type: "string", minLength: 1, maxLength: 64, description: "IANA zone such as Asia/Tokyo." },
               occurrence: { type: "string", enum: ["earlier", "later"], default: "earlier", description: "Which one, when the local time happens twice." }
             },
-            required: ["from", "to"]
+            required: ["from", "to"],
+            additionalProperties: false,
+            examples: [{ dateTime: "2026-03-14T09:30", from: "America/New_York", to: "Europe/London" }]
+          },
+          output: {
+            type: "object",
+            properties: {
+              from: { type: "string", description: "The moment, written for the from zone." },
+              to: { type: "string", description: "The same moment, written for the to zone." },
+              instant: { type: "string", description: "The moment in UTC, as ISO 8601." },
+              happensTwice: { type: "boolean", description: "Whether the local time comes round twice there, as the clocks go back." }
+            },
+            required: ["from", "to", "instant", "happensTwice"],
+            additionalProperties: false
           },
           readOnly: true,
           compute: function (args) {

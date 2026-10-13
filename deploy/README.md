@@ -112,7 +112,15 @@ default, lets it through with no rule opening `/api/share/*`.
   often with an AI user agent, so a bot check must let `POST /mcp` through;
   with Anubis, allow the path `^/mcp$` ahead of any rule denying AI user agents.
   Browser pages on other sites are refused unless listed in
-  `MCP_ALLOWED_ORIGINS`, which works as `SHARE_ALLOWED_ORIGINS` does.
+  `MCP_ALLOWED_ORIGINS`, which works as `SHARE_ALLOWED_ORIGINS` does. A call
+  can carry a file as base64, so let `/mcp` bodies reach 16 MB: nginx refuses
+  anything over 1 MB unless `client_max_body_size 16m;` is set for it.
+- Tools called through `/mcp` run in worker threads, one call at a time each,
+  so a slow one never holds up share's signaling; a call still running after
+  20 seconds ends with its worker, which is replaced. Each worker holds every
+  tool, and resizing an image or drawing a sound can take a few hundred MB
+  while it runs. `MCP_WORKERS` sets how many there are: one fewer than the
+  processor's cores, up to four, unless it is set; on a small server, 1.
 - WebRTC sends files directly or through your optional TURN relay. The HTTP proxy
   carries only signaling, not file data. TURN is needed for some NAT/firewall
   combinations; see [Sharing](https://github.com/mzyhot/eyes.tools/wiki/Sharing#stun-and-turn)

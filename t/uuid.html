@@ -267,14 +267,22 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        kind: { type: "string", enum: KINDS, default: "v4" },
-        count: { type: "integer", minimum: 1, maximum: MAX_N, default: 1 },
+        kind: { type: "string", enum: KINDS, default: "v4", description: "v4: random uuid. v7: uuid that sorts by time. ulid: 26 characters, sorts by time. short: like nanoid, from an alphabet." },
+        count: { type: "integer", minimum: 1, maximum: MAX_N, default: 1, description: "How many ids." },
         length: { type: "integer", minimum: 1, maximum: MAX_LEN, description: "Short ids only; 21 when left out." },
-        alphabet: { type: "string", description: "Short ids only; the characters to draw from." },
+        alphabet: { type: "string", minLength: 2, maxLength: 256, description: "Short ids only; the characters to draw from, each equally likely. Letters, digits, _ and - when left out." },
         uppercase: { type: "boolean", default: false, description: "uuids only." },
         braces: { type: "boolean", default: false, description: "uuids only: wrap in {}." },
         hyphens: { type: "boolean", default: true, description: "uuids only." }
-      }
+      },
+      additionalProperties: false,
+      examples: [{ kind: "v7", count: 3 }, { kind: "short", length: 12, alphabet: "0123456789abcdef" }]
+    },
+    output: {
+      type: "object",
+      properties: { ids: { type: "array", items: { type: "string" } } },
+      required: ["ids"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {

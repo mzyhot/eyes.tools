@@ -274,7 +274,7 @@ try {
     await go('case'); assert.equal((await call('convert_case', { text: 'hello World' })).snake, 'hello_world'); assert.equal(await page.locator('#in').inputValue(), 'hello World');
     assert.ok((await call('convert_case', { text: '' })).error);
     await go('hash'); assert.equal((await call('hash_text', { text: 'abc🌍' }))['sha-256'], createHash('sha256').update('abc🌍').digest('hex'));
-    assert.match((await call('hash_chosen_file', {})).error, /no file/);
+    assert.match((await call('hash_file', {})).error, /no file/);
     await go('calc'); assert.equal((await call('calculate', { expression: '2^3^2' })).result, 512); assert.equal((await call('convert_units', { value: 0, from: 'celsius', to: '°F' })).result, 32);
     assert.match((await call('calculate', { expression: '1/0' })).error, /zero/);
     await go('code'); assert.ok((await call('format_json', { json: '{bad}' })).error); assert.equal((await call('format_json', { json: '{ "a" : 1 }', indent: 'minify' })).json, '{"a":1}');
@@ -283,11 +283,43 @@ try {
     await go('dump'); await call('add_to_scratchpad', { text: 'from an agent' }); assert.ok((await page.locator('#pad').inputValue()).endsWith('from an agent'));
     await go('tz'); assert.equal((await call('convert_time_zone', { dateTime: '2026-11-01T01:30', from: 'America/New_York', to: 'UTC', occurrence: 'later' })).instant, '2026-11-01T06:30:00.000Z');
     await go('case'); assert.equal((await call('convert_case', {})).error, 'text is required');
+    // Input the schema does not allow is refused in the same words as over MCP.
+    assert.equal((await call('convert_case', { text: 'a', txt: 'b' })).error, 'unknown input txt: this tool takes text');
+    await go('coin'); assert.equal((await call('flip_coins', { count: 101 })).error, 'count must be between 1 and 100');
+
+    // A file an agent hands a page goes in the page's file field, as if the
+    // visitor had chosen it, and the page shows what it made of it.
+    const preview = await readFile(new URL('../preview.png', import.meta.url));
+    await go('hash');
+    const file = Buffer.from('a download to check\n');
+    const hashed = await call('hash_file', { file: file.toString('base64'), compare: createHash('md5').update(file).digest('hex') });
+    assert.equal(hashed['sha-256'], createHash('sha256').update(file).digest('hex'));
+    assert.deepEqual(hashed.comparison, { algorithm: 'md5', encoding: 'hex', match: true });
+    assert.match(await text('#fmeta'), /file from the agent/);
+    await go('img');
+    const resized = await call('resize_image', { image: preview.toString('base64'), width: 300, format: 'png' });
+    assert.deepEqual([resized.width, resized.height, resized.originalWidth, resized.format], [300, 158, 2400, 'png']);
+    const resizedPng = Buffer.from(resized.image.data, 'base64');
+    assert.deepEqual([resizedPng.readUInt32BE(16), resizedPng.readUInt32BE(20)], [300, 158]);
+    assert.equal(await page.locator('#w').inputValue(), '300');
+    await go('exif');
+    const metadata = await call('read_image_metadata', { image: 'data:image/png;base64,' + preview.toString('base64') });
+    assert.ok(Object.entries(metadata.fields).some(([key, value]) => /image width/i.test(key) && /2400/.test(value)), JSON.stringify(metadata.fields));
+    await page.waitForFunction(() => document.querySelectorAll('#out dt').length > 0);
+    await go('spectrogram');
+    const tone = Buffer.alloc(44 + 16000);
+    tone.write('RIFF', 0); tone.writeUInt32LE(36 + 16000, 4); tone.write('WAVEfmt ', 8); tone.writeUInt32LE(16, 16); tone.writeUInt16LE(1, 20); tone.writeUInt16LE(1, 22);
+    tone.writeUInt32LE(8000, 24); tone.writeUInt32LE(16000, 28); tone.writeUInt16LE(2, 32); tone.writeUInt16LE(16, 34); tone.write('data', 36); tone.writeUInt32LE(16000, 40);
+    for (let i = 0; i < 8000; i++) tone.writeInt16LE(Math.round(9000 * Math.sin(2 * Math.PI * 1000 * i / 8000)), 44 + i * 2);
+    const drawn = await call('make_spectrogram', { audio: tone.toString('base64') });
+    /* Web Audio decodes at the page's own rate, so the rate is the browser's. */
+    assert.deepEqual([drawn.duration, drawn.channels, drawn.width, drawn.height, drawn.image.mimeType, drawn.frequencyMax], [1, 1, 960, 480, 'image/png', drawn.sampleRate / 2]);
+    assert.equal(await page.locator('#frame').isHidden(), false);
 
     // The MCP server runs the same cores: it offers every page tool but those
     // needing the visitor's own things, and answers exactly as the page does.
     const mcp = async (method, params) => (await (await fetch(base + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })).json()).result;
-    const pageOnly = ['hash_chosen_file', 'resize_image', 'read_image_metadata', 'read_scratchpad', 'add_to_scratchpad'];
+    const pageOnly = ['read_scratchpad', 'add_to_scratchpad'];
     assert.deepEqual((await mcp('tools/list', {})).tools.map(t => t.name).sort(), [...names].filter(n => !pageOnly.includes(n)).sort());
     for (const [slug, name, input] of [
       ['case', 'convert_case', { text: 'Hello wide World' }], ['base64', 'base64_encode', { text: 'hé🌍', urlSafe: true }],
@@ -296,9 +328,12 @@ try {
       ['char', 'look_up_character', { query: '&copy;' }], ['inspect', 'inspect_text', { text: 'a\u200bb', set: 'ascii' }],
       ['diff', 'diff_text', { before: 'a\nb\nc', after: 'a\nc\nd' }], ['color', 'convert_color', { color: '#777' }],
       ['calc', 'calculate', { expression: 'sqrt(2) * 3!' }], ['calc', 'convert_units', { value: 5, from: 'mi', to: 'km' }],
-      ['barcode', 'make_ean13_barcode', { digits: '590123412345' }], ['qr', 'make_qr_code', { text: 'eyes', errorCorrection: 'high', size: 128 }],
-      ['dump', 'clean_up_lines', { text: 'b\na\nb', sort: 'asc', unique: true }], ['dir', 'search_directory', { query: 'github' }],
-      ['lorem', 'generate_lorem_ipsum', { kind: 'words', count: 7 }], ['time', 'convert_timestamp', { value: '1787313600' }],
+      ['barcode', 'make_ean13_barcode', { digits: '590123412345' }], ['qr', 'make_qr_code', { text: 'eyes', errorCorrection: 'high', size: 192 }],
+      ['dump', 'clean_up_lines', { text: 'b\na\nb', order: 'asc', dedupe: true }], ['dir', 'search_directory', { query: 'github' }],
+      ['lorem', 'generate_lorem_ipsum', { unit: 'words', count: 7 }], ['time', 'convert_timestamp', { value: '1787313600' }],
+      ['hash', 'hash_file', { file: 'aGVsbG8=', compare: 'sha-1: aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d' }],
+      ['exif', 'read_image_metadata', { image: (await readFile(new URL('../favicon.svg', import.meta.url))).toString('base64') }],
+      ['dump', 'clean_up_lines', { text: 'b', sort: 'asc' }], ['qr', 'make_qr_code', { text: 'eyes', size: 128 }],
       ['tz', 'convert_time_zone', { dateTime: '2026-03-08T02:30', from: 'America/New_York', to: 'Asia/Tokyo' }],
       ['calc', 'calculate', { expression: '1/0' }], ['code', 'format_json', { json: '{bad}' }],
       ['code', 'clean_code', { language: 'python', code: 'x = {"a":1}' }], ['code', 'clean_code', { language: 'tsx', code: 'const A=()=><b/>' }],
@@ -310,6 +345,14 @@ try {
       else {
         // The page adds what only a browser knows: the reader's own local time.
         delete onPage.local;
+        /* An image over MCP is image content, its base64 kept out of the
+           structured content; it is the same image. */
+        for (const [key, value] of Object.entries(onPage)) {
+          if (value && value.data && value.mimeType) {
+            assert.equal(onServer.content.find(item => item.type === 'image').data, value.data, name + ' image');
+            delete value.data;
+          }
+        }
         assert.deepEqual(onServer.structuredContent, onPage, name + ' ' + JSON.stringify(input));
       }
     }

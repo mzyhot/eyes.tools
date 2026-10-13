@@ -155,10 +155,23 @@
           input: {
             type: "object",
             properties: {
-              text: { type: "string" },
-              set: { type: "string", enum: ["unicode", "ascii"], default: "unicode" }
+              text: { type: "string", maxLength: 1000000, description: "The text to look through, such as a line that should match another but does not." },
+              set: { type: "string", enum: ["unicode", "ascii"], default: "unicode", description: "ascii gives ascii decimals and marks anything past 127." }
             },
-            required: ["text"]
+            required: ["text"],
+            additionalProperties: false,
+            examples: [{ text: "a\u00a0b\u200bc" }]
+          },
+          output: {
+            type: "object",
+            properties: {
+              columns: { type: "array", items: { type: "string" }, description: "What each row's cells are." },
+              rows: { type: "array", items: { type: "array", items: { type: "string" } }, description: "One a character, in order; up to 2,000." },
+              truncated: { type: "boolean", description: "Present when the text had more characters than rows." },
+              note: { type: "string" }
+            },
+            required: ["columns", "rows"],
+            additionalProperties: false
           },
           readOnly: true,
           compute: function (args) {

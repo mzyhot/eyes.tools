@@ -24,8 +24,11 @@ export const PUBLIC_ROOT_FILES = [
   "fonts/geist-mono-cyrillic-ext.woff2", "fonts/geist-mono-vietnamese.woff2", "fonts/geist-mono-symbols2.woff2",
   /* page scripts */
   "index.js", "redirect.js",
+  /* the checks every tool's input passes for agents, loaded by s.js when one
+     first calls, and the file handling the tools that take or give files share */
+  "agent-schema.js", "media.js",
   /* clean code's formatters, each loaded the first time its language is
-     picked; scripts/vendor-formatters.mjs makes them */
+     picked; scripts/vendor.mjs makes them */
   "fmt/clang-format.js", "fmt/clang-format.wasm", "fmt/gofmt.js", "fmt/gofmt.wasm", "fmt/lua.js",
   "fmt/lua.wasm", "fmt/markup.js", "fmt/markup.wasm", "fmt/prettier-angular.js",
   "fmt/prettier-babel.js", "fmt/prettier-estree.js", "fmt/prettier-glimmer.js",
@@ -36,10 +39,17 @@ export const PUBLIC_ROOT_FILES = [
   "fmt/prettier-xml.js", "fmt/prettier-yaml.js", "fmt/prettier.js", "fmt/ruff.js", "fmt/ruff.wasm",
   "fmt/shfmt.js", "fmt/shfmt.wasm", "fmt/sql-formatter.js", "fmt/taplo.js", "fmt/taplo.wasm",
   "fmt/zig.js", "fmt/zig.wasm",
+  /* the image codecs and audio decoders the file tools load where the
+     browser's own cannot be asked; scripts/vendor.mjs makes them */
+  "codecs/flac.js", "codecs/jpeg-decode.js", "codecs/jpeg-decode.wasm",
+  "codecs/jpeg-encode.js", "codecs/jpeg-encode.wasm", "codecs/mp3.js", "codecs/opus.js",
+  "codecs/png.js", "codecs/png.wasm", "codecs/resize.js", "codecs/resize.wasm", "codecs/vorbis.js",
+  "codecs/webp-decode.js", "codecs/webp-decode.wasm", "codecs/webp-encode.js",
+  "codecs/webp-encode.wasm",
   /* scripts tools name in their `deps` */
   "qrcode.min.js", "drand-tools.js", "drand-client.min.js", "exif-reader.js",
   /* crawler metadata, and the picture link previews show */
   "robots.txt", "sitemap.xml", "preview.png",
   /* notices */
-  "THIRDPARTYLICENSES", "fmt/NOTICES.txt", "LICENSE", "ADDENDUM"
+  "THIRDPARTYLICENSES", "fmt/NOTICES.txt", "codecs/NOTICES.txt", "LICENSE", "ADDENDUM"
 ];

@@ -14,6 +14,7 @@
     "/functions/*",
     "/github-webhook.mjs",
     "/mcp-server.mjs",
+    "/mcp-worker.mjs",
     "/package-lock.json",
     "/package.json",
     "/public-files.mjs",

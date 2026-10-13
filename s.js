@@ -479,12 +479,13 @@
    * Offer one of this page's actions to AI agents through WebMCP.
    *
    * `run` receives the agent's input and returns, or resolves to, a result
-   * that survives JSON. An input missing a property the schema requires is
-   * refused before `run` sees it. Throwing is how a tool refuses: the message
-   * goes back as `{ error }`, in the same quiet, specific words the page shows
-   * a person, because a rejected call reaches the agent with no reason
-   * attached. A tool that works on what is on the page does it through the
-   * page's own fields, so the visitor sees what the agent did.
+   * that survives JSON. An input its schema does not allow is refused before
+   * `run` sees it, in the words agent-schema.js (loaded the first time an
+   * agent calls) gives the MCP server's callers too. Throwing is how a tool
+   * refuses: the message goes back as `{ error }`, in the same quiet, specific
+   * words the page shows a person, because a rejected call reaches the agent
+   * with no reason attached. A tool that works on what is on the page does it
+   * through the page's own fields, so the visitor sees what the agent did.
    * @param {Object} tool
    * @param {string} tool.name Unique on the page: letters, digits, `_`, `-`, `.`.
    * @param {string} tool.title A short label a browser may show the visitor.
@@ -511,10 +512,10 @@
       inputSchema: tool.input || { type: "object", properties: {} },
       annotations: { readOnlyHint: !!tool.readOnly },
       execute: function (input, options) {
-        return Promise.resolve().then(function () {
+        return E.load("agent-schema.js").then(function () {
           input = input || {};
-          var absent = ((tool.input && tool.input.required) || []).filter(function (key) { return input[key] == null; })[0];
-          if (absent) throw new Error(absent + " is required");
+          var wrong = window.AgentSchema.check(tool.input || { type: "object" }, input);
+          if (wrong) throw new Error(wrong);
           return run(input, options && options.signal);
         }).catch(function (error) {
           return { error: (error && error.message) || String(error) };
@@ -534,9 +535,19 @@
    * Offer a page's core tools, each through its page-side run when it has one.
    * @param {Object[]} list The core's AGENT_TOOLS.
    * @param {Object<string, Function>} [runs] Tool name → page-side run.
+   * @param {string[]} [fromPage] Inputs the page can supply itself, such as
+   *   the file the visitor chose: required over MCP, so optional only here.
    */
-  E.agentTools = function (list, runs) {
-    (list || []).forEach(function (tool) { E.agentTool(tool, runs && runs[tool.name]); });
+  E.agentTools = function (list, runs, fromPage) {
+    (list || []).forEach(function (tool) {
+      var required = tool.input && tool.input.required;
+      if (fromPage && required && required.some(function (name) { return fromPage.indexOf(name) >= 0; })) {
+        var input = JSON.parse(JSON.stringify(tool.input));
+        input.required = required.filter(function (name) { return fromPage.indexOf(name) < 0; });
+        tool = Object.assign({}, tool, { input: input });
+      }
+      E.agentTool(tool, runs && runs[tool.name]);
+    });
   };
 
   /* Every page, the index and the not-found page included, can point an agent
@@ -665,6 +676,26 @@
     dropTimer = setTimeout(function () { delete field.dataset.drop; }, 180);
   }
 
+  /**
+   * Put a file in a page's file field as if the visitor had chosen it there,
+   * and tell the page so: how a dropped file arrives, and a file an agent
+   * hands a tool.
+   * @param {HTMLInputElement} field A file input.
+   * @param {File|FileList} file
+   * @returns {boolean} Whether the browser let it be set.
+   */
+  E.giveFile = function (field, file) {
+    try {
+      var list = new DataTransfer();
+      list.items.add(file instanceof File ? file : file[0]);
+      field.files = list.files;
+    } catch (error) {
+      try { field.files = file; } catch (again) { return false; }
+    }
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  };
+
   function watchDrops() {
     E.on(window, "dragover", function (e) {
       if (!carriesFiles(e) || e.defaultPrevented) return;
@@ -679,14 +710,7 @@
       markDrop(null);
       var field = soleFileField(), file = e.dataTransfer.files && e.dataTransfer.files[0];
       if (!field || !file) return;
-      try {
-        var list = new DataTransfer();
-        list.items.add(file);
-        field.files = list.files;
-      } catch (error) {
-        try { field.files = e.dataTransfer.files; } catch (again) { return; }
-      }
-      field.dispatchEvent(new Event("change", { bubbles: true }));
+      E.giveFile(field, e.dataTransfer.files);
     });
   }
 

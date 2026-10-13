@@ -122,10 +122,21 @@
           input: {
             type: "object",
             properties: {
-              kind: { type: "string", enum: ["password", "passphrase", "pin"], default: "password" },
+              kind: { type: "string", enum: ["password", "passphrase", "pin"], default: "password", description: "password: letters, digits and symbols, easily confused ones left out. passphrase: words joined by hyphens. pin: digits." },
               length: { type: "integer", minimum: 4, maximum: 128, description: "Characters, or words for a passphrase. 20, 12 and 6 when left out." },
-              count: { type: "integer", minimum: 1, maximum: 100, default: 1 }
-            }
+              count: { type: "integer", minimum: 1, maximum: 100, default: 1, description: "How many to make." }
+            },
+            additionalProperties: false,
+            examples: [{ kind: "password", length: 24 }, { kind: "passphrase", length: 6, count: 3 }]
+          },
+          output: {
+            type: "object",
+            properties: {
+              values: { type: "array", items: { type: "string" } },
+              strength: { type: "string", description: "Bits of randomness in each, such as \"121 bits of randomness per value\"." }
+            },
+            required: ["values", "strength"],
+            additionalProperties: false
           },
           readOnly: true,
           compute: function (args) {

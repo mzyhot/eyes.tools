@@ -15,6 +15,7 @@
 /functions/
 /github-webhook.mjs
 /mcp-server.mjs
+/mcp-worker.mjs
 /package-lock.json
 /public-files.mjs
 /request-origin.mjs

@@ -17,15 +17,20 @@
   with `node scripts/static-routes.mjs`.
 - `api-modules.mjs` lists the APIs the Node server mounts; the router matches a
   prefix and knows nothing else about them.
-- `mcp-server.mjs` answers agents at `/mcp` by running the block each tool page
-  marks `core`, so that block must use no DOM and no `E`, only the page's
-  `deps` and published files it loads through the server's `eyesLoadScript`
-  and `eyesLoadBytes`. Tools that need the visitor's own file or scratchpad
-  stay outside it and are offered on the page alone.
-- `fmt/` holds clean code's formatters, generated with their notices by
-  `node scripts/vendor-formatters.mjs` from the versions pinned there; never
-  edit them by hand. The WebAssembly ones are why every policy's `script-src`
-  allows `'wasm-unsafe-eval'`.
+- `mcp-server.mjs` answers agents at `/mcp` by running, in the worker threads
+  of `mcp-worker.mjs`, the block each tool page marks `core`, so that block
+  must use no DOM and no `E`, only the page's `deps` and published files it
+  loads through the server's `eyesLoadScript` and `eyesLoadBytes`. Each tool
+  in it describes its input (every property, `additionalProperties: false`,
+  `examples`) and its answer (`output`), which `agent-schema.js` checks
+  against on the page and at `/mcp` alike and the tests check every answer
+  against. A tool that takes a file takes it as base64 (`media.js`); only the
+  scratchpad's tools stay outside the core, offered on the page alone.
+- `fmt/` (clean code's formatters) and `codecs/` (the file tools' image codecs
+  and audio decoders) are generated with their notices by
+  `node scripts/vendor.mjs` from the versions pinned there; never edit them by
+  hand. The WebAssembly ones are why every policy's `script-src` allows
+  `'wasm-unsafe-eval'`.
 - `dev-server.mjs` is both the local and self-hosted production server.
   `share-server.mjs` provides only discovery and WebRTC signaling; shared file
   contents must never pass through it.

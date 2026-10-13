@@ -73,9 +73,23 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        value: { type: "string", description: "A date, or a unix timestamp in seconds or milliseconds." },
+        value: { type: "string", maxLength: 100, description: "A date, such as 2026-08-21T12:00:00Z, or a unix timestamp in seconds or milliseconds. The current moment when left out." },
         unit: { type: "string", enum: ["auto", "seconds", "milliseconds"], default: "auto", description: "How to read a bare number; auto picks by size." }
-      }
+      },
+      additionalProperties: false,
+      examples: [{ value: "1767225600" }, { value: "2026-08-21T12:00:00Z" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        utc: { type: "string", description: "Such as Fri, 21 Aug 2026 12:00:00 GMT." },
+        iso8601: { type: "string" },
+        unixSeconds: { type: "integer" },
+        unixMilliseconds: { type: "integer" },
+        readAs: { type: "string", enum: ["seconds", "milliseconds"], description: "How a bare number was read." }
+      },
+      required: ["utc", "iso8601", "unixSeconds", "unixMilliseconds"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {

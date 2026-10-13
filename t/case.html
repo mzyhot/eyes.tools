@@ -79,8 +79,17 @@ E.tool(function () {
       "constant, dot, path, title, sentence, lower and upper.",
     input: {
       type: "object",
-      properties: { text: { type: "string", description: "The text or identifier to rewrite." } },
-      required: ["text"]
+      properties: { text: { type: "string", minLength: 1, maxLength: 1000000, description: "The text or identifier to rewrite, such as \"user id\", userId or USER_ID." } },
+      required: ["text"],
+      additionalProperties: false,
+      examples: [{ text: "hello World" }]
+    },
+    output: {
+      type: "object",
+      description: "The text in each case: helloWorld, HelloWorld, hello_world, hello-world, HELLO_WORLD, hello.world, hello/world, Hello World, Hello world, hello world, HELLO WORLD.",
+      properties: { camel: { type: "string" }, pascal: { type: "string" }, snake: { type: "string" }, kebab: { type: "string" }, constant: { type: "string" }, dot: { type: "string" }, path: { type: "string" }, title: { type: "string" }, sentence: { type: "string" }, lower: { type: "string" }, upper: { type: "string" } },
+      required: ["camel", "pascal", "snake", "kebab", "constant", "dot", "path", "title", "sentence", "lower", "upper"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {

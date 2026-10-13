@@ -55,7 +55,28 @@ E.tool(function () {
     title: "count words and characters",
     description: "Count words, characters (as a person sees them), characters without spaces, Unicode code " +
       "points, UTF-8 bytes, lines and sentences in a text, and estimate its reading time at 200 words a minute.",
-    input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    input: {
+      type: "object",
+      properties: { text: { type: "string", maxLength: 10000000, description: "The text to count." } },
+      required: ["text"],
+      additionalProperties: false,
+      examples: [{ text: "Hello, world. How are you?" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        words: { type: "integer" },
+        characters: { type: "integer", description: "As a person sees them: an emoji or an accented letter is one." },
+        charactersWithoutSpaces: { type: "integer" },
+        codePoints: { type: "integer" },
+        utf8Bytes: { type: "integer" },
+        lines: { type: "integer" },
+        sentences: { type: "integer" },
+        readingTime: { type: "string", description: "At 200 words a minute, such as \"2 min\"." }
+      },
+      required: ["words", "characters", "charactersWithoutSpaces", "codePoints", "utf8Bytes", "lines", "sentences", "readingTime"],
+      additionalProperties: false
+    },
     readOnly: true,
     compute: function (args) { return countText(String(args.text == null ? "" : args.text)); }
   }];

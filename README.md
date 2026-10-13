@@ -39,11 +39,15 @@ drand-client.min.js  vendored official drand client; verifies beacon signatures
 drand-tools.js    shared PRNG, drand TRNG and Web Crypto randomness helpers
 exif-reader.js    vendored ExifReader browser build for image metadata
 fmt/              clean code's formatters, each loaded the first time a language needs it (generated)
+codecs/           image codecs and audio decoders for the file tools, where no browser's are (generated)
 dev-server.mjs    the Node server, for development and self-hosting
 api-modules.mjs   the API registry: one row per same-origin endpoint the server mounts
 public-files.mjs  the files the site publishes; everything else stays private
 share-server.mjs  ephemeral rooms and WebRTC signaling
 mcp-server.mjs    the tools for AI agents, at /mcp, run from each page's own code
+mcp-worker.mjs    the threads mcp-server.mjs runs those tools in
+agent-schema.js   checks what an agent sends a tool, on the pages and at /mcp alike
+media.js          files for the tools that take or give them: base64, types, PNGs, codecs
 github-webhook.mjs  the signed deployment hook, at /api/github/sync
 request-origin.mjs  which pages may call share and the MCP server
 functions/[[path]].js  Cloudflare Pages: answers private paths with the 404 page
@@ -53,7 +57,7 @@ _headers          Cloudflare Pages: the server's security headers (generated)
 vercel.json       Vercel: serves each tool at /<slug>, with those headers (generated)
 .vercelignore     Vercel: leaves private files out of the deployment (generated)
 scripts/          check.mjs (static checks), static-routes.mjs (writes the five files above, and sitemap.xml),
-                  vendor-formatters.mjs (writes fmt/ from pinned npm packages)
+                  vendor.mjs (writes fmt/ and codecs/ from pinned npm packages)
 tests/            Node tests and Playwright browser suites
 deploy/           systemd unit, environment example, and self-hosting notes
 desktop/          the tools as a Tauri desktop app (Rust); see desktop/README.md
@@ -146,23 +150,36 @@ curl -s https://eyes.tools/mcp -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hash_text","arguments":{"text":"hello"}}}'
 ```
 
-`tools/list` names them all: `hash_text`, `convert_case`, `calculate`,
+`tools/list` names all 34: `hash_text`, `convert_case`, `calculate`,
 `clean_code`, `convert_color`, `convert_time_zone`, `generate_passwords`,
-`roll_dice`, `make_qr_code` and the rest. A call sends its input to the server, which uses it
-for the one answer and keeps nothing.
+`roll_dice`, `make_qr_code`, `resize_image`, `make_spectrogram` and the rest.
+Every tool describes each of its inputs, gives an example, and declares the
+shape of its answer (`outputSchema`); the answer comes as structured content
+and as its JSON. Arguments are checked before a tool runs, and a mistake is
+named: `unknown input lenght: this tool takes text, length and count`.
+
+Files go in as base64, or as a data: URL, in the argument the tool names: an
+image to resize, convert or read the metadata of, a file to hash against a
+checksum, a sound to draw as a spectrogram, up to 10 MB. An image a tool makes
+(a QR code, a barcode, a resized photo, a spectrogram) comes back as image
+content, so an assistant can show it, and its base64 stays out of the text. A
+call sends its input to the server, which uses it for the one answer and keeps
+nothing.
 
 **In the browser, through [WebMCP](https://github.com/webmachinelearning/webmcp).**
 Every page offers `find_tool`, and each tool's page offers the tool itself. An
 agent's call there runs on the page's own fields, so the visitor sees what it
-did, and the work stays in the browser as it does for a person. A few tools
-exist only there because they need what only the visitor has: the file they
-chose to hash, resize or read, and their scratchpad.
+did, and the work stays in the browser as it does for a person. A file the
+agent hands a page goes in the page's file field, as if the visitor had chosen
+it; with none, the file tools use the one the visitor chose. The scratchpad's
+tools exist only there, since the pad is the visitor's.
 
 Both are the same code. Each tool page keeps its logic in a block marked
 `core`, ending with the `AGENT_TOOLS` it offers; the page registers them with
-`E.agentTools` in `s.js` (a no-op where the browser lacks WebMCP), and
-`mcp-server.mjs` runs the same block on the server. Share offers agents
-nothing: a transfer needs a person on each device.
+`E.agentTools` in `s.js` (a no-op where the browser lacks WebMCP), and the MCP
+server runs the same block in worker threads, off the thread that serves
+everything else. Share offers agents nothing: a transfer needs a person on each
+device.
 
 ## Deploying
 
@@ -236,6 +253,7 @@ before publishing a copy.
 The vendored `qrcode.min.js` (MIT, with a local UTF-8 fix),
 `drand-client.min.js` (MIT/Apache-2.0), `exif-reader.js` (MPL-2.0), and the
 Geist fonts in `fonts/` (SIL OFL 1.1) keep their own licenses, collected in
-[THIRDPARTYLICENSES](THIRDPARTYLICENSES). The formatters in `fmt/` keep theirs
-too; [fmt/NOTICES.txt](fmt/NOTICES.txt) lists what each file contains, with
+[THIRDPARTYLICENSES](THIRDPARTYLICENSES). The formatters in `fmt/` and the codecs
+in `codecs/` keep theirs too; [fmt/NOTICES.txt](fmt/NOTICES.txt) and
+[codecs/NOTICES.txt](codecs/NOTICES.txt) list what each file contains, with
 every license text.

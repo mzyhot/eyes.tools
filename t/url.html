@@ -67,7 +67,29 @@
           name: "parse_url",
           title: "take a url apart",
           description: "Split an absolute URL into scheme, user, host, port, path, query, fragment and decoded query parameters.",
-          input: { type: "object", properties: { url: { type: "string", description: "An absolute URL, scheme included." } }, required: ["url"] },
+          input: {
+            type: "object",
+            properties: { url: { type: "string", minLength: 1, maxLength: 100000, description: "An absolute URL, scheme included." } },
+            required: ["url"],
+            additionalProperties: false,
+            examples: [{ url: "https://user@example.com:8080/a/b?q=one%20two&q=3#top" }]
+          },
+          output: {
+            type: "object",
+            properties: {
+              scheme: { type: "string" }, username: { type: "string" }, password: { type: "string" },
+              host: { type: "string" }, port: { type: "string", description: "Empty when the scheme's usual port." },
+              path: { type: "string" },
+              query: { type: "string", description: "With its ?, as written." },
+              fragment: { type: "string", description: "With its #, as written." },
+              parameters: {
+                type: "array", description: "The query's parameters, decoded, in order; a name may repeat.",
+                items: { type: "object", properties: { name: { type: "string" }, value: { type: "string" } }, required: ["name", "value"], additionalProperties: false }
+              }
+            },
+            required: ["scheme", "username", "password", "host", "port", "path", "query", "fragment", "parameters"],
+            additionalProperties: false
+          },
           readOnly: true,
           compute: function (args) { return parseUrl(text(args.url)); }
         }, {
@@ -77,9 +99,15 @@
             "encoding, spaces become + as in submitted forms.",
           input: {
             type: "object",
-            properties: { text: { type: "string" }, formEncoding: { type: "boolean", default: false } },
-            required: ["text"]
+            properties: {
+              text: { type: "string", maxLength: 1000000, description: "The text to encode." },
+              formEncoding: { type: "boolean", default: false, description: "Spaces as +, as a submitted form writes them." }
+            },
+            required: ["text"],
+            additionalProperties: false,
+            examples: [{ text: "café & crème" }]
           },
+          output: { type: "object", properties: { encoded: { type: "string" } }, required: ["encoded"], additionalProperties: false },
           readOnly: true,
           compute: function (args) { return { encoded: percentEncode(text(args.text), !!args.formEncoding) }; }
         }, {
@@ -88,9 +116,15 @@
           description: "Decode percent-encoded text from a URL. With form encoding, + is read as a space.",
           input: {
             type: "object",
-            properties: { text: { type: "string" }, formEncoding: { type: "boolean", default: false } },
-            required: ["text"]
+            properties: {
+              text: { type: "string", maxLength: 1000000, description: "The percent-encoded text." },
+              formEncoding: { type: "boolean", default: false, description: "Read + as a space, as a submitted form means it." }
+            },
+            required: ["text"],
+            additionalProperties: false,
+            examples: [{ text: "caf%C3%A9+%26+cr%C3%A8me", formEncoding: true }]
           },
+          output: { type: "object", properties: { decoded: { type: "string" } }, required: ["decoded"], additionalProperties: false },
           readOnly: true,
           compute: function (args) { return { decoded: percentDecode(text(args.text), !!args.formEncoding) }; }
         }];

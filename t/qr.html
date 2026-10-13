@@ -39,7 +39,8 @@ E.tool(function () {
      Pure but for the encoder, which wants an element to draw into and gets
      a throwaway one. The site's MCP server (mcp-server.mjs) runs this block
      on its own, so an agent that never opens the page gets the same code.
-     AGENT_TOOLS is what the page and the server both offer. */
+     AGENT_TOOLS is what the page and the server both offer; media.js writes
+     the PNG. */
 
   var LEVELS = { low: "L", medium: "M", quartile: "Q", high: "H" }, SIZES = [192, 256, 384, 512];
 
@@ -69,19 +70,48 @@ E.tool(function () {
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="' + paper + '"/><path d="' + path + '" fill="' + ink + '"/></svg>';
   }
 
+  /* The squares as pixels, black on white, for a PNG. */
+  function qrPixels(squares, size) {
+    var pixels = new Uint8Array(size * size * 4).fill(255);
+    squares.forEach(function (q) {
+      for (var y = q[1]; y < q[1] + q[3]; y++) for (var x = q[0]; x < q[0] + q[2]; x++) {
+        var at = (y * size + x) * 4;
+        pixels[at] = pixels[at + 1] = pixels[at + 2] = 0;
+      }
+    });
+    return pixels;
+  }
+
   var AGENT_TOOLS = [{
     name: "make_qr_code",
     title: "make a qr code",
-    description: "Make a QR code for text or a link, returned as svg markup. Higher error correction " +
-      "survives more damage but holds less text.",
+    description: "Make a QR code for text or a link, black on white with a one-module border: a PNG image to show " +
+      "or save, and the same code as SVG markup. Higher error correction survives more damage but holds less text.",
     input: {
       type: "object",
       properties: {
-        text: { type: "string", description: "The text or link to encode." },
-        size: { type: "integer", enum: SIZES, default: 256, description: "Pixels a side." },
-        errorCorrection: { type: "string", enum: ["low", "medium", "quartile", "high"], default: "medium" }
+        text: { type: "string", minLength: 1, maxLength: 7089, description: "The text or link to encode." },
+        size: { type: "integer", enum: SIZES, default: 256, description: "The image's width and height in pixels, border included." },
+        errorCorrection: {
+          type: "string", enum: ["low", "medium", "quartile", "high"], default: "medium",
+          description: "How much of the code may be damaged and still scan: about 7%, 15%, 25% or 30%."
+        }
       },
-      required: ["text"]
+      required: ["text"],
+      additionalProperties: false,
+      examples: [{ text: "https://eyes.tools", size: 256, errorCorrection: "medium" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        size: { type: "integer", description: "Pixels a side." },
+        errorCorrection: { type: "string" },
+        modules: { type: "integer", description: "The code's modules a side, border left out." },
+        image: Media.FILE,
+        svg: { type: "string", description: "The same code as SVG markup." }
+      },
+      required: ["size", "errorCorrection", "modules", "image", "svg"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {
@@ -90,7 +120,13 @@ E.tool(function () {
       if (SIZES.indexOf(size) < 0) throw new Error("size must be 192, 256, 384 or 512");
       if (!Object.prototype.hasOwnProperty.call(LEVELS, level)) throw new Error("error correction must be low, medium, quartile or high");
       if (!text) throw new Error("give some text to encode");
-      return { svg: qrSvg(qrSquares(qrModel(text, LEVELS[level]), size), size, "#000000", "#ffffff") };
+      var model = qrModel(text, LEVELS[level]), squares = qrSquares(model, size);
+      return Media.png(qrPixels(squares, size), size, size).then(function (png) {
+        return {
+          size: size, errorCorrection: level, modules: model.getModuleCount(),
+          image: Media.file("qr.png", "image/png", png), svg: qrSvg(squares, size, "#000000", "#ffffff")
+        };
+      });
     }
   }];
 
@@ -146,16 +182,15 @@ E.tool(function () {
   run();
 
   /* For agents in the browser: the code is drawn on the page, where it can
-     be scanned or saved, and the agent gets the same svg the page offers. */
+     be scanned or saved, and the agent gets the core's answer, as over MCP. */
   E.agentTools(AGENT_TOOLS, {
     make_qr_code: function (args) {
-      AGENT_TOOLS[0].compute(args);
+      var answer = AGENT_TOOLS[0].compute(args);
       E.qs("#size").value = String(args.size == null ? 256 : args.size);
       E.qs("#level").value = LEVELS[args.errorCorrection == null ? "medium" : String(args.errorCorrection)];
       input.value = String(args.text);
       run();
-      if (error.textContent) throw new Error(error.textContent);
-      return { svg: svgText };
+      return answer;
     }
   });
 });

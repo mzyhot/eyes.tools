@@ -84,8 +84,16 @@ E.tool(function () {
       properties: {
         count: { type: "integer", minimum: 1, maximum: 10000, default: 3, description: "How many paragraphs, sentences or words; at most 100, 1,000 and 10,000." },
         unit: { type: "string", enum: UNITS, default: "paragraphs" },
-        paragraphLength: { type: "string", enum: LENGTHS, default: "medium" }
-      }
+        paragraphLength: { type: "string", enum: LENGTHS, default: "medium", description: "For paragraphs: how many sentences each has." }
+      },
+      additionalProperties: false,
+      examples: [{ count: 2, unit: "paragraphs", paragraphLength: "short" }, { count: 12, unit: "words" }]
+    },
+    output: {
+      type: "object",
+      properties: { text: { type: "string", description: "Paragraphs are separated by blank lines." } },
+      required: ["text"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {

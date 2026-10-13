@@ -330,42 +330,143 @@ E.tool(function () {
     return "crypto.subtle refused the digest (" + ((e && e.name) || "unknown error") + ").";
   }
 
-  var TEXT_CAP = 64 * 1024 * 1024;
+  var TEXT_CAP = 64 * 1024 * 1024, FILE_CAP = 10 * 1024 * 1024;
 
-  /**
-   * Every digest of a text's UTF-8 bytes.
-   * @returns {Promise<Object<string, string>>} Algorithm label → digest.
-   * @throws {Error} For text over TEXT_CAP.
-   */
-  function hashText(text, encoding, uppercase) {
-    var bytes = enc.encode(text);
-    if (bytes.length > TEXT_CAP) throw new Error("the text is over the " + TEXT_CAP / 1048576 + " MB limit");
+  /* Every digest of some bytes, as raw bytes: algorithm key → digest. */
+  function digestBytes(bytes) {
     var store = { md5: new MD5().update(bytes).digest() };
     return shas(bytes).then(function (out) {
       for (var k in out) store[k] = out[k];
-      return formatDigests(store, encoding, uppercase);
+      return store;
     }, function (e) { throw new Error(subtleMsg(e)); });
+  }
+
+  /* first whitespace-delimited token wins (checksum-file lines), then the
+     whole value with all whitespace removed (digests split into groups)  */
+  function parseExpected(raw) {
+    var trimmed = String(raw).trim();
+    var labeled = trimmed.match(/^(md5|sha-?1|sha-?256|sha-?384|sha-?512)(?:\s*\([^\r\n]*\)\s*=\s*|\s*[:=]\s*|\s+)(\S+)/i);
+    var declared = labeled ? labeled[1].toLowerCase().replace(/-/g, "") : null;
+    var first = trimmed.split(/\s+/)[0] || "";
+    var joined = trimmed.replace(/\s+/g, "");
+    var cands = first ? [first] : [];
+    if (labeled) cands.unshift(labeled[2]);
+    if (joined && joined !== first) cands.push(joined);
+
+    for (var i = 0; i < cands.length; i++) {
+      var c = cands[i], b;
+      if (/^[0-9a-fA-F]+$/.test(c) && c.length % 2 === 0) {
+        b = unhex(c.toLowerCase());
+        if (BY_LEN[b.length]) return declared && declared !== BY_LEN[b.length].key ? null : { bytes: b, enc: "hex", algo: BY_LEN[b.length] };
+      }
+      if (/^[A-Za-z0-9+/\-_]+={0,2}$/.test(c)) {
+        try { b = unb64(c); } catch (e) { b = null; }
+        if (b && BY_LEN[b.length]) return declared && declared !== BY_LEN[b.length].key ? null : { bytes: b, enc: "base64", algo: BY_LEN[b.length] };
+      }
+    }
+    return null;
+  }
+
+  /* What an agent's `compare` says against digests made: which algorithm
+     it is, how it was written, and whether it matches. */
+  function expectedDigest(raw) {
+    var expected = parseExpected(raw);
+    if (!expected) throw new Error("compare is not a digest of a known length: give 32, 40, 64, 96 or 128 hex characters, or the same bytes in base64");
+    return expected;
+  }
+  function comparison(expected, store) {
+    return { algorithm: expected.algo.label, encoding: expected.enc, match: same(expected.bytes, store[expected.algo.key]) };
+  }
+
+  /* An agent's choices, checked, and the answer built from a store of digests. */
+  function options(args) {
+    var encoding = args.encoding == null ? "hex" : String(args.encoding);
+    if (encoding !== "hex" && encoding !== "base64") throw new Error("encoding must be hex or base64");
+    return { encoding: encoding, uppercase: !!args.uppercase, expected: args.compare == null ? null : expectedDigest(String(args.compare)) };
+  }
+  function answer(store, chosen, out) {
+    var digests = formatDigests(store, chosen.encoding, chosen.uppercase);
+    for (var k in digests) out[k] = digests[k];
+    if (chosen.expected) out.comparison = comparison(chosen.expected, store);
+    return out;
+  }
+
+  var CHOICES = {
+    encoding: { type: "string", enum: ["hex", "base64"], default: "hex", description: "How each digest is written." },
+    uppercase: { type: "boolean", default: false, description: "Uppercase hex; base64 has no case to choose." },
+    compare: {
+      type: "string", maxLength: 1000,
+      description: "A digest to check against, such as one a download page lists: hex or base64, alone or as a line of a " +
+        "checksum file (\"sha256: …\", \"SHA256 (file) = …\"). Its length says which algorithm it is."
+    }
+  };
+  var DIGESTS = {
+    md5: { type: "string" }, "sha-1": { type: "string" }, "sha-256": { type: "string" }, "sha-384": { type: "string" }, "sha-512": { type: "string" },
+    comparison: {
+      type: "object", description: "Present when compare was given.",
+      properties: {
+        algorithm: { type: "string", enum: ["md5", "sha-1", "sha-256", "sha-384", "sha-512"] },
+        encoding: { type: "string", enum: ["hex", "base64"], description: "How compare was written." },
+        match: { type: "boolean" }
+      },
+      required: ["algorithm", "encoding", "match"],
+      additionalProperties: false
+    }
+  };
+  function shape(extra) {
+    var properties = {};
+    for (var k in extra) properties[k] = extra[k];
+    for (k in DIGESTS) properties[k] = DIGESTS[k];
+    return { type: "object", properties: properties, required: Object.keys(extra).concat(["md5", "sha-1", "sha-256", "sha-384", "sha-512"]), additionalProperties: false };
   }
 
   var AGENT_TOOLS = [{
     name: "hash_text",
     title: "hash text",
-    description: "Compute the md5, sha-1, sha-256, sha-384 and sha-512 digests of a text's UTF-8 bytes, " +
-      "in hex or base64. md5 is fine for spotting accidental corruption but broken for security.",
+    description: "Compute the md5, sha-1, sha-256, sha-384 and sha-512 digests of a text's UTF-8 bytes, in hex or " +
+      "base64, and check one against a digest you have. md5 is fine for spotting accidental corruption but broken for security.",
     input: {
       type: "object",
       properties: {
-        text: { type: "string" },
-        encoding: { type: "string", enum: ["hex", "base64"], default: "hex" },
-        uppercase: { type: "boolean", default: false, description: "Uppercase hex." }
+        text: { type: "string", description: "The text; its UTF-8 bytes are hashed, as they are, with no trimming." },
+        encoding: CHOICES.encoding, uppercase: CHOICES.uppercase, compare: CHOICES.compare
       },
-      required: ["text"]
+      required: ["text"],
+      additionalProperties: false,
+      examples: [{ text: "hello", encoding: "hex", compare: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" }]
     },
+    output: shape({}),
     readOnly: true,
     compute: function (args) {
-      var encoding = args.encoding == null ? "hex" : String(args.encoding);
-      if (encoding !== "hex" && encoding !== "base64") throw new Error("encoding must be hex or base64");
-      return hashText(String(args.text == null ? "" : args.text), encoding, !!args.uppercase);
+      var chosen = options(args);
+      var bytes = enc.encode(String(args.text == null ? "" : args.text));
+      if (bytes.length > TEXT_CAP) throw new Error("the text is over the " + TEXT_CAP / 1048576 + " MB limit");
+      return digestBytes(bytes).then(function (store) { return answer(store, chosen, {}); });
+    }
+  }, {
+    name: "hash_file",
+    title: "hash a file",
+    description: "Compute the md5, sha-1, sha-256, sha-384 and sha-512 digests of a file, such as a download whose " +
+      "checksum you want to check, and compare one with the digest you were given. Send the file as base64, up to 10 MB; " +
+      "on the hash page the file the visitor chose is hashed when none is sent, at any size, without leaving the browser.",
+    input: {
+      type: "object",
+      properties: {
+        file: {
+          type: "string", contentEncoding: "base64", maxLength: 14000000,
+          description: "The file, as base64 or a data: URL. On the hash page, leave it out to use the file the visitor chose."
+        },
+        encoding: CHOICES.encoding, uppercase: CHOICES.uppercase, compare: CHOICES.compare
+      },
+      required: ["file"],
+      additionalProperties: false,
+      examples: [{ file: "aGVsbG8=", compare: "5d41402abc4b2a76b9719d911017c592" }]
+    },
+    output: shape({ bytes: { type: "integer", minimum: 0, description: "The file's size." } }),
+    readOnly: true,
+    compute: function (args) {
+      var chosen = options(args), bytes = Media.bytes(args.file, "file", FILE_CAP);
+      return digestBytes(bytes).then(function (store) { return answer(store, chosen, { bytes: bytes.length }); });
     }
   }];
 
@@ -614,32 +715,6 @@ E.tool(function () {
 
   /* ── compare ──────────────────────────────────────────── */
 
-  /* first whitespace-delimited token wins (checksum-file lines), then the
-     whole value with all whitespace removed (digests split into groups)  */
-  function parseExpected(raw) {
-    var trimmed = String(raw).trim();
-    var labeled = trimmed.match(/^(md5|sha-?1|sha-?256|sha-?384|sha-?512)(?:\s*\([^\r\n]*\)\s*=\s*|\s*[:=]\s*|\s+)(\S+)/i);
-    var declared = labeled ? labeled[1].toLowerCase().replace(/-/g, "") : null;
-    var first = trimmed.split(/\s+/)[0] || "";
-    var joined = trimmed.replace(/\s+/g, "");
-    var cands = first ? [first] : [];
-    if (labeled) cands.unshift(labeled[2]);
-    if (joined && joined !== first) cands.push(joined);
-
-    for (var i = 0; i < cands.length; i++) {
-      var c = cands[i], b;
-      if (/^[0-9a-fA-F]+$/.test(c) && c.length % 2 === 0) {
-        b = unhex(c.toLowerCase());
-        if (BY_LEN[b.length]) return declared && declared !== BY_LEN[b.length].key ? null : { bytes: b, enc: "hex", algo: BY_LEN[b.length] };
-      }
-      if (/^[A-Za-z0-9+/\-_]+={0,2}$/.test(c)) {
-        try { b = unb64(c); } catch (e) { b = null; }
-        if (b && BY_LEN[b.length]) return declared && declared !== BY_LEN[b.length].key ? null : { bytes: b, enc: "base64", algo: BY_LEN[b.length] };
-      }
-    }
-    return null;
-  }
-
   function verdict(dd, expected, mine, missing) {
     dd.textContent = "";
     if (!mine) { dd.appendChild(E.el("span", { class: "dim", text: missing })); return; }
@@ -701,7 +776,10 @@ E.tool(function () {
     return formatDigests(store, encMode() === "b64" ? "base64" : "hex", ucBox.checked);
   }
 
-  /* The core's tool, with the text and digests shown on the page too. */
+  /* The core's tools, with what they hash shown on the page too. A file an
+     agent sends goes in the page's file field, as if the visitor had chosen it,
+     and is hashed there in the browser; with none, the visitor's own file is,
+     at any size. Either way the answer is the core's shape. */
   E.agentTools(AGENT_TOOLS, {
     hash_text: function (args) {
       var result = AGENT_TOOLS[0].compute(args);
@@ -709,41 +787,28 @@ E.tool(function () {
       input.value = String(args.text == null ? "" : args.text);
       doText();
       return result;
-    }
-  });
-
-  /* The file the visitor chose or dropped on the page, hashed here in the
-     browser: the agent gets digests, never the file. */
-  E.agentTool({
-    name: "hash_chosen_file",
-    title: "hash the file on the page",
-    description: "Give the digests of the file the visitor has chosen or dropped on this page, once hashing " +
-      "finishes. The file itself is never sent anywhere. If no file is chosen, ask the visitor to choose " +
-      "or drop one here.",
-    input: {
-      type: "object",
-      properties: {
-        encoding: { type: "string", enum: ["hex", "base64"], default: "hex" },
-        uppercase: { type: "boolean", default: false }
-      }
     },
-    readOnly: true,
-    run: function (args, signal) {
+    hash_file: function (args, signal) {
+      var chosen = options(args);
       setEncoding(args.encoding, args.uppercase);
+      if (args.file != null) {
+        var bytes = Media.bytes(args.file, "file", FILE_CAP);
+        E.giveFile(fileIn, new File([bytes], "file from the agent", { type: Media.type(bytes) || "application/octet-stream" }));
+      }
       paint();
-      if (!current) throw new Error("no file is chosen on the page; ask the visitor to choose or drop one");
+      if (!current) throw new Error("no file is chosen on the page; send one as base64, or ask the visitor to choose or drop one");
       return new Promise(function (resolve, reject) {
         (function wait() {
           if (signal && signal.aborted) { reject(new Error("cancelled")); return; }
           if (runBtn.dataset.state === "loading") { setTimeout(wait, 100); return; }
           if (!fileD.md5) { reject(new Error(ferr.textContent || "the file could not be read")); return; }
-          var result = { file: current.name, bytes: current.size, digests: digests(fileD) };
+          var result = answer(fileD, chosen, { bytes: current.size });
           if (ferr.textContent) result.note = ferr.textContent;
           resolve(result);
         })();
       });
     }
-  });
+  }, ["file"]);
 });
 </script>
 </body>

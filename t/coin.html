@@ -85,9 +85,25 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        count: { type: "integer", minimum: 1, maximum: 100, default: 1 },
-        source: { type: "string", enum: SOURCES, default: "csrng" }
-      }
+        count: { type: "integer", minimum: 1, maximum: 100, default: 1, description: "How many coins." },
+        source: { type: "string", enum: SOURCES, default: "csrng", description: "csrng: Web Crypto, fit for secrets. trng: a drand beacon, verified, that anyone can check later by its round; reaches the network. prng: Math.random, predictable." }
+      },
+      additionalProperties: false,
+      examples: [{ count: 3 }, { count: 1, source: "trng" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        flips: { type: "array", items: { type: "string", enum: ["heads", "tails"] } },
+        heads: { type: "integer" },
+        tails: { type: "integer" },
+        source: { type: "string", enum: ["csrng", "trng", "prng"] },
+        verified: { type: "boolean", description: "True for trng: the beacon's signature was checked." },
+        round: { type: "integer", description: "trng only: the drand round drawn from." },
+        chainHash: { type: "string", description: "trng only: the drand chain the round belongs to." }
+      },
+      required: ["flips", "heads", "tails", "source", "verified"],
+      additionalProperties: false
     },
     readOnly: true,
     network: true,
