@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { runInNewContext } from 'node:vm';
 
-/* The color page's core, run as the MCP server runs it. */
+/* The color page's core, run in this realm. In a vm context, as the MCP
+   server runs it, every lookup of Math goes through the context's global and
+   this grid takes minutes; tests/mcp-server.test.mjs covers the server's way. */
 const html = await readFile(new URL('../t/color.html', import.meta.url), 'utf8');
-const scope = {};
-runInNewContext(/\/\* ── core\b[^]*?\*\/([^]*?)\/\* ── end core\b/.exec(html)[1], scope);
+const scope = new Function(/\/\* ── core\b[^]*?\*\/([^]*?)\/\* ── end core\b/.exec(html)[1] + '\nreturn { AGENT_TOOLS, room, fromOklab };')();
 const convert = scope.AGENT_TOOLS.find(tool => tool.name === 'convert_color').compute;
 
 /* oklch() back to 8-bit sRGB with the reference code of CSS Color 4
