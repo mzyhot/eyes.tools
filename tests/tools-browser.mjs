@@ -166,6 +166,30 @@ try {
     await fill('#color', 'hwb(240 0% 0%)'); await has('#hex', '#0000ff'); assert.equal(await page.locator('#pick').inputValue(), '#0000ff');
     await fill('#color', 'broken'); assert.ok(await text('#err')); assert.equal(await page.locator('#copy-hex').isDisabled(), true);
   });
+  await check('oklch the color page writes paints back as the same color, dark channels beside bright ones included', async () => {
+    /* The page's own core, on a blank page (a served page's policy forbids
+       adding a script), painted by Chromium: it reads oklch() a little off the
+       exact value, which costs a dark channel most of a step. */
+    const html = await readFile(new URL('../t/color.html', import.meta.url), 'utf8');
+    const core = /\/\* ── core\b[^]*?\*\/([^]*?)\/\* ── end core\b/.exec(html)[1];
+    const blank = await context.newPage();
+    try {
+      await blank.goto('about:blank');
+      await blank.addScriptTag({ content: core + '\nwindow.toOklch = oklch;' });
+      const misses = await blank.evaluate(() => {
+        const ctx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
+        const found = [];
+        for (let dark = 0; dark <= 12; dark++) for (let at = 0; at < 3; at++) for (let p = 3; p < 256; p += 7) for (let q = 3; q < 256; q += 7) {
+          const color = at === 0 ? [dark, p, q] : at === 1 ? [p, dark, q] : [p, q, dark];
+          ctx.fillStyle = '#000'; ctx.fillStyle = window.toOklch(color); ctx.fillRect(0, 0, 1, 1);
+          const back = [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+          if (back.join() !== color.join() && found.length < 5) found.push(color + ' became ' + back + ' through ' + ctx.fillStyle);
+        }
+        return found;
+      });
+      assert.deepEqual(misses, []);
+    } finally { await blank.close(); }
+  });
   await check('lorem word count and password/PIN generation', async () => {
     await go('lorem'); await page.locator('#unit').selectOption('words'); await fill('#n', '7'); await page.waitForFunction(() => document.querySelector('#out').textContent.trim().split(/\s+/).length === 7);
     await go('pass'); let rows = await page.locator('#out .res__v').allTextContents(); assert.equal(rows.length, 5); assert.ok(rows.every(r => r.length === 20));

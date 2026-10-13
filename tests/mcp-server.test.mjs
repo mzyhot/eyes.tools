@@ -67,7 +67,7 @@ test('MCP: initialize, list and call the pages\' tools over Streamable HTTP', as
   assert.equal((await call('convert_case', { text: 'hello World' })).structuredContent.snake, 'hello_world');
   assert.equal((await call('calculate', { expression: '2^3^2' })).structuredContent.result, 512);
   assert.equal((await call('convert_units', { value: 0, from: 'celsius', to: '°F' })).structuredContent.result, 32);
-  assert.deepEqual((await call('convert_color', { color: 'red' })).structuredContent, { hex: '#ff0000', rgb: 'rgb(255 0 0)', hsl: 'hsl(0 100% 50%)', oklch: 'oklch(62.8% 0.2577 29.23)' });
+  assert.deepEqual((await call('convert_color', { color: 'red' })).structuredContent, { hex: '#ff0000', rgb: 'rgb(255 0 0)', hsl: 'hsl(0 100% 50%)', oklch: 'oklch(62.8% 0.25768 29.23)' });
   assert.equal((await call('base64_decode', { base64: 'aGk' })).structuredContent.text, 'hi');
   // Clean code loads each formatter on the server as its page does: Prettier,
   // a WebAssembly one, and sql-formatter, and a formatter's error is a result.

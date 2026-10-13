@@ -164,24 +164,123 @@
             Math.round(saturation * 100) + "% " + Math.round(lightness * 100) + "%)";
         }
 
-        /* sRGB to OKLCH, by way of linear light and Björn Ottosson's OKLab. A
-           grey has no hue, so it is written as 0. */
+        /* An sRGB channel, 0 to 255 and a little past either end, as linear light. */
+        function linear(value) {
+          value /= 255;
+          return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+        }
+
+        /* OKLab back to linear sRGB, with the matrices of CSS Color 4. */
+        function fromOklab(lab) {
+          var l = lab[0] + 0.3963377773761749 * lab[1] + 0.2158037573099136 * lab[2];
+          var m = lab[0] - 0.1055613458156586 * lab[1] - 0.0638541728258133 * lab[2];
+          var s = lab[0] - 0.0894841775298119 * lab[1] - 1.2914855480194092 * lab[2];
+          l = l * l * l; m = m * m * m; s = s * s * s;
+          var x = 1.2268798758459243 * l - 0.5578149944602171 * m + 0.2813910456659647 * s;
+          var y = -0.0405757452148008 * l + 1.1122868032803170 * m - 0.0717110580655164 * s;
+          var z = -0.0763729366746601 * l - 0.4214933324022432 * m + 1.5869240198367816 * s;
+          return [
+            12831 / 3959 * x - 329 / 214 * y - 1974 / 3959 * z,
+            -851781 / 878810 * x + 1648619 / 878810 * y + 36519 / 878810 * z,
+            705 / 12673 * x - 2585 / 12673 * y + 705 / 667 * z
+          ];
+        }
+
+        /* How far a browser's own reading of oklch() may land from the exact
+           value of a channel, low and high, in linear light. Chromium 141 goes
+           by way of XYZ D50 in single precision and reads a dark channel up to
+           0.000193 low and 0.000029 high, most of an 8-bit step there, and a
+           bright one up to about 0.0003 either way; this leaves room past both. */
+        function drift(lin) {
+          return [-0.000215 - 0.00012 * lin, 0.000045 + 0.00035 * lin];
+        }
+
+        /* How safely an oklch() comes back to `color`: the least room, in steps,
+           any channel has before it would round to its neighbour, once exactly
+           (`exact`) and once read with the drift above (`read`). A browser clamps
+           what falls below 0 or above 255, so there drift costs nothing. */
+        function room(lin, color) {
+          var exact = Infinity, read = Infinity;
+          for (var k = 0; k < 3; k++) {
+            var low = linear(color[k] - 0.5), high = linear(color[k] + 0.5), step = high - low, off = drift(lin[k]);
+            exact = Math.min(exact, (lin[k] - low) / step, (high - lin[k]) / step);
+            read = Math.min(read,
+              color[k] === 0 ? Infinity : (lin[k] + off[0] - low) / step,
+              color[k] === 255 ? Infinity : (high - lin[k] - off[1]) / step);
+          }
+          return { exact: exact, read: Math.min(exact, read) };
+        }
+
+        /* One way of writing a color, rounded to the digits the page shows (and
+           `finer` more of each), with how safely it comes back. A grey has no
+           hue, so it is written as 0. */
+        function written(lightness, chroma, hue, color, finer) {
+          lightness = Number(trim(lightness * 100, 2 + finer));
+          chroma = chroma < 0.0001 ? 0 : Number(trim(chroma, 5 + finer));
+          hue = chroma ? Number(trim(((hue % 360) + 360) % 360, 2 + finer)) : 0;
+          var radians = hue * Math.PI / 180;
+          return {
+            text: "oklch(" + lightness + "% " + chroma + " " + hue + ")",
+            room: room(fromOklab([lightness / 100, chroma * Math.cos(radians), chroma * Math.sin(radians)]), color)
+          };
+        }
+
+        /* sRGB to OKLCH with the matrices of CSS Color 4: linear light, then XYZ,
+           then OKLab. Written plainly, every one of the 16,777,216 colors comes
+           back exactly. Read by a browser with the drift above, a dark channel
+           can still slip a step, so where one would, this aims each channel at
+           the middle of where it is safe and writes the nearest digits that
+           land there, with a digit more of each, and more, where a dark
+           channel beside a bright one leaves too little room for fewer. Every
+           color has been checked both ways, and in Chromium; the tests keep a
+           grid of them to it. */
         function oklch(color) {
-          var lin = color.map(function (value) {
-            value /= 255;
-            return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+          var lin = color.map(linear);
+          var x = 506752 / 1228815 * lin[0] + 87881 / 245763 * lin[1] + 12673 / 70218 * lin[2];
+          var y = 87098 / 409605 * lin[0] + 175762 / 245763 * lin[1] + 12673 / 175545 * lin[2];
+          var z = 7918 / 409605 * lin[0] + 87881 / 737289 * lin[1] + 1001167 / 1053270 * lin[2];
+          var l = Math.cbrt(0.8190224379967030 * x + 0.3619062600528904 * y - 0.1288737815209879 * z);
+          var m = Math.cbrt(0.0329836539323885 * x + 0.9292868615863434 * y + 0.0361446663506424 * z);
+          var s = Math.cbrt(0.0481771893596242 * x + 0.2642395317527308 * y + 0.6335478284694309 * z);
+          var lab = [
+            0.2104542683093140 * l + 0.7936177747023054 * m - 0.0040720430116193 * s,
+            1.9779985324311684 * l - 2.4285922420485799 * m + 0.4505937096174110 * s,
+            0.0259040424655478 * l + 0.7827717124575296 * m - 0.8086757549230774 * s
+          ];
+          var best = written(lab[0], Math.sqrt(lab[1] * lab[1] + lab[2] * lab[2]), Math.atan2(lab[2], lab[1]) * 180 / Math.PI, color, 0);
+          if (best.room.read > 0) return best.text;
+
+          /* Where each channel is safest, read exactly and with drift alike. */
+          var target = color.map(function (value) {
+            var low = linear(value - 0.5), high = linear(value + 0.5), off = drift(linear(value));
+            return ((value === 0 ? low : low - off[0]) + (value === 255 ? high : high - off[1])) / 2;
           });
-          var l = Math.cbrt(0.4122214708 * lin[0] + 0.5363325363 * lin[1] + 0.0514459929 * lin[2]);
-          var m = Math.cbrt(0.2119034982 * lin[0] + 0.6806995451 * lin[1] + 0.1073969566 * lin[2]);
-          var s = Math.cbrt(0.0883024619 * lin[0] + 0.2817188376 * lin[1] + 0.6299787005 * lin[2]);
-          var lightness = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
-          var a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
-          var b = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
-          var chroma = Math.sqrt(a * a + b * b);
-          var hue = chroma < 0.0001 ? 0 : (Math.atan2(b, a) * 180 / Math.PI + 360) % 360;
-          /* Precise enough that a color read back from this comes within one step
-             of where it started. */
-          return "oklch(" + trim(lightness * 100, 2) + "% " + trim(chroma < 0.0001 ? 0 : chroma, 4) + " " + trim(hue, 2) + ")";
+          /* One Newton step in OKLab: how each channel moves with L, a and b. */
+          var h = 1e-7, columns = [0, 1, 2].map(function (axis) {
+            var nudged = lab.slice(); nudged[axis] += h;
+            return fromOklab(nudged).map(function (value, k) { return (value - lin[k]) / h; });
+          });
+          var want = target.map(function (value, k) { return value - lin[k]; });
+          var det = function (a, b, c) {
+            return a[0] * (b[1] * c[2] - b[2] * c[1]) - b[0] * (a[1] * c[2] - a[2] * c[1]) + c[0] * (a[1] * b[2] - a[2] * b[1]);
+          };
+          var whole = det(columns[0], columns[1], columns[2]);
+          var aim = [
+            lab[0] + det(want, columns[1], columns[2]) / whole,
+            lab[1] + det(columns[0], want, columns[2]) / whole,
+            lab[2] + det(columns[0], columns[1], want) / whole
+          ];
+          var lightness = aim[0], chroma = Math.sqrt(aim[1] * aim[1] + aim[2] * aim[2]), hue = Math.atan2(aim[2], aim[1]) * 180 / Math.PI;
+          /* The written digits near that aim: the one with the most room wins,
+             as long as it still comes back exactly. Fewest digits first. */
+          for (var finer = 0; finer <= 4 && best.room.read <= 0; finer++) {
+            var unit = Math.pow(10, -finer);
+            for (var dl = -2; dl <= 2; dl++) for (var dc = -2; dc <= 2; dc++) for (var dh = -2; dh <= 2; dh++) {
+              var option = written(lightness + dl * unit / 10000, chroma + dc * unit / 100000, hue + dh * unit / 100, color, finer);
+              if (option.room.exact > 0 && option.room.read > best.room.read) best = option;
+            }
+          }
+          return best.text;
         }
 
         /* Why a value is not a usable color, in the page's words. */
