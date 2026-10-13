@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="../fonts.css">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<style>
+  /* Code keeps its lines: the fields scroll sideways rather than wrap. */
+  #in, #out { min-height: calc(var(--space-16) * 3); white-space: pre; overflow-wrap: normal; tab-size: 4; }
+</style>
+<script src="../site.js"></script>
+</head>
+<body data-tool="code">
+<main class="stack-6">
+  <section>
+    <div class="grid2">
+      <div><label class="lbl" for="lang">language</label><select class="field" id="lang"></select></div>
+      <div><label class="lbl" for="indent">indent</label><select class="field" id="indent"><option value="usual">the language's usual</option><option value="2">2 spaces</option><option value="4">4 spaces</option><option value="tab">tabs</option></select></div>
+    </div>
+    <label class="lbl mt-4" for="in">code</label>
+    <textarea class="field mono" id="in" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+    <div class="row mt-2" id="json-modes" hidden><button class="btn" id="fmt" type="button">clean</button><button class="btn -ghost" id="min" type="button">minify</button><button class="btn -ghost" id="esc" type="button">escape</button><button class="btn -ghost" id="unesc" type="button">unescape</button></div>
+    <p class="err" id="err" role="alert"></p>
+    <p class="hint" id="status" role="status"></p>
+  </section>
+  <section>
+    <div class="out-head"><label class="lbl" for="out">clean</label><span class="row__spacer"></span><button class="tbtn" type="button" data-copy="#out">copy</button><button class="tbtn" id="save" type="button">download</button></div>
+    <textarea class="field mono" id="out" wrap="off" readonly aria-live="polite"></textarea>
+  </section>
+</main>
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+E.tool(function () {
+  "use strict";
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E. The site's MCP server (mcp-server.mjs) runs this
+     block on its own, so an agent that never opens the page gets the same
+     answers. AGENT_TOOLS is what the page and the server both offer. */
+
+  /* Each language's formatter is a published file in fmt/, loaded the first
+     time it is wanted. The MCP server hands the core its own loaders; the page
+     puts its own in their place. A WebAssembly formatter's .wasm comes as
+     bytes. */
+  var loadScript = typeof eyesLoadScript === "function" ? eyesLoadScript : null;
+  var loadBytes = typeof eyesLoadBytes === "function" ? eyesLoadBytes : null;
+
+  /* Engine messages open with a capital ("Unexpected token…"); the site's
+     errors are lowercase. A leading acronym such as JSON is left alone. */
+  function quiet(message) {
+    return /^[A-Z][a-z]/.test(message) ? message.charAt(0).toLowerCase() + message.slice(1) : message;
+  }
+  function formatJSON(source, indent) {
+    // Validate without serializing the parsed values: JSON.stringify would
+    // silently round large integers, normalize exponents, and lose duplicate keys.
+    JSON.parse(source);
+    var tokens = source.match(/"(?:[^"\\]|\\[\s\S])*"|true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],:]/g) || [];
+    if (!indent) return tokens.join("");
+    var parts = [], depth = 0, size = 0;
+    function append(value) {
+      size += value.length;
+      if (size > 8 * 1024 * 1024) throw new Error("formatted output is too large; use minify or reduce the input");
+      parts.push(value);
+    }
+    function line() { append("\n" + indent.repeat(depth)); }
+    tokens.forEach(function (token, i) {
+      if (token === "{" || token === "[") {
+        append(token);
+        if (++depth > 128) throw new Error("json is nested too deeply to format");
+        if (tokens[i + 1] !== "}" && tokens[i + 1] !== "]") line();
+      } else if (token === "}" || token === "]") {
+        depth--;
+        if (tokens[i - 1] !== "{" && tokens[i - 1] !== "[") line();
+        append(token);
+      } else if (token === ",") { append(token); line(); }
+      else append(token === ":" ? ": " : token);
+    });
+    return parts.join("");
+  }
+  /**
+   * One of JSON's four modes over a text.
+   * @param {"format"|"minify"|"escape"|"unescape"} mode
+   * @param {string} text
+   * @param {"usual"|"2"|"4"|"tab"} [indent] For format; usual is 2 spaces.
+   * @returns {string} The result.
+   * @throws {Error} With the lowercase message the page shows.
+   */
+  function transform(mode, text, indent) {
+    try {
+      if (text.length > 2 * 1024 * 1024) throw new Error("keep json input under 2 million characters");
+      if (mode === "escape") return JSON.stringify(text);
+      if (mode === "unescape") {
+        var parsed = JSON.parse(text);
+        if (typeof parsed !== "string") throw new Error("unescape needs a json string enclosed in double quotes");
+        return parsed;
+      }
+      return formatJSON(text, mode === "minify" ? "" : indent === "tab" ? "\t" : " ".repeat(indent === "4" ? 4 : 2));
+    } catch (e) {
+      throw new Error(quiet(e.message || "invalid json"));
+    }
+  }
+  function text(value) { return String(value == null ? "" : value); }
+
+  /* The languages, grouped as the page lists them. Each names its file
+     extension and how it is cleaned: by the JSON code above, by Prettier with
+     its parser and plugins, by sql-formatter in a dialect, or by a WebAssembly
+     formatter. */
+  function pretty(parser, plugins) { return { engine: "prettier", parser: parser, plugins: plugins }; }
+  function sql(dialect) { return { engine: "sql", dialect: dialect }; }
+  function wasm(name, extra) { var how = { engine: "wasm", formatter: name }; for (var key in extra) how[key] = extra[key]; return how; }
+  var JS = ["babel", "estree"], WEB = ["html", "postcss", "babel", "estree"];
+  var GROUPS = [
+    ["web", [
+      ["javascript", "JavaScript", "js", pretty("babel", JS)],
+      ["jsx", "JSX", "jsx", pretty("babel", JS)],
+      ["typescript", "TypeScript", "ts", pretty("typescript", ["typescript", "estree"])],
+      ["tsx", "TSX", "tsx", pretty("typescript", ["typescript", "estree"])],
+      ["flow", "Flow", "js", pretty("babel-flow", JS)],
+      ["html", "HTML", "html", pretty("html", WEB)],
+      ["css", "CSS", "css", pretty("css", ["postcss"])],
+      ["scss", "SCSS", "scss", pretty("scss", ["postcss"])],
+      ["less", "Less", "less", pretty("less", ["postcss"])],
+      ["vue", "Vue", "vue", pretty("vue", WEB.concat("typescript"))],
+      ["angular", "Angular template", "component.html", pretty("angular", ["html", "angular", "postcss", "babel", "estree"])],
+      ["svelte", "Svelte", "svelte", pretty("svelte", ["babel", "estree", "postcss", "typescript", "svelte"])],
+      ["lwc", "Lightning Web Components", "html", pretty("lwc", WEB)],
+      ["graphql", "GraphQL", "graphql", pretty("graphql", ["graphql"])],
+      ["markdown", "Markdown", "md", pretty("markdown", ["markdown"])],
+      ["mdx", "MDX", "mdx", pretty("mdx", ["markdown", "babel", "estree"])]
+    ]],
+    ["templates", [
+      ["handlebars", "Handlebars", "hbs", pretty("glimmer", ["glimmer"])],
+      ["astro", "Astro", "astro", wasm("markup")],
+      ["jinja", "Jinja", "jinja", wasm("markup")],
+      ["twig", "Twig", "twig", wasm("markup")],
+      ["nunjucks", "Nunjucks", "njk", wasm("markup")],
+      ["vento", "Vento", "vto", wasm("markup")],
+      ["mustache", "Mustache", "mustache", wasm("markup")]
+    ]],
+    ["data and config", [
+      ["json", "JSON", "json", { engine: "json" }],
+      ["json5", "JSON5", "json5", pretty("json5", JS)],
+      ["jsonc", "JSON with comments", "jsonc", pretty("jsonc", JS)],
+      ["yaml", "YAML", "yaml", pretty("yaml", ["yaml"])],
+      ["toml", "TOML", "toml", wasm("taplo")],
+      ["xml", "XML", "xml", pretty("xml", ["xml"])],
+      ["svg", "SVG", "svg", pretty("xml", ["xml"])],
+      ["ini", "INI", "ini", pretty("ini", ["ini"])],
+      ["properties", "Java properties", "properties", pretty("dot-properties", ["properties"])],
+      ["nginx", "nginx config", "conf", pretty("nginx", ["nginx"])],
+      ["protobuf", "Protocol Buffers", "proto", wasm("clang-format", { style: "Google" })]
+    ]],
+    ["programming", [
+      ["python", "Python", "py", wasm("ruff")],
+      ["go", "Go", "go", wasm("gofmt")],
+      ["rust", "Rust", "rs", pretty("jinx-rust", ["rust"])],
+      ["c", "C", "c", wasm("clang-format", { style: "LLVM" })],
+      ["cpp", "C++", "cpp", wasm("clang-format", { style: "LLVM" })],
+      ["csharp", "C#", "cs", wasm("clang-format", { style: "Microsoft" })],
+      ["java", "Java", "java", wasm("clang-format", { style: "Google" })],
+      ["objectivec", "Objective-C", "m", wasm("clang-format", { style: "LLVM" })],
+      ["php", "PHP", "php", pretty("php", ["php"])],
+      ["lua", "Lua", "lua", wasm("lua")],
+      ["zig", "Zig", "zig", wasm("zig")],
+      ["shell", "Shell", "sh", wasm("shfmt")],
+      ["bash", "Bash", "bash", wasm("shfmt")],
+      ["verilog", "Verilog", "sv", wasm("clang-format", { style: "LLVM" })],
+      ["latex", "LaTeX", "tex", pretty("latex-parser", ["latex"])]
+    ]],
+    ["sql", [
+      ["sql", "SQL", "sql", sql("sql")],
+      ["postgresql", "PostgreSQL", "sql", sql("postgresql")],
+      ["mysql", "MySQL", "sql", sql("mysql")],
+      ["mariadb", "MariaDB", "sql", sql("mariadb")],
+      ["sqlite", "SQLite", "sql", sql("sqlite")],
+      ["tsql", "SQL Server (T-SQL)", "sql", sql("transactsql")],
+      ["plsql", "Oracle PL/SQL", "sql", sql("plsql")],
+      ["bigquery", "BigQuery", "sql", sql("bigquery")],
+      ["snowflake", "Snowflake", "sql", sql("snowflake")],
+      ["redshift", "Amazon Redshift", "sql", sql("redshift")],
+      ["clickhouse", "ClickHouse", "sql", sql("clickhouse")],
+      ["duckdb", "DuckDB", "sql", sql("duckdb")],
+      ["spark", "Spark SQL", "sql", sql("spark")],
+      ["hive", "Hive", "sql", sql("hive")],
+      ["trino", "Trino", "sql", sql("trino")],
+      ["db2", "Db2", "sql", sql("db2")],
+      ["db2i", "Db2 for IBM i", "sql", sql("db2i")],
+      ["tidb", "TiDB", "sql", sql("tidb")],
+      ["singlestoredb", "SingleStore", "sql", sql("singlestoredb")],
+      ["n1ql", "Couchbase N1QL", "sql", sql("n1ql")]
+    ]]
+  ];
+  var LANGUAGES = {};
+  GROUPS.forEach(function (group) {
+    group[1].forEach(function (row) {
+      var how = row[3];
+      how.id = row[0]; how.name = row[1]; how.ext = row[2]; how.group = group[0];
+      LANGUAGES[how.id] = how;
+    });
+  });
+
+  /* Scripts load in order, once each: Prettier before its plugins. */
+  var scripts = {};
+  function need(files) {
+    return files.reduce(function (chain, file) {
+      return chain.then(function () {
+        if (!scripts[file]) scripts[file] = Promise.resolve().then(function () { return loadScript(file); })
+          .catch(function (error) { delete scripts[file]; throw error; });
+        return scripts[file];
+      });
+    }, Promise.resolve());
+  }
+  var started = {};
+  function formatter(name) {
+    if (!started[name]) {
+      started[name] = need(["fmt/" + name + ".js"]).then(function () {
+        if (!loadBytes) throw new Error("this formatter loads from the site; open clean code on the web or in the app");
+        return loadBytes("fmt/" + name + ".wasm");
+      }).then(function (bytes) {
+        var found = wasmFmt[name];
+        return Promise.resolve(found.init(bytes)).then(function () { return found; });
+      }).catch(function (error) { delete started[name]; throw error; });
+    }
+    return started[name];
+  }
+
+  /* How each engine is told about the indent picked; "usual" tells it
+     nothing, so each keeps its own convention. */
+  function width(indent) { return indent === "tab" ? 4 : Number(indent); }
+  var CLEANERS = {
+    json: function (language, code, indent) { return transform("format", code, indent); },
+    prettier: function (language, code, indent) {
+      var files = ["fmt/prettier.js"].concat(language.plugins.map(function (name) { return "fmt/prettier-" + name + ".js"; }));
+      return need(files).then(function () {
+        var options = {
+          parser: language.parser,
+          plugins: language.plugins.map(function (name) { return prettierPlugins[name]; }),
+          filepath: "main." + language.ext
+        };
+        if (indent !== "usual") { options.useTabs = indent === "tab"; options.tabWidth = width(indent); }
+        /* Without it the PHP plugin looks for composer.json on a disk it has not got. */
+        if (language.id === "php") options.phpVersion = "8.4";
+        return prettier.format(code, options);
+      });
+    },
+    sql: function (language, code, indent) {
+      return need(["fmt/sql-formatter.js"]).then(function () {
+        var options = { language: language.dialect };
+        if (indent !== "usual") { options.useTabs = indent === "tab"; options.tabWidth = width(indent); }
+        return sqlFormatter.format(code, options) + "\n";
+      });
+    },
+    wasm: function (language, code, indent) {
+      var usual = indent === "usual", tabs = indent === "tab", n = width(indent);
+      return formatter(language.formatter).then(function (found) {
+        switch (language.formatter) {
+          case "clang-format":
+            return found.format(code, "main." + language.ext, "{BasedOnStyle: " + language.style +
+              (usual ? "" : tabs ? ", IndentWidth: 4, TabWidth: 4, UseTab: ForIndentation" : ", IndentWidth: " + n + ", UseTab: Never") + "}");
+          case "ruff": return found.format(code, "main.py", usual ? null : { indent_style: tabs ? "tab" : "space", indent_width: n });
+          case "gofmt": return found.format(code);
+          case "lua": return found.format(code, usual ? null : { indent_style: tabs ? "tab" : "space", indent_width: n });
+          case "zig": return found.format(code, "main.zig");
+          case "shfmt": return found.format(code, "main." + language.ext, usual ? {} : { indent: tabs ? 0 : n });
+          case "taplo": return found.format(code, usual ? null : { indent_string: tabs ? "\t" : " ".repeat(n) });
+          case "markup": return found.format(code, "index." + language.ext, usual ? null : { indentStyle: tabs ? "tab" : "space", indentWidth: n });
+        }
+      });
+    }
+  };
+
+  /**
+   * Clean code in a language, as that language's usual formatter would.
+   * @param {string} id A key of LANGUAGES.
+   * @param {string} code
+   * @param {"usual"|"2"|"4"|"tab"} indent
+   * @returns {Promise<string>} The cleaned code; rejects with the page's message.
+   */
+  function clean(id, code, indent) {
+    var language = Object.prototype.hasOwnProperty.call(LANGUAGES, id) ? LANGUAGES[id] : null;
+    return Promise.resolve().then(function () {
+      if (!language) throw new Error("pick a language from the list");
+      if (["usual", "2", "4", "tab"].indexOf(indent) < 0) throw new Error("indent must be usual, 2, 4 or tab");
+      if (code.length > 1000000) throw new Error("keep code under a million characters");
+      return CLEANERS[language.engine](language, code, indent);
+    }).then(String, function (error) {
+      /* Formatters throw Errors, strings, or objects; the first line of what
+         they say is the part a person can act on. */
+      var message = (error && (error.message || error.reason)) || String(error);
+      throw new Error(quiet(String(message).split("\n")[0].replace(/^SyntaxError: /, "")));
+    });
+  }
+
+  var AGENT_TOOLS = [{
+    name: "clean_code",
+    title: "clean up code",
+    description: "Format code as its language's usual formatter would: Prettier for JavaScript, TypeScript, HTML, CSS, " +
+      "Markdown, YAML and the rest of the web; ruff for Python; gofmt for Go; clang-format for C, C++, C#, Java and " +
+      "Objective-C; sql-formatter for twenty SQL dialects; and more, named by the language's id. Code that does not " +
+      "parse returns the formatter's error.",
+    input: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "The code to clean." },
+        language: { type: "string", enum: Object.keys(LANGUAGES), description: "The language's id, such as python, typescript or postgresql." },
+        indent: { type: "string", enum: ["usual", "2", "4", "tab"], default: "usual", description: "usual keeps the formatter's own: 4 spaces for Python, tabs for Go." }
+      },
+      required: ["code", "language"]
+    },
+    readOnly: true,
+    compute: function (args) {
+      return clean(String(args.language), text(args.code), args.indent == null ? "usual" : String(args.indent))
+        .then(function (code) { return { code: code }; });
+    }
+  }, {
+    name: "format_json",
+    title: "format or minify json",
+    description: "Check that text is valid JSON and lay it out with 2 or 4 spaces or tabs, or minify it. " +
+      "Numbers, key order and duplicate keys are kept exactly as written. Invalid JSON returns the parser's error.",
+    input: {
+      type: "object",
+      properties: {
+        json: { type: "string", description: "The JSON text." },
+        indent: { type: "string", enum: ["2", "4", "tab", "minify"], default: "2", description: "Indentation, or minify for one line." }
+      },
+      required: ["json"]
+    },
+    readOnly: true,
+    compute: function (args) {
+      var indent = args.indent == null ? "2" : String(args.indent);
+      if (["2", "4", "tab", "minify"].indexOf(indent) < 0) throw new Error("indent must be 2, 4, tab or minify");
+      return { json: transform(indent === "minify" ? "minify" : "format", text(args.json), indent) };
+    }
+  }, {
+    name: "escape_json_string",
+    title: "escape text as a json string",
+    description: "Turn text into a JSON string literal, quotes and escapes included, ready to paste into JSON or JavaScript.",
+    input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    readOnly: true,
+    compute: function (args) { return { json: transform("escape", text(args.text)) }; }
+  }, {
+    name: "unescape_json_string",
+    title: "read a json string literal",
+    description: "Turn a JSON string literal, in double quotes, back into the text it stands for.",
+    input: { type: "object", properties: { json: { type: "string", description: "A JSON string, quotes included." } }, required: ["json"] },
+    readOnly: true,
+    compute: function (args) { return { text: transform("unescape", text(args.json)) }; }
+  }];
+  /* ── end core ────────────────────────────────────────────────────── */
+
+  var input = E.qs("#in"), output = E.qs("#out"), error = E.qs("#err"), status = E.qs("#status");
+  var picker = E.qs("#lang"), indent = E.qs("#indent"), modes = E.qs("#json-modes");
+  var KEY = "eyes.code.language";
+
+  loadScript = function (name) { return E.load(name); };
+  /* A page opened from disk has no address to fetch a .wasm from. */
+  loadBytes = function (name) {
+    return fetch(E.base + name).then(function (response) {
+      if (!response.ok) throw new Error("could not load " + name);
+      return response.arrayBuffer();
+    }, function () {
+      throw new Error("this formatter loads from the site; open clean code on the web or in the app");
+    });
+  };
+
+  GROUPS.forEach(function (group) {
+    picker.appendChild(E.el("optgroup", { label: group[0] }, group[1].map(function (row) {
+      return E.el("option", { value: row[0], text: row[1] });
+    })));
+  });
+
+  /* JSON keeps the old tool's other three things it can do. */
+  var mode = "format";
+  var actions = [["#fmt", "format"], ["#min", "minify"], ["#esc", "escape"], ["#unesc", "unescape"]];
+  var turn = 0;
+  function run() {
+    var mine = ++turn, json = picker.value === "json";
+    modes.hidden = !json;
+    if (!json) mode = "format";
+    actions.forEach(function (action) {
+      var button = E.qs(action[0]), selected = mode === action[1];
+      button.classList.toggle("-ghost", !selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+    if (!input.value.trim() && mode !== "escape") { output.value = ""; status.textContent = error.textContent = ""; return; }
+    var name = LANGUAGES[picker.value].name;
+    var work = json && mode !== "format"
+      ? Promise.resolve().then(function () { return transform(mode, input.value, indent.value); })
+      : clean(picker.value, input.value, indent.value);
+    /* Say so only if the formatter is taking a moment, as on its first load. */
+    var slow = setTimeout(function () { if (mine === turn) status.textContent = "loading the " + name + " formatter…"; }, 150);
+    work.then(function (result) {
+      if (mine !== turn) return;
+      output.value = result;
+      error.textContent = "";
+      status.textContent = mode === "unescape" ? "decoded string" : mode === "escape" ? "escaped as a json string"
+        : mode === "minify" ? "valid json, minified" : "clean " + name;
+    }, function (e) {
+      if (mine !== turn) return;
+      output.value = "";
+      status.textContent = "";
+      error.textContent = e.message;
+    }).then(function () { clearTimeout(slow); });
+  }
+
+  actions.forEach(function (action) {
+    E.on(E.qs(action[0]), "click", function () { mode = action[1]; run(); });
+  });
+  E.on(picker, "change", function () {
+    try { localStorage.setItem(KEY, picker.value); } catch (e) {}
+    run();
+  });
+  E.on(indent, "change", function () { if (mode === "minify") mode = "format"; run(); });
+  E.on(input, "input", E.debounce(run, 200));
+  E.on(E.qs("#save"), "click", function () {
+    if (output.value) E.download(output.value, "clean." + LANGUAGES[picker.value].ext);
+  });
+
+  /* ?lang= or, from the old /json address, ?mode=; then the last one used. */
+  var asked = E.param("lang") || E.param("mode"), remembered = null;
+  try { remembered = localStorage.getItem(KEY); } catch (e) {}
+  picker.value = [asked, remembered, "json"].filter(function (id) { return id && LANGUAGES[id]; })[0];
+  input.value = E.param("t") || "";
+  run();
+
+  /* For agents in the browser: the core's tools, each shown in the page's
+     own fields so the visitor sees what was asked. */
+  function show(language, next, value, spaces) {
+    picker.value = language;
+    mode = next;
+    if (spaces) indent.value = spaces;
+    input.value = text(value);
+    run();
+  }
+  E.agentTools(AGENT_TOOLS, {
+    clean_code: function (args) {
+      var result = AGENT_TOOLS[0].compute(args);
+      if (LANGUAGES[args.language]) show(String(args.language), "format", args.code, args.indent == null ? "usual" : String(args.indent));
+      return result;
+    },
+    format_json: function (args) {
+      var result = AGENT_TOOLS[1].compute(args);
+      var spaces = args.indent == null ? "2" : String(args.indent);
+      show("json", spaces === "minify" ? "minify" : "format", args.json, spaces === "minify" ? null : spaces);
+      return result;
+    },
+    escape_json_string: function (args) { show("json", "escape", args.text); return AGENT_TOOLS[2].compute(args); },
+    unescape_json_string: function (args) { show("json", "unescape", args.json); return AGENT_TOOLS[3].compute(args); }
+  });
+});
+</script>
+</body>
+</html>

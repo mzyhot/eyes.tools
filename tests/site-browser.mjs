@@ -19,6 +19,7 @@ try {
        land before asking whether that page is ready. */
     if (route === '/lines') await page.waitForURL('**/dump?mode=lines');
     if (route === '/units') await page.waitForURL('**/calc?mode=units');
+    if (route === '/json') await page.waitForURL('**/code?mode=json');
     await page.waitForFunction(() => document.body.dataset.ready === '1');
     const controls = await page.evaluate(() => ({
       title: document.querySelector('h1')?.textContent,

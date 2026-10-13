@@ -604,6 +604,20 @@
     });
   }
 
+  var loads = {};
+
+  /**
+   * Load a published script once, for a tool that needs it only some of the
+   * time, as clean code needs a language's formatter only when it is picked.
+   * A load that fails can be tried again.
+   * @param {string} name A file `public-files.mjs` publishes, such as `fmt/prettier.js`.
+   * @returns {Promise<void>} Resolves once it has run.
+   */
+  E.load = function (name) {
+    if (!loads[name]) loads[name] = loadScript(name).catch(function (error) { delete loads[name]; throw error; });
+    return loads[name];
+  };
+
   /**
    * Run a tool's code once everything the registry lists for it has loaded.
    *

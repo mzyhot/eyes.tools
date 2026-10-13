@@ -44,10 +44,12 @@ import { webcrypto } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
+import { PUBLIC_ROOT_FILES } from "./public-files.mjs";
 import { originPolicy } from "./request-origin.mjs";
 
 const ENDPOINT = "/mcp";
 const ROOT = dirname(fileURLToPath(import.meta.url));
+const PUBLISHED = new Set(PUBLIC_ROOT_FILES);
 /* Newest first: the first is offered to a client asking for one we lack. */
 const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -112,10 +114,21 @@ async function loadTools(root) {
     const scope = createContext({
       ...browserShims(),
       console, crypto: webcrypto, TextEncoder, TextDecoder, URL, URLSearchParams, atob, btoa,
-      setTimeout, clearTimeout, fetch: globalThis.fetch
+      setTimeout, clearTimeout, queueMicrotask, structuredClone, fetch: globalThis.fetch
     });
     scope.window = scope;
     scope.self = scope;
+    /* A core may load more of the site's published files when it first needs
+       them, as its page does: a script, run in this realm once, or a
+       WebAssembly formatter's bytes. Nothing the site does not publish. */
+    const published = name => PUBLISHED.has(name) ? readFile(join(root, name)) : Promise.reject(new Error("not a published file: " + name));
+    const ran = new Set();
+    scope.eyesLoadScript = name => published(name).then(file => {
+      if (ran.has(name)) return;
+      runInContext(file.toString("utf8"), scope, { filename: name });
+      ran.add(name);
+    });
+    scope.eyesLoadBytes = name => published(name).then(file => new Uint8Array(file));
     for (const dep of row.deps || []) runInContext(await readFile(join(root, dep), "utf8"), scope, { filename: dep });
     runInContext('"use strict";\n' + match[1], scope, { filename: "t/" + row.slug + ".html (core)" });
 

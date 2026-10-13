@@ -24,7 +24,9 @@ When in doubt, do what `case.html` does.
    doesn't offer, implement it locally inside your file.
 2. **No CDN runtime dependencies.** No remote scripts, npm runtime, or `import`.
    QR and metadata parsing use vendored browser builds, named in your row's
-   `deps`, never in a `<script src>` on the page. The typeface ships with the
+   `deps`, never in a `<script src>` on the page. A script only some inputs
+   need, such as one of clean code's formatters in `fmt/`, is published and
+   loaded with `E.load` when first needed. The typeface ships with the
    site too, in `fonts/`, named once in `fonts.css`. Network tools are
    explicit exceptions: verified randomness contacts Cloudflare's drand relay,
    and share uses the same-origin `/api/share/*` endpoints plus WebRTC.
@@ -95,7 +97,9 @@ The site's one job is: **the visitor leaves holding a result.**
   the shared handler leaves them alone.
 - **Agents use the tool too.** Wherever the input can be written as JSON, put
   the tool's logic in a block marked `/* ── core` … `/* ── end core` at the top
-  of the script: no DOM and no `E`, only the page's `deps`, ending with
+  of the script: no DOM and no `E`, only the page's `deps` and any published
+  script it loads on demand through the `eyesLoadScript` the server hands it
+  (the page swaps in `E.load`; see `code.html`), ending with
   `var AGENT_TOOLS = [...]` (name, title, description, input as JSON Schema,
   readOnly, network if it can leave the site, and compute(input) returning, or
   resolving to, the answer). The page offers them in the browser with
@@ -157,6 +161,8 @@ Segmented control markup. The radio must live **inside** its label:
 
 ```
 E.tool(fn)                   your whole script; runs after `deps` have loaded
+E.load(name)                 load a published script once, on demand; a
+                             promise, shared by every caller
 E.qs(sel[, root])            querySelector
 E.qsa(sel[, root])           querySelectorAll → real array
 E.on(el, ev, fn[, opts])     addEventListener, null-safe

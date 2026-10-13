@@ -24,10 +24,22 @@ export const PUBLIC_ROOT_FILES = [
   "fonts/geist-mono-cyrillic-ext.woff2", "fonts/geist-mono-vietnamese.woff2", "fonts/geist-mono-symbols2.woff2",
   /* page scripts */
   "index.js", "redirect.js",
+  /* clean code's formatters, each loaded the first time its language is
+     picked; scripts/vendor-formatters.mjs makes them */
+  "fmt/clang-format.js", "fmt/clang-format.wasm", "fmt/gofmt.js", "fmt/gofmt.wasm", "fmt/lua.js",
+  "fmt/lua.wasm", "fmt/markup.js", "fmt/markup.wasm", "fmt/prettier-angular.js",
+  "fmt/prettier-babel.js", "fmt/prettier-estree.js", "fmt/prettier-glimmer.js",
+  "fmt/prettier-graphql.js", "fmt/prettier-html.js", "fmt/prettier-ini.js",
+  "fmt/prettier-latex.js", "fmt/prettier-markdown.js", "fmt/prettier-nginx.js",
+  "fmt/prettier-php.js", "fmt/prettier-postcss.js", "fmt/prettier-properties.js",
+  "fmt/prettier-rust.js", "fmt/prettier-svelte.js", "fmt/prettier-typescript.js",
+  "fmt/prettier-xml.js", "fmt/prettier-yaml.js", "fmt/prettier.js", "fmt/ruff.js", "fmt/ruff.wasm",
+  "fmt/shfmt.js", "fmt/shfmt.wasm", "fmt/sql-formatter.js", "fmt/taplo.js", "fmt/taplo.wasm",
+  "fmt/zig.js", "fmt/zig.wasm",
   /* scripts tools name in their `deps` */
   "qrcode.min.js", "drand-tools.js", "drand-client.min.js", "exif-reader.js",
   /* crawler metadata, and the picture link previews show */
   "robots.txt", "sitemap.xml", "preview.png",
   /* notices */
-  "THIRDPARTYLICENSES", "LICENSE", "ADDENDUM"
+  "THIRDPARTYLICENSES", "fmt/NOTICES.txt", "LICENSE", "ADDENDUM"
 ];

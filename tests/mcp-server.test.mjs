@@ -45,7 +45,7 @@ test('MCP: initialize, list and call the pages\' tools over Streamable HTTP', as
   const names = tools.map(tool => tool.name);
   assert.equal(new Set(names).size, names.length, 'tool names are unique');
   assert.ok(names.length >= 25, 'only ' + names.length + ' tools');
-  for (const name of ['hash_text', 'convert_case', 'calculate', 'convert_color', 'roll_dice', 'make_qr_code']) assert.ok(names.includes(name), name);
+  for (const name of ['hash_text', 'convert_case', 'calculate', 'convert_color', 'clean_code', 'format_json', 'roll_dice', 'make_qr_code']) assert.ok(names.includes(name), name);
   // What needs a visitor's own file, scratchpad or share room stays on the pages.
   for (const name of ['hash_chosen_file', 'resize_image', 'read_image_metadata', 'read_scratchpad', 'add_to_scratchpad', 'find_tool']) assert.ok(!names.includes(name), name);
   for (const tool of tools) {
@@ -69,6 +69,15 @@ test('MCP: initialize, list and call the pages\' tools over Streamable HTTP', as
   assert.equal((await call('convert_units', { value: 0, from: 'celsius', to: '°F' })).structuredContent.result, 32);
   assert.deepEqual((await call('convert_color', { color: 'red' })).structuredContent, { hex: '#ff0000', rgb: 'rgb(255 0 0)', hsl: 'hsl(0 100% 50%)', oklch: 'oklch(62.8% 0.2577 29.23)' });
   assert.equal((await call('base64_decode', { base64: 'aGk' })).structuredContent.text, 'hi');
+  // Clean code loads each formatter on the server as its page does: Prettier,
+  // a WebAssembly one, and sql-formatter, and a formatter's error is a result.
+  assert.equal((await call('clean_code', { language: 'typescript', code: 'let a:number=1' })).structuredContent.code, 'let a: number = 1;\n');
+  assert.equal((await call('clean_code', { language: 'python', code: 'def f( a ):\n  return a', indent: '2' })).structuredContent.code, 'def f(a):\n  return a\n');
+  assert.equal((await call('clean_code', { language: 'cpp', code: 'int main(){return 0;}', indent: '4' })).structuredContent.code, 'int main() { return 0; }');
+  assert.equal((await call('clean_code', { language: 'sqlite', code: 'select a from t' })).structuredContent.code, 'select\n  a\nfrom\n  t\n');
+  const broken = await call('clean_code', { language: 'go', code: 'package (' });
+  assert.equal(broken.isError, true); assert.match(broken.content[0].text, /^[0-9a-z]/);
+  assert.equal((await call('clean_code', { language: 'cobol', code: 'x' })).content[0].text, 'pick a language from the list');
   assert.equal((await call('convert_time_zone', { dateTime: '2026-11-01T01:30', from: 'America/New_York', to: 'UTC', occurrence: 'later' })).structuredContent.instant, '2026-11-01T06:30:00.000Z');
   assert.equal((await call('make_ean13_barcode', { digits: '400638133393' })).structuredContent.number, '4006381333931');
   assert.match((await call('make_qr_code', { text: 'https://eyes.tools' })).structuredContent.svg, /^<svg /);

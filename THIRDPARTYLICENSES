@@ -19,6 +19,11 @@ Vendored components:
   Copyright 2024 The Geist Project Authors, licensed under the SIL Open Font
   License 1.1 (text below). The files are the per-script subsets Google Fonts
   serves (Geist v5, Geist Mono v6), unmodified.
+- fmt/: the formatters clean code loads, made by scripts/vendor-formatters.mjs
+  from Prettier and its plugins, sql-formatter, and WebAssembly builds of
+  clang-format (LLVM), Ruff, gofmt, StyLua, zig fmt, shfmt, Taplo and
+  markup_fmt. Each file's contents, every license text they carry, and where
+  each component's source is are in fmt/NOTICES.txt.
 
 Adapted work:
 - t/share.html and share-server.mjs: finding devices on the same network, and

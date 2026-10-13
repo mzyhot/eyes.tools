@@ -82,8 +82,8 @@ export function pagesRedirects(slugs) {
 }
 
 /* The server's security headers as a static host sends them. The policy ends
-   in `script-src 'self'`, which is what the server appends hashes to. */
-if (!CSP.endsWith("script-src 'self'")) throw new Error("dev-server.mjs: the CSP must end with script-src 'self'");
+   in `script-src`, which is what the server appends hashes to. */
+if (!/; script-src [^;]+$/.test(CSP)) throw new Error("dev-server.mjs: the CSP must end with script-src");
 export const STATIC_HEADERS = Object.freeze({ ...SECURITY_HEADER_VALUES, 'Content-Security-Policy': CSP + " 'unsafe-inline'" });
 
 /** The `vercel.json` for these slugs. */

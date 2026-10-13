@@ -89,9 +89,10 @@ one-off build), and the server lists the app's origins.
 EYES_PROBE=1 cargo run
 ```
 
-opens the index and every page in turn, then saves a download, and fails if a
-page does not finish assembling on the right tool, is not a secure context,
-or logs a script error, failed load or CSP violation. It prints one line per
+opens the index and every page in turn, cleans Go through its WebAssembly
+formatter, then saves a download, and fails if a page does not finish
+assembling on the right tool, is not a secure context, or logs a script error,
+failed load or CSP violation. It prints one line per
 step and exits non-zero on any failure.
 
 To test share between the app and a browser, run a server that allows the app,

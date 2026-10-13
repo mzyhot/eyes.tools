@@ -2,11 +2,11 @@
 //!
 //!     EYES_PROBE=1 cargo run
 //!
-//! Opens the index and every embedded page in turn, then saves a download.
-//! Each page must finish assembling (`s.js` sets `body[data-ready]`) on the
-//! tool it should, in a secure context, without a script error, a failed load
-//! or a blocked request. Prints one line per step and exits non-zero if any
-//! failed.
+//! Opens the index and every embedded page in turn, cleans Go through its
+//! WebAssembly formatter, then saves a download. Each page must finish
+//! assembling (`s.js` sets `body[data-ready]`) on the tool it should, in a
+//! secure context, without a script error, a failed load or a blocked request.
+//! Prints one line per step and exits non-zero if any failed.
 //!
 //! With `EYES_PROBE_PEER` set, it opens share instead, in the room named by
 //! `EYES_PROBE_ROOM` (24 hex characters, the same link a browser opens), waits
@@ -43,6 +43,7 @@ pub const SCRIPT: &str = r#"
     if (!ready && Date.now() - started < 8000) return setTimeout(wait, 50);
     if (ready && location.hash === '#probe-download') return E.download('probe', 'eyes-probe.txt', 'text/plain');
     if (ready && location.hash.includes('probe-peer')) return peer().then(report, e => { errors.push(e.message); report(''); });
+    if (ready && location.hash === '#probe-format') return formatted().then(() => report(''), e => { errors.push(e.message); report(''); });
     setTimeout(() => report(''), 300);
     function report(received) {
       location.href = 'eyes-probe://report?' + new URLSearchParams({
@@ -73,6 +74,10 @@ pub const SCRIPT: &str = r#"
     }
     return test();
   };
+  /* Clean code compiles a WebAssembly formatter, which the policy must allow. */
+  function formatted() {
+    return until('formatted go', () => document.querySelector('#out').value === 'package main\n\nfunc main() {}\n');
+  }
   async function peer() {
     await until('device ready', () => [...document.querySelectorAll('.device__action')].some(e => e.textContent === 'ready'));
     document.querySelector('[aria-label^="send text to"]').click();
@@ -131,6 +136,11 @@ pub fn start(app: &AppHandle) -> bool {
             let (slug, tool) = pair.split_once(':').expect("slug:tool");
             steps.push_back(Step { name: slug.into(), go: local(slug), expect: Expect::Page(tool.into()) });
         }
+        steps.push_back(Step {
+            name: "clean go, through WebAssembly".into(),
+            go: local("/code?lang=go&t=package%20main%0Afunc%20main(){}#probe-format"),
+            expect: Expect::Page("code".into()),
+        });
         steps.push_back(Step { name: "download".into(), go: local("/#probe-download"), expect: Expect::Download });
     }
 

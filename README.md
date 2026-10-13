@@ -29,7 +29,7 @@ s.css             shared stylesheet: every class a tool page may use
 s.js              shared runtime: the `E` global, and the chrome built from the registries
 index.js          the index: filter field and registry-driven list
 index.html        an empty page index.js fills
-redirect.js       drives the compatibility stubs (t/lines.html, t/units.html)
+redirect.js       drives the compatibility stubs (t/json.html, t/lines.html, t/units.html)
 favicon.svg       one eye
 preview.png       the picture a link preview shows (site.js names it)
 404.html          an empty page s.js fills from site.js
@@ -38,6 +38,7 @@ qrcode.min.js     vendored QR encoder; generation remains offline
 drand-client.min.js  vendored official drand client; verifies beacon signatures
 drand-tools.js    shared PRNG, drand TRNG and Web Crypto randomness helpers
 exif-reader.js    vendored ExifReader browser build for image metadata
+fmt/              clean code's formatters, each loaded the first time a language needs it (generated)
 dev-server.mjs    the Node server, for development and self-hosting
 api-modules.mjs   the API registry: one row per same-origin endpoint the server mounts
 public-files.mjs  the files the site publishes; everything else stays private
@@ -51,7 +52,8 @@ _routes.json      Cloudflare Pages: sends private paths to a 404 Function (gener
 _headers          Cloudflare Pages: the server's security headers (generated)
 vercel.json       Vercel: serves each tool at /<slug>, with those headers (generated)
 .vercelignore     Vercel: leaves private files out of the deployment (generated)
-scripts/          check.mjs (static checks), static-routes.mjs (writes the five files above, and sitemap.xml)
+scripts/          check.mjs (static checks), static-routes.mjs (writes the five files above, and sitemap.xml),
+                  vendor-formatters.mjs (writes fmt/ from pinned npm packages)
 tests/            Node tests and Playwright browser suites
 deploy/           systemd unit, environment example, and self-hosting notes
 desktop/          the tools as a Tauri desktop app (Rust); see desktop/README.md
@@ -68,7 +70,7 @@ node dev-server.mjs
 ```
 
 Then open <http://127.0.0.1:8777>. Each tool lives at a clean address such as
-`/share` or `/json`; old `/t/<slug>.html` links redirect there. Pass a different port as the first argument,
+`/share` or `/code`; old `/t/<slug>.html` links redirect there. Pass a different port as the first argument,
 for example `node dev-server.mjs 9000`. Most local tools also work when
 `index.html` is opened straight off disk. The included server runs the share
 service. WebRTC sharing needs HTTPS (or localhost during development)
@@ -145,8 +147,8 @@ curl -s https://eyes.tools/mcp -H 'Content-Type: application/json' \
 ```
 
 `tools/list` names them all: `hash_text`, `convert_case`, `calculate`,
-`convert_color`, `convert_time_zone`, `generate_passwords`, `roll_dice`,
-`make_qr_code` and the rest. A call sends its input to the server, which uses it
+`clean_code`, `convert_color`, `convert_time_zone`, `generate_passwords`,
+`roll_dice`, `make_qr_code` and the rest. A call sends its input to the server, which uses it
 for the one answer and keeps nothing.
 
 **In the browser, through [WebMCP](https://github.com/webmachinelearning/webmcp).**
@@ -234,4 +236,6 @@ before publishing a copy.
 The vendored `qrcode.min.js` (MIT, with a local UTF-8 fix),
 `drand-client.min.js` (MIT/Apache-2.0), `exif-reader.js` (MPL-2.0), and the
 Geist fonts in `fonts/` (SIL OFL 1.1) keep their own licenses, collected in
-[THIRDPARTYLICENSES](THIRDPARTYLICENSES).
+[THIRDPARTYLICENSES](THIRDPARTYLICENSES). The formatters in `fmt/` keep theirs
+too; [fmt/NOTICES.txt](fmt/NOTICES.txt) lists what each file contains, with
+every license text.

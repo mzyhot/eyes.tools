@@ -248,11 +248,13 @@ const COMPRESS_MIN_BYTES = 1024;
 const COMPRESS_MAX_BYTES = 4 * 1024 * 1024;
 
 /* `script-src` stays last: each page's inline-script hashes are appended to
-   it (see pagePolicy), and the static hosts append 'unsafe-inline' instead. */
+   it (see pagePolicy), and the static hosts append 'unsafe-inline' instead.
+   'wasm-unsafe-eval' lets the site's own scripts compile WebAssembly, which
+   clean code's formatters are; it allows no eval of JavaScript. */
 export const CSP = "default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; " +
   "style-src 'self' 'unsafe-inline'; font-src 'self'; " +
   "img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self' https://drand.cloudflare.com; " +
-  "worker-src 'self' blob:; script-src 'self'";
+  "worker-src 'self' blob:; script-src 'self' 'wasm-unsafe-eval'";
 
 /* The headers every response carries. `scripts/static-routes.mjs` writes the
    static hosts' headers from this same table. */

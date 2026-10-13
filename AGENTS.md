@@ -19,8 +19,13 @@
   prefix and knows nothing else about them.
 - `mcp-server.mjs` answers agents at `/mcp` by running the block each tool page
   marks `core`, so that block must use no DOM and no `E`, only the page's
-  `deps`. Tools that need the visitor's own file or scratchpad stay outside it
-  and are offered on the page alone.
+  `deps` and published files it loads through the server's `eyesLoadScript`
+  and `eyesLoadBytes`. Tools that need the visitor's own file or scratchpad
+  stay outside it and are offered on the page alone.
+- `fmt/` holds clean code's formatters, generated with their notices by
+  `node scripts/vendor-formatters.mjs` from the versions pinned there; never
+  edit them by hand. The WebAssembly ones are why every policy's `script-src`
+  allows `'wasm-unsafe-eval'`.
 - `dev-server.mjs` is both the local and self-hosted production server.
   `share-server.mjs` provides only discovery and WebRTC signaling; shared file
   contents must never pass through it.

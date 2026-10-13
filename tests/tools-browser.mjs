@@ -43,7 +43,7 @@ async function download(selector) {
 
 try {
   await check('JSON preserves numbers, duplicate keys and escapes', async () => {
-    await go('json');
+    await go('code?lang=json');
     const source = '{"large":9007199254740993,"small":-0,"exponent":1e309,"same":1,"same":2,"quoted":"a\\\"b","empty":[{},[]]}';
     await fill('#in', source); await click('#fmt');
     assert.ok((await page.locator('#out').inputValue()).includes('9007199254740993'));
@@ -51,6 +51,30 @@ try {
     await fill('#in', '{bad}'); await click('#fmt'); assert.ok(await text('#err')); assert.equal(await page.locator('#out').inputValue(), '');
     await fill('#in', 'hello\n🌍'); await click('#esc'); await outValue(JSON.stringify('hello\n🌍'));
     await fill('#in', JSON.stringify('hello\n🌍')); await click('#unesc'); await outValue('hello\n🌍');
+  });
+  await check('clean code through every kind of formatter, with errors, indent and download', async () => {
+    // The old address lands on the JSON it used to be.
+    await go('json'); await page.waitForURL('**/code?mode=json'); assert.equal(await page.locator('#lang').inputValue(), 'json');
+    const cleans = async (lang, source, expected) => {
+      await page.selectOption('#lang', lang); await fill('#in', source); await outValue(expected);
+    };
+    await cleans('typescript', 'const a:number=1', 'const a: number = 1;\n');
+    await cleans('python', 'def f( a,b ):\n  return a+b', 'def f(a, b):\n    return a + b\n');
+    await cleans('go', 'package main\nfunc main(){x:=1\n_=x}', 'package main\n\nfunc main() {\n\tx := 1\n\t_ = x\n}\n');
+    await cleans('postgresql', 'select a,b from t', 'select\n  a,\n  b\nfrom\n  t\n');
+    // Rust's usual is rustfmt's four spaces, not Prettier's two.
+    await cleans('rust', 'fn main(){let x=1;}', 'fn main() {\n    let x = 1;\n}\n');
+    await page.selectOption('#indent', '4'); await cleans('javascript', 'if(a){b()}', 'if (a) {\n    b();\n}\n');
+    await page.selectOption('#indent', 'tab'); await cleans('css', 'a{b:c}', 'a {\n\tb: c;\n}\n');
+    await page.selectOption('#indent', 'usual');
+    // Code that does not parse says why, in the page's lowercase voice, and clears the result.
+    await page.selectOption('#lang', 'python'); await fill('#in', 'def (');
+    await page.waitForFunction(() => document.querySelector('#err').textContent); assert.match(await text('#err'), /^[a-z]/); assert.equal(await page.locator('#out').inputValue(), '');
+    // The language picked is the one a visitor comes back to; the download is named for it.
+    await page.selectOption('#lang', 'go'); await fill('#in', 'package main'); await outValue('package main\n');
+    await go('code'); assert.equal(await page.locator('#lang').inputValue(), 'go');
+    await fill('#in', 'package main'); await outValue('package main\n');
+    assert.equal((await download('#save')).name, 'clean.go');
   });
   await check('base64 UTF-8, URL-safe encoding and malformed input', async () => {
     await go('base64'); await fill('#in', 'hello 🌍'); await click('#enc'); await outValue(Buffer.from('hello 🌍').toString('base64'));
@@ -218,7 +242,7 @@ try {
     assert.deepEqual((await call('find_tool', { query: 'time zone' })).tools.map(t => t.url), [base + '/tz']);
     const names = new Set();
     for (const slug of (await readdir(new URL('../t/', import.meta.url))).filter(f => f.endsWith('.html')).map(f => f.slice(0, -5))) {
-      if (slug === 'lines' || slug === 'units') continue;
+      if (slug === 'lines' || slug === 'units' || slug === 'json') continue;
       await go(slug);
       for (const name of await offered()) if (name !== 'find_tool') { assert.ok(!names.has(name), 'tool name reused: ' + name); names.add(name); }
     }
@@ -229,7 +253,7 @@ try {
     assert.match((await call('hash_chosen_file', {})).error, /no file/);
     await go('calc'); assert.equal((await call('calculate', { expression: '2^3^2' })).result, 512); assert.equal((await call('convert_units', { value: 0, from: 'celsius', to: '°F' })).result, 32);
     assert.match((await call('calculate', { expression: '1/0' })).error, /zero/);
-    await go('json'); assert.ok((await call('format_json', { json: '{bad}' })).error); assert.equal((await call('format_json', { json: '{ "a" : 1 }', indent: 'minify' })).json, '{"a":1}');
+    await go('code'); assert.ok((await call('format_json', { json: '{bad}' })).error); assert.equal((await call('format_json', { json: '{ "a" : 1 }', indent: 'minify' })).json, '{"a":1}');
     await go('color'); assert.equal((await call('convert_color', { color: 'rebeccapurple' })).hex, '#663399');
     await go('uuid'); assert.equal((await call('generate_ids', { kind: 'ulid', count: 3 })).ids.length, 3);
     await go('dump'); await call('add_to_scratchpad', { text: 'from an agent' }); assert.ok((await page.locator('#pad').inputValue()).endsWith('from an agent'));
@@ -243,7 +267,7 @@ try {
     assert.deepEqual((await mcp('tools/list', {})).tools.map(t => t.name).sort(), [...names].filter(n => !pageOnly.includes(n)).sort());
     for (const [slug, name, input] of [
       ['case', 'convert_case', { text: 'Hello wide World' }], ['base64', 'base64_encode', { text: 'hé🌍', urlSafe: true }],
-      ['hash', 'hash_text', { text: 'abc', encoding: 'base64' }], ['json', 'format_json', { json: '{"b":[1,{"c":null}]}', indent: '4' }],
+      ['hash', 'hash_text', { text: 'abc', encoding: 'base64' }], ['code', 'format_json', { json: '{"b":[1,{"c":null}]}', indent: '4' }],
       ['url', 'parse_url', { url: 'https://a.example:8080/p/q?x=1&y=%20#f' }], ['count', 'count_text', { text: 'one two\nthree' }],
       ['char', 'look_up_character', { query: '&copy;' }], ['inspect', 'inspect_text', { text: 'a\u200bb', set: 'ascii' }],
       ['diff', 'diff_text', { before: 'a\nb\nc', after: 'a\nc\nd' }], ['color', 'convert_color', { color: '#777' }],
@@ -252,7 +276,9 @@ try {
       ['dump', 'clean_up_lines', { text: 'b\na\nb', sort: 'asc', unique: true }], ['dir', 'search_directory', { query: 'github' }],
       ['lorem', 'generate_lorem_ipsum', { kind: 'words', count: 7 }], ['time', 'convert_timestamp', { value: '1787313600' }],
       ['tz', 'convert_time_zone', { dateTime: '2026-03-08T02:30', from: 'America/New_York', to: 'Asia/Tokyo' }],
-      ['calc', 'calculate', { expression: '1/0' }], ['json', 'format_json', { json: '{bad}' }]
+      ['calc', 'calculate', { expression: '1/0' }], ['code', 'format_json', { json: '{bad}' }],
+      ['code', 'clean_code', { language: 'python', code: 'x = {"a":1}' }], ['code', 'clean_code', { language: 'tsx', code: 'const A=()=><b/>' }],
+      ['code', 'clean_code', { language: 'mysql', code: 'select 1' }], ['code', 'clean_code', { language: 'go', code: 'package (' }]
     ]) {
       await go(slug);
       const onPage = await call(name, input), onServer = await mcp('tools/call', { name, arguments: input });

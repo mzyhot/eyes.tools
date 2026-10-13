@@ -22,7 +22,7 @@
         "media-src": "'self' blob: data:",
         "connect-src": "'self' https://drand.cloudflare.com https://eyes.tools ipc: http://ipc.localhost",
         "worker-src": "'self' blob:",
-        "script-src": "'self'"
+        "script-src": "'self' 'wasm-unsafe-eval'"
       }
     }
   },

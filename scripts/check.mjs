@@ -146,6 +146,10 @@ console.log(`PASS link previews name ${site.url} and show a published ${site.pre
   console.log(`PASS fonts.css names ${files.length} font files, all published`);
 }
 
+/* Every file the site publishes is in the repository, or every host would 404 it. */
+for (const file of PUBLIC_ROOT_FILES) await readFile(resolve(root, file)).catch(() => assert.fail(`public-files.mjs lists ${file}, which does not exist`));
+console.log(`PASS all ${PUBLIC_ROOT_FILES.length} published files exist`);
+
 /* The desktop app's policy mirrors the server's. It may allow more where the
    app needs it (its own IPC, the share service it reaches), never less. */
 {

@@ -16,7 +16,7 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
   t.after(() => app.close());
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const get = path => fetch(base + path);
-  for (const path of ['/', '/share', '/json', '/s.js', '/site.js', '/fonts.css', '/index.js', '/robots.txt', '/sitemap.xml', '/THIRDPARTYLICENSES', '/LICENSE', '/ADDENDUM']) {
+  for (const path of ['/', '/share', '/code', '/json', '/s.js', '/site.js', '/fonts.css', '/index.js', '/fmt/prettier.js', '/fmt/ruff.wasm', '/robots.txt', '/sitemap.xml', '/THIRDPARTYLICENSES', '/fmt/NOTICES.txt', '/LICENSE', '/ADDENDUM']) {
     const res = await get(path);
     assert.equal(res.status, 200, path);
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
@@ -35,9 +35,13 @@ test('production HTTP boundaries, security headers, and graceful shutdown', asyn
     const res = await get(path);
     assert.equal(res.status, 404, path);
     // The not-found page has no inline script, so the base policy covers it.
-    assert.match(res.headers.get('content-security-policy'), /script-src 'self'$/);
+    assert.match(res.headers.get('content-security-policy'), /script-src 'self' 'wasm-unsafe-eval'$/);
     await res.arrayBuffer();
   }
+  /* A formatter's WebAssembly is typed for streaming compilation. */
+  const wasm = await get('/fmt/ruff.wasm');
+  assert.equal(wasm.headers.get('content-type'), 'application/wasm');
+  await wasm.arrayBuffer();
   const robots = await get('/robots.txt');
   assert.match(robots.headers.get('content-type'), /^text\/plain;\s*charset=utf-8$/i);
   const robotsBody = await robots.text();
@@ -197,7 +201,7 @@ test('static hosts send the same security headers, with inline scripts allowed',
   const app = createEyesServer();
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   t.after(() => app.close());
-  const res = await fetch(`http://127.0.0.1:${app.server.address().port}/json`);
+  const res = await fetch(`http://127.0.0.1:${app.server.address().port}/code`);
   for (const [name, value] of Object.entries(STATIC_HEADERS)) {
     if (name !== 'Content-Security-Policy') { assert.equal(res.headers.get(name), value, name); continue; }
     /* The server's policy for a page is the base policy plus that page's
