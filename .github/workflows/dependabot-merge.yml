@@ -1,0 +1,70 @@
+name: dependabot merge
+
+# Merges each Dependabot update once its commit has passed checks and, when the
+# update touches the app, the desktop build; a failure leaves it open. The
+# ruleset requires a review but no checks, so this waits for them itself rather
+# than leaving it to GitHub's auto-merge, and approves before merging.
+# A merge made with this token starts no push run on main; daily tests covers it.
+on:
+  workflow_run:
+    workflows: [checks, desktop]
+    types: [completed]
+    branches: ['dependabot/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-merge-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    # A run Dependabot started; one on a person's push to its branch is theirs.
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Dependabot's own pull request from this repository, still at this commit.
+          number=$(gh pr list --head "$BRANCH" --author app/dependabot \
+              --json number,headRefOid,isCrossRepository |
+            jq -r --arg sha "$SHA" \
+              '.[] | select(.headRefOid == $sha and (.isCrossRepository | not)) | .number')
+          if [ -z "$number" ]; then
+            echo "No open Dependabot pull request is at $SHA."
+            exit 0
+          fi
+
+          # The latest run of each workflow on the commit; desktop runs only
+          # when the update changes its paths. Whichever finishes last merges.
+          waiting=$(gh api "repos/$GH_REPO/actions/runs?head_sha=$SHA&per_page=100" |
+            jq -r '[.workflow_runs[]
+                | select(.path == ".github/workflows/check.yml" or
+                         .path == ".github/workflows/desktop.yml")]
+              | group_by(.path) | map(max_by(.id))
+              | if any(.path == ".github/workflows/check.yml") then . else
+                  [{name: "checks", status: "not started", conclusion: null}] end
+              | .[] | select(.conclusion != "success")
+              | "\(.name) \(.conclusion // .status)"')
+          if [ -n "$waiting" ]; then
+            echo "Not merging #$number yet:"
+            echo "$waiting"
+            exit 0
+          fi
+
+          if [ "$(gh pr view "$number" --json reviewDecision --jq .reviewDecision)" != APPROVED ]; then
+            gh pr review "$number" --approve --body "Checks passed on $SHA."
+          fi
+          gh pr merge "$number" --auto --squash --match-head-commit "$SHA"
