@@ -17,7 +17,10 @@ on, shows devices on the same network to each other without one, and a small
 in-memory service introduces the devices and relays their connection setup.
 File contents travel between browsers, never through it, and are written to the
 receiver's browser storage as they arrive, so their size is bounded by disk
-rather than memory.
+rather than memory. The downloader finds a video with yt-dlp on the server
+and passes its streams through to the browser, which joins them into one
+file itself, as cobalt's local processing does; what the browser cannot
+finish, the server does.
 
 ```
 site.js           the site registry: wordmark, copy, footers, shortcuts
@@ -39,11 +42,13 @@ drand-client.min.js  vendored official drand client; verifies beacon signatures
 drand-tools.js    shared PRNG, drand TRNG and Web Crypto randomness helpers
 exif-reader.js    vendored ExifReader browser build for image metadata
 fmt/              clean code's formatters, each loaded the first time a language needs it (generated)
-codecs/           image codecs and audio decoders for the file tools, where no browser's are (generated)
+codecs/           image codecs and audio decoders for the file tools, where no browser's are,
+                  and the muxer the downloader joins streams with on the device (generated)
 dev-server.mjs    the Node server, for development and self-hosting
 api-modules.mjs   the API registry: one row per same-origin endpoint the server mounts
 public-files.mjs  the files the site publishes; everything else stays private
 share-server.mjs  ephemeral rooms and WebRTC signaling
+download-server.mjs  the downloader's lookups, streams and server-side joins, with yt-dlp
 mcp-server.mjs    the tools for AI agents, at /mcp, run from each page's own code
 mcp-worker.mjs    the threads mcp-server.mjs runs those tools in
 agent-schema.js   checks what an agent sends a tool, on the pages and at /mcp alike
@@ -179,7 +184,7 @@ Both are the same code. Each tool page keeps its logic in a block marked
 `E.agentTools` in `s.js` (a no-op where the browser lacks WebMCP), and the MCP
 server runs the same block in worker threads, off the thread that serves
 everything else. Share offers agents nothing: a transfer needs a person on each
-device.
+device, and the downloader none, since it sends a link off the device.
 
 ## Deploying
 
@@ -187,7 +192,7 @@ To get every feature, run the Node server behind a reverse proxy that
 terminates HTTPS; [deploy/README.md](deploy/README.md) covers the systemd
 service, proxy requirements, and release checks.
 
-Static hosts can serve the tools, but not share, the MCP server or link
+Static hosts can serve the tools, but not share, the downloader, the MCP server or link
 previews (the server writes each page's title, description and preview
 picture into its HTML, for apps that read a link without running scripts):
 

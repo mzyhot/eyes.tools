@@ -18,9 +18,11 @@
  *   <name>.js + .wasm      `wasmFmt.<name>`: `init(bytes)` once, then `format()`
  *
  * codecs/, the image codecs and audio decoders the file tools use wherever a
- * browser's own are not there to ask, as on the MCP server. Each defines
- * `eyesCodecs.<name>`: `init(bytes)` once, with the bytes of its `.wasm` (an
- * audio decoder carries its own and takes none), then the one thing it does:
+ * browser's own are not there to ask, as on the MCP server, and the muxer the
+ * downloader joins streams with. Each defines `eyesCodecs.<name>`:
+ * `init(bytes)` once, with the bytes of its `.wasm` (an audio decoder, the
+ * muxer and the mp3 encoder carry their own and take none), then the one
+ * thing it does:
  *   png                    decode(bytes) → { data, width, height }, encode(rgba, w, h)
  *   jpeg-decode            decode(bytes), turned as the photo's orientation says
  *   jpeg-encode            encode(rgba, w, h, quality)
@@ -29,6 +31,9 @@
  *   resize                 resize(rgba, w, h, toW, toH) → rgba, lanczos3 in linear light
  *   mp3, flac, vorbis, opus  decode(bytes, limit) → Promise of { channels, sampleRate },
  *                          refusing a sound past limit samples, all channels counted
+ *   mux                    join(blobs, { container, video, audio, onProgress }) → Promise of a Blob:
+ *                          the first video and sound tracks among them in one file, copied
+ *   mp3-encode             lets mux make mp3; loaded after it, since it adds to it
  *
  * Each folder's NOTICES.txt says what every other file there contains and
  * carries the license texts: each npm package in it, each project a
@@ -73,6 +78,8 @@ const VERSIONS = {
   '@wasm-audio-decoders/flac': '0.2.11',
   '@wasm-audio-decoders/ogg-vorbis': '0.1.20',
   'ogg-opus-decoder': '1.7.5',
+  'mediabunny': '1.61.3',
+  '@mediabunny/mp3-encoder': '1.61.3',
   'esbuild': '0.28.2'
 };
 
@@ -168,6 +175,58 @@ const AUDIO = (name, pkg, decoder) => `import { ${decoder} } from ${JSON.stringi
     return { channels, sampleRate };
   }
 };`;
+/* The muxer: Mediabunny's conversions, each told to keep one kind of track,
+   adding to one output, so a video stream and a sound stream become one file
+   with their packets copied as they are. Only sound bound for an mp3 is
+   re-encoded, which needs mp3-encode. What mp3-encode needs from Mediabunny
+   it takes from here, so the encoder joins this copy's registry. */
+const MUX = `import { ALL_FORMATS, BlobSource, BufferTarget, Conversion, CustomAudioEncoder, EncodedPacket, Input, Logging, MkvOutputFormat,
+  Mp3OutputFormat, Mp4OutputFormat, OggOutputFormat, Output, WebMOutputFormat, registerEncoder } from "mediabunny";
+const FORMATS = {
+  mp4: () => new Mp4OutputFormat({ fastStart: "in-memory" }), webm: () => new WebMOutputFormat(), mkv: () => new MkvOutputFormat(),
+  ogg: () => new OggOutputFormat(), mp3: () => new Mp3OutputFormat()
+};
+(globalThis.eyesCodecs = globalThis.eyesCodecs || {}).mux = {
+  init: () => Promise.resolve(),
+  mediabunny: { CustomAudioEncoder, EncodedPacket, Logging, registerEncoder },
+  join: async (parts, { container, video = true, audio = true, onProgress }) => {
+    if (!FORMATS[container]) throw new Error("no such container: " + container);
+    const output = new Output({ format: FORMATS[container](), target: new BufferTarget() });
+    const conversions = [];
+    for (const part of parts) {
+      const input = new Input({ source: new BlobSource(part), formats: ALL_FORMATS });
+      const takeVideo = video && !!(await input.getPrimaryVideoTrack());
+      const takeAudio = audio && !!(await input.getPrimaryAudioTrack());
+      if (!takeVideo && !takeAudio) continue;
+      video = video && !takeVideo;
+      audio = audio && !takeAudio;
+      const conversion = await Conversion.init({
+        input, output, composable: true,
+        video: takeVideo ? {} : { discard: true },
+        audio: takeAudio ? (container === "mp3" ? { codec: "mp3", bitrate: 256000 } : {}) : { discard: true }
+      });
+      if (!conversion.isValid) throw new Error("this browser cannot join these streams");
+      conversions.push(conversion);
+    }
+    if (!conversions.length) throw new Error("these streams hold nothing to keep");
+    const done = conversions.map(() => 0);
+    conversions.forEach((conversion, at) => {
+      conversion.onProgress = value => { done[at] = value; if (onProgress) onProgress(done.reduce((a, b) => a + b, 0) / done.length); };
+    });
+    await output.start();
+    await Promise.all(conversions.map(conversion => conversion.execute()));
+    await output.finalize();
+    return new Blob([output.target.buffer], { type: output.format.mimeType });
+  }
+};`;
+/* mp3-encode's imports of Mediabunny, answered by the muxer's. */
+const muxGlobal = {
+  name: 'mux-global',
+  setup(build) {
+    build.onResolve({ filter: /^mediabunny$/ }, args => ({ path: args.path, namespace: 'mux-global' }));
+    build.onLoad({ filter: /.*/, namespace: 'mux-global' }, () => ({ contents: 'module.exports = globalThis.eyesCodecs.mux.mediabunny;', loader: 'js' }));
+  }
+};
 const XIPH = (name, repo, file) => [name, 'BSD-3-Clause', 'https://github.com/xiph/' + repo, 'xiph/' + repo + '/' + file];
 const CODECS = {
   png: {
@@ -246,7 +305,18 @@ codecs.resize = { init: bytes => init(bytes), resize: (rgba, width, height, toWi
     upstream: [XIPH('Vorbis', 'vorbis', 'master/COPYING'), XIPH('Ogg', 'ogg', 'master/COPYING'), EMSCRIPTEN],
     source: AUDIO('vorbis', '@wasm-audio-decoders/ogg-vorbis', 'OggVorbisDecoder')
   },
-  opus: { upstream: [XIPH('Opus', 'opus', 'main/COPYING'), EMSCRIPTEN], source: AUDIO('opus', 'ogg-opus-decoder', 'OggOpusDecoder') }
+  opus: { upstream: [XIPH('Opus', 'opus', 'main/COPYING'), EMSCRIPTEN], source: AUDIO('opus', 'ogg-opus-decoder', 'OggOpusDecoder') },
+  mux: { upstream: [], source: MUX },
+  'mp3-encode': {
+    upstream: [['LAME', 'LGPL-2.0-or-later', 'https://lame.sourceforge.io/', 'lameproject/lame/master/COPYING',
+      'codecs/mp3-encode.js is a file of its own, loaded only to make mp3, and may be replaced with a build of a changed LAME; the source is at https://lame.sourceforge.io/ and the build at https://github.com/Vanilagy/mediabunny/tree/main/packages/mp3-encoder'], EMSCRIPTEN],
+    plugins: [muxGlobal],
+    source: `import { registerMp3Encoder } from "@mediabunny/mp3-encoder";
+let registered = false;
+(globalThis.eyesCodecs = globalThis.eyesCodecs || {})["mp3-encode"] = {
+  init: () => { if (!registered) { registerMp3Encoder(); registered = true; } return Promise.resolve(); }
+};`
+  }
 };
 
 /* Left out of the audio decoders: their web-worker variants, which subclass a
@@ -490,8 +560,8 @@ try {
 
   /* ── codecs/ ── */
   const codecs = folder('codecs');
-  for (const [name, { wasm, upstream: compiled, source }] of Object.entries(CODECS)) {
-    const { code, packages } = await bundle(source, { plugins: [unused], base: 'file:///' });
+  for (const [name, { wasm, upstream: compiled, source, plugins = [] }] of Object.entries(CODECS)) {
+    const { code, packages } = await bundle(source, { plugins: [unused, ...plugins], base: 'file:///' });
     const owner = packages.map(key => components.get(key).name.split(' ')[0]).find(pkg => pkg in VERSIONS);
     writeFileSync(join(codecs.out, `${name}.js`), codecs.header(owner) + code);
     if (wasm) copyFileSync(join(modules, wasm), join(codecs.out, `${name}.wasm`));
@@ -499,8 +569,9 @@ try {
   }
   notices(codecs, 'Notices for the codecs in codecs/', [
     'The tools that take or give an image or a sound load these files where a',
-    'browser\'s own codecs are not there to ask, as on the MCP server: each the',
-    'first time a file needs it. scripts/vendor.mjs makes them from the npm',
+    'browser\'s own codecs are not there to ask, as on the MCP server, and the',
+    'downloader loads the muxer to join streams: each the first time a file',
+    'needs it. scripts/vendor.mjs makes them from the npm',
     'packages named below; a WebAssembly build also compiles the projects and',
     'Rust crates named with it. Each keeps its own license. The license texts',
     'follow the list, each once, headed by everything that ships it, and each',

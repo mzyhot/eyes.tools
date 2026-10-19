@@ -29,7 +29,8 @@ When in doubt, do what `case.html` does.
    loaded with `E.load` when first needed. The typeface ships with the
    site too, in `fonts/`, named once in `fonts.css`. Network tools are
    explicit exceptions: verified randomness contacts Cloudflare's drand relay,
-   and share uses the same-origin `/api/share/*` endpoints plus WebRTC.
+   share uses the same-origin `/api/share/*` endpoints plus WebRTC, and the
+   downloader uses the same-origin `/api/download/*` endpoints.
 3. **Classic scripts only.** No `<script type="module">`. The site must work when
    opened straight off disk via `file://`. All paths are relative (`../s.css`).
 4. **Local unless the tool says otherwise.** No telemetry or analytics. File

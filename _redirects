@@ -12,6 +12,7 @@
 /dice /t/dice 200
 /diff /t/diff 200
 /dir /t/dir 200
+/downloader /t/downloader 200
 /dump /t/dump 200
 /exif /t/exif 200
 /hash /t/hash 200

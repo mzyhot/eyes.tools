@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="../fonts.css">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../s.css">
+<style>
+#bar { -webkit-appearance:none; appearance:none; display:block; width:100%; height:var(--space-1); border:0; border-radius:var(--radius); background:var(--color-rule); color:var(--color-ink); }
+#bar::-webkit-progress-bar { background:var(--color-rule); border-radius:var(--radius); }
+#bar::-webkit-progress-value { background:var(--color-ink); border-radius:var(--radius); }
+#bar::-moz-progress-bar { background:var(--color-ink); border-radius:var(--radius); }
+#title { overflow-wrap:anywhere; }
+.how { border-top:var(--rule) solid var(--color-rule); padding-top:var(--space-4); }
+.how summary { cursor:pointer; font-family:var(--font-mono); font-size:var(--text-xs); padding:var(--space-2) 0; }
+.how p { max-width:60ch; }
+</style>
+<script src="../site.js"></script>
+</head>
+<body data-tool="downloader">
+
+<main class="stack-6">
+
+  <section>
+    <label class="lbl" for="url">link</label>
+    <input class="field" id="url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
+           placeholder="https://www.youtube.com/watch?v=…">
+    <div class="row mt-3">
+      <button class="btn" type="button" id="go">download</button>
+      <button class="btn -ghost" type="button" id="paste">paste</button>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div>
+      <p class="lbl" id="mode-label">save</p>
+      <div class="seg" role="radiogroup" aria-labelledby="mode-label">
+        <label><input type="radio" name="mode" value="video" checked><span>video</span></label>
+        <label><input type="radio" name="mode" value="audio"><span>audio</span></label>
+      </div>
+    </div>
+    <div id="quality-field">
+      <label class="lbl" for="quality">quality</label>
+      <select class="field" id="quality">
+        <option value="best">best available</option>
+        <option value="2160">2160p</option>
+        <option value="1440">1440p</option>
+        <option value="1080" selected>1080p</option>
+        <option value="720">720p</option>
+        <option value="480">480p</option>
+        <option value="360">360p</option>
+      </select>
+    </div>
+    <div id="format-field" hidden>
+      <p class="lbl" id="format-label">format</p>
+      <div class="seg" role="radiogroup" aria-labelledby="format-label">
+        <label><input type="radio" name="format" value="original" checked><span>original</span></label>
+        <label><input type="radio" name="format" value="mp3"><span>mp3</span></label>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="lbl" id="where-label">join and convert</p>
+    <div class="seg" role="radiogroup" aria-labelledby="where-label">
+      <label><input type="radio" name="where" value="device" checked><span>on this device</span></label>
+      <label><input type="radio" name="where" value="server"><span>on the server</span></label>
+    </div>
+    <p class="hint mt-2">on this device, the server only fetches the streams; your browser puts them together. what it can't do, the server does.</p>
+  </section>
+
+  <section class="stack-2" id="job" hidden>
+    <p id="title"></p>
+    <progress id="bar" max="1" hidden></progress>
+    <p class="hint num" id="status" aria-live="polite"></p>
+    <div class="row"><button class="btn -ghost -sm" type="button" id="again" hidden>save again</button></div>
+  </section>
+  <p class="err" id="err" role="alert"></p>
+
+  <details class="how">
+    <summary>how it works</summary>
+    <p class="hint">The link goes to this site's server, which uses yt-dlp to find the video and fetch it from the site, since a browser cannot read another site's pages. On this device, each stream passes through to your browser as it arrives, and joining the picture to its sound, or converting to mp3, happens here; the finished file never exists on the server. On the server, or when this device cannot finish (a stream cut into pieces, a very large file, a browser without the codecs), the server makes the file and keeps it for an hour at most.</p>
+    <p class="hint">YouTube, TikTok, Bluesky, SoundCloud, Twitch and many other sites work. Videos that need an account, live streams, videos over three hours and files over 4 GB do not. Save only what you have the right to keep.</p>
+  </details>
+
+</main>
+
+<script src="../tools.js"></script>
+<script src="../s.js"></script>
+<script>
+E.tool(function () {
+  "use strict";
+
+  /* The downloader's server: this site's own, unless the site configuration
+     names the public site, as the desktop app's does. A page on another
+     origin cannot hand a download to the browser by link, so it saves what
+     it fetched itself. */
+  var SERVICE = SITE.publicOrigin || "";
+  var API = SERVICE + "/api/download/";
+
+  var url = E.qs("#url"), go = E.qs("#go"), err = E.qs("#err"), job = E.qs("#job"), title = E.qs("#title"),
+      bar = E.qs("#bar"), status = E.qs("#status"), again = E.qs("#again"), quality = E.qs("#quality");
+  /* The download running, if any, and how to save the last result again. */
+  var running = null, saveAgain = null;
+
+  var choice = function (name) { return E.qs('input[name="' + name + '"]:checked').value; };
+
+  function show(text, fraction) {
+    status.textContent = text;
+    bar.hidden = fraction == null;
+    if (fraction != null) bar.value = Math.max(0, Math.min(1, fraction));
+  }
+
+  function duration(s) {
+    if (!s) return "";
+    s = Math.round(s);
+    var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, sec = String(s % 60).padStart(2, "0");
+    return h ? h + ":" + String(m).padStart(2, "0") + ":" + sec : m + ":" + sec;
+  }
+
+  /** "12.3 MB of 51.0 MB", or what is known of it. */
+  function amount(got, total) { return E.bytes(got) + (total ? " of " + E.bytes(total) : ""); }
+
+  /** One call to the download service, answered in JSON. */
+  async function api(path, options) {
+    var response;
+    try { response = await fetch(API + path, Object.assign({ cache: "no-store" }, options)); }
+    catch (e) {
+      if (e.name === "AbortError") throw e;
+      throw new Error("could not reach the downloader's server. check the connection and try again.");
+    }
+    var data = null;
+    try { data = await response.json(); } catch (e) {}
+    if (!data) throw new Error("the downloader needs this site's server, which is not here. use it at " + (SITE.url || "the site's own address") + ".");
+    if (!response.ok) throw new Error(data.error || "the downloader's server refused that");
+    return data;
+  }
+
+  /** Wait, unless the download is stopped first. */
+  function pause(ms, signal) {
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(resolve, ms);
+      signal.addEventListener("abort", function () { clearTimeout(timer); reject(new DOMException("stopped", "AbortError")); }, { once: true });
+    });
+  }
+
+  /** Read a stream or a file the server sends into a Blob, reporting bytes as they come. */
+  async function fetchBlob(address, signal, onBytes) {
+    var response = await fetch(address, { cache: "no-store", signal: signal });
+    if (!response.ok) {
+      var data = await response.json().catch(function () { return null; });
+      throw new Error((data && data.error) || "the server could not send this stream");
+    }
+    var reader = response.body.getReader(), chunks = [], got = 0;
+    for (;;) {
+      var part = await reader.read();
+      if (part.done) break;
+      chunks.push(part.value);
+      got += part.value.length;
+      onBytes(got);
+    }
+    return new Blob(chunks, { type: response.headers.get("Content-Type") || "" });
+  }
+
+  /** Hand the browser a same-origin address to save, through its own downloads. */
+  function saveLink(address, name) {
+    var a = E.el("a", { href: address });
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function saved(save, text) {
+    save();
+    saveAgain = save;
+    again.hidden = false;
+    show(text, 1);
+  }
+
+  /**
+   * Fetch the streams through the server and finish them here: joined into
+   * one file, or with the picture dropped, or made into an mp3. A stream that
+   * is already the finished file goes to the browser's downloads untouched.
+   */
+  async function onDevice(found, signal) {
+    var plan = found.local, query = "?t=" + found.token, name = found.filename + "." + plan.ext;
+    var streams = plan.streams.map(function (s, n) { return API + found.id + "/stream/" + n + query; });
+    if (!plan.process && !SERVICE) {
+      return saved(function () { saveLink(streams[0] + "&save=1", name); }, "saving to your browser's downloads");
+    }
+    var sizes = plan.streams.map(function (s) { return s.size; });
+    var total = sizes.every(Boolean) ? sizes.reduce(function (a, b) { return a + b; }, 0) : null, got = sizes.map(function () { return 0; });
+    var tracking = function (n) {
+      return function (bytes) {
+        got[n] = bytes;
+        var sum = got.reduce(function (a, b) { return a + b; }, 0);
+        show("fetching through the server · " + amount(sum, total), total ? sum / total : null);
+      };
+    };
+    show("fetching through the server", null);
+    /* The muxer loads while the streams arrive; the mp3 encoder adds to it, so it comes second. */
+    var ready = !plan.process ? Promise.resolve() : E.load("codecs/mux.js").then(function () {
+      return plan.container === "mp3" ? E.load("codecs/mp3-encode.js").then(function () { return eyesCodecs["mp3-encode"].init(); }) : null;
+    });
+    ready.catch(function () {});
+    var blobs = await Promise.all(streams.map(function (address, n) { return fetchBlob(address, signal, tracking(n)); }));
+    var result = blobs[0];
+    if (plan.process) {
+      await ready;
+      var doing = plan.container === "mp3" ? "converting" : plan.video && blobs.length > 1 ? "joining" : "finishing";
+      show(doing + " on this device", 0);
+      result = await eyesCodecs.mux.join(blobs, {
+        container: plan.container, video: plan.video, audio: true,
+        onProgress: function (p) { if (!signal.aborted) show(doing + " on this device · " + Math.round(p * 100) + "%", p); }
+      });
+      if (signal.aborted) throw new DOMException("stopped", "AbortError");
+    }
+    saved(function () { E.download(result, name); }, "saved · " + E.bytes(result.size) + " · " + plan.ext);
+  }
+
+  /** Have the server download and finish the file, then take it. */
+  async function onServer(found, signal, note) {
+    var query = "?t=" + found.token;
+    var state = await api(found.id + "/process" + query, { method: "POST", signal: signal });
+    for (;;) {
+      if (state.state === "failed") throw new Error(state.error || "the server could not finish this file");
+      if (state.state === "ready") break;
+      var processing = state.state === "processing";
+      show((note ? note + " " : "the server is ") + (processing ? "finishing the file" : "downloading") +
+        (state.downloaded && !processing ? " · " + amount(state.downloaded, state.total) : ""), processing ? null : state.progress);
+      await pause(1000, signal);
+      state = await api(found.id + query, { signal: signal });
+    }
+    var address = API + found.id + "/file" + query, name = found.filename + "." + state.ext;
+    if (!SERVICE) return saved(function () { saveLink(address, name); }, "saving to your browser's downloads · " + E.bytes(state.size) + " · " + state.ext);
+    var file = await fetchBlob(address, signal, function (bytes) { show("receiving · " + amount(bytes, state.size), bytes / state.size); });
+    saved(function () { E.download(file, name); }, "saved · " + E.bytes(file.size) + " · " + state.ext);
+  }
+
+  async function start() {
+    if (running) { running.abort(); return; }
+    var link = url.value.trim();
+    if (!link) { E.fail(err, "paste a link to a video"); url.focus(); return; }
+    var controller = new AbortController(), signal = controller.signal, found = null;
+    running = controller;
+    E.fail(err, "");
+    saveAgain = null;
+    again.hidden = true;
+    title.textContent = "";
+    job.hidden = false;
+    go.textContent = "stop";
+    show("looking up the link", null);
+    try {
+      found = await api("probe", {
+        method: "POST", headers: { "Content-Type": "application/json" }, signal: signal,
+        body: JSON.stringify({ url: link, mode: choice("mode"), quality: quality.value, audioFormat: choice("format") })
+      });
+      title.textContent = [found.title || found.filename, found.site.toLowerCase(), duration(found.duration)].filter(Boolean).join(" · ");
+      var note = "";
+      if (choice("where") === "device" && found.local) {
+        try { return await onDevice(found, signal); }
+        catch (e) {
+          if (signal.aborted) throw e;
+          note = "this device could not finish it, so the server is";
+        }
+      }
+      await onServer(found, signal, note);
+    } catch (e) {
+      if (signal.aborted) {
+        /* Let the server drop what it fetched or made for this one. */
+        if (found) fetch(API + found.id + "?t=" + found.token, { method: "DELETE", keepalive: true }).catch(function () {});
+        show("stopped", null);
+        return;
+      }
+      show("", null);
+      E.fail(err, e.message || "that did not work");
+    } finally {
+      if (running === controller) running = null;
+      go.textContent = "download";
+    }
+  }
+
+  function syncMode() {
+    var audio = choice("mode") === "audio";
+    E.qs("#quality-field").hidden = audio;
+    E.qs("#format-field").hidden = !audio;
+  }
+
+  E.on(go, "click", start);
+  E.on(url, "keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); start(); } });
+  E.qsa('input[name="mode"]').forEach(function (input) { E.on(input, "change", syncMode); });
+  E.on(again, "click", function () { if (saveAgain) saveAgain(); });
+
+  /* Where the browser cannot read the clipboard, name the paste shortcut for
+     this platform instead. A pasted link starts at once, as it does in cobalt. */
+  var PASTE_KEY = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent) ? "⌘V" : "ctrl+V";
+  E.on(E.qs("#paste"), "click", function () {
+    var btn = this;
+    if (!navigator.clipboard || !navigator.clipboard.readText) { E.flash(btn, "use " + PASTE_KEY); url.focus(); return; }
+    navigator.clipboard.readText().then(function (text) {
+      url.value = text.trim();
+      if (url.value && !running) start();
+    }, function () { E.flash(btn, "blocked"); url.focus(); });
+  });
+
+  url.value = E.param("u") || "";
+  syncMode();
+});
+</script>
+</body>
+</html>

@@ -357,6 +357,17 @@ try {
       }
     }
   });
+  await check('downloader switches between video and audio, and refuses a link it cannot use in words', async () => {
+    await go('downloader');
+    assert.equal(await page.locator('#format-field').isHidden(), true);
+    await page.locator('input[name="mode"][value="audio"]').check();
+    assert.deepEqual([await page.locator('#quality-field').isHidden(), await page.locator('#format-field').isHidden()], [true, false]);
+    // Refused whether or not this server runs yt-dlp: off, or not an http link.
+    await fill('#url', 'ftp://example.invalid/clip'); await click('#go');
+    await page.waitForFunction(() => document.querySelector('#err').textContent);
+    assert.match(await text('#err'), /^[a-z]/);
+    assert.equal(await text('#go'), 'download');
+  });
   await check('directory filtering', async () => {
     await go('dir'); await fill('#q', 'github'); assert.ok((await text('main')).toLowerCase().includes('github')); await enabled('#copy-urls');
   });

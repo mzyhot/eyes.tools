@@ -31,6 +31,11 @@
   `node scripts/vendor.mjs` from the versions pinned there; never edit them by
   hand. The WebAssembly ones are why every policy's `script-src` allows
   `'wasm-unsafe-eval'`.
+- `download-server.mjs` runs yt-dlp for the downloader, off unless
+  `DOWNLOAD_YTDLP` names it. Every request yt-dlp makes goes through the
+  loopback proxy it starts, which reaches public addresses only; keep it that
+  way, and keep stream links tied to a job's token and to streams yt-dlp
+  found, never to an address a visitor sends.
 - `dev-server.mjs` is both the local and self-hosted production server.
   `share-server.mjs` provides only discovery and WebRTC signaling; shared file
   contents must never pass through it.

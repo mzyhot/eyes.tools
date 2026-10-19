@@ -2,7 +2,7 @@
  *
  * Despite the filename this is the production server for self-hosted
  * deployments (see `deploy/README.md`): static hosts can serve the pages, but
- * only this process provides share discovery.
+ * only this process provides share discovery and the downloader's lookups.
  * It has no npm runtime dependencies and no build step, so what runs in
  * production is the file in the repository.
  *
@@ -651,6 +651,7 @@ async function route(request, response, apis) {
  * @param {object} [options] Passed to every API module's factory.
  * @param {object} [options.shareOptions] Passed to createShareService.
  * @param {object} [options.mcpOptions] Passed to createMcpService.
+ * @param {object} [options.downloadOptions] Passed to createDownloadService.
  * @returns {{server: import("node:http").Server, close: () => Promise<void>}}
  */
 export function createEyesServer(options = {}) {

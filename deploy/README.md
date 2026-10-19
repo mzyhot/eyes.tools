@@ -107,6 +107,11 @@ default, lets it through with no rule opening `/api/share/*`.
   Readiness) runs under the policy as it is, beside the tools each page
   registers itself. Its Site MCP server pack reads tools from `/mcp`, the
   site's own MCP server, and offers them to agents in the browser too.
+- `/api/download/*` stays on the website's origin, uncached and unbuffered.
+  A lookup answers within seconds; a stream starts sending as soon as the
+  source does and can then run for minutes, so a proxy read timeout must
+  allow for a pause while yt-dlp waits on the source, and must not cap the
+  length of a response. A join on the server answers at once and is polled.
 - `/mcp` stays on the website's origin: `POST` JSON in, JSON out, never
   cached. Agents call it from their own servers, with no browser or cookies and
   often with an AI user agent, so a bot check must let `POST /mcp` through;
@@ -152,6 +157,60 @@ same secret. Subscribe to the events you want to trigger a check (a `push`
 to `main` is sufficient). Keep the endpoint out of CDN caches and preserve
 its POST body and `X-Hub-Signature-256` header.
 
+## Downloader
+
+The downloader looks links up and fetches media with
+[yt-dlp](https://github.com/yt-dlp/yt-dlp), and is off until
+`DOWNLOAD_YTDLP` names it. Give yt-dlp a virtual environment of its own, with
+its default extras, curl_cffi (some sites need a browser's TLS fingerprint)
+and deno (the JavaScript runtime it solves YouTube's challenges with), plus
+ffmpeg from your packages for joining on the server:
+
+```bash
+sudo python3 -m venv /opt/yt-dlp
+sudo /opt/yt-dlp/bin/pip install "yt-dlp[default,curl-cffi]" deno
+sudo dnf install ffmpeg        # or: sudo apt install ffmpeg
+```
+
+The service puts the environment's own `bin` first on yt-dlp's path, so it
+finds that deno. Sites change often and yt-dlp follows, so upgrade it daily,
+for example from a root cron job or timer running
+`/opt/yt-dlp/bin/pip install --upgrade "yt-dlp[default,curl-cffi]" deno`.
+
+```
+DOWNLOAD_YTDLP=/opt/yt-dlp/bin/yt-dlp
+DOWNLOAD_ALLOWED_ORIGINS=tauri://localhost,http://tauri.localhost
+```
+
+Each job keeps what yt-dlp found, and any file the server makes, in a folder
+of `DOWNLOAD_DIR` (by default a folder of the system's temporary directory,
+which the template's `PrivateTmp` covers) for an hour at most, up to 4 GB a
+file; folders left behind are cleared at startup. A service that runs as
+root should run yt-dlp as a user of its own, by number, with a folder that
+user cannot leave:
+
+```bash
+sudo useradd --system --home-dir /var/lib/eyes-dl --create-home --shell /usr/sbin/nologin eyes-dl
+id eyes-dl                      # DOWNLOAD_UID and DOWNLOAD_GID
+```
+
+```
+DOWNLOAD_DIR=/var/lib/eyes-dl
+DOWNLOAD_UID=977
+DOWNLOAD_GID=975
+```
+
+yt-dlp reaches the internet only through a proxy the service runs on
+loopback, which connects to public addresses on ports 80 and 443 and nothing
+else: never this machine, its LAN, a tailnet or a cloud metadata address, so
+a page that sends yt-dlp somewhere private gets a refusal. The generic
+extractor, which would read any page at all, is off. Lookups count against
+the visitor's network as share's joins do, so behind Cloudflare the
+downloader needs `SHARE_TRUST_CLOUDFLARE=1` too. Sites that refuse
+data-centre or VPN addresses refuse the downloader as well, and videos that
+need an account are out of reach. Media fetched through the server also
+passes through your proxy or CDN, so check its terms for video.
+
 ## Verify after each release
 
 ```bash
@@ -162,6 +221,7 @@ curl --head http://127.0.0.1:8777/share
 curl --fail -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' http://127.0.0.1:8777/mcp
 curl --fail -s http://127.0.0.1:8777/qr | grep 'og:image'
+sudo -u eyes-dl /opt/yt-dlp/bin/yt-dlp --version   # with the downloader on
 ```
 
 Link previews and the sitemap name the address in `url` in `site.js`. A copy

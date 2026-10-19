@@ -13,6 +13,7 @@
  *
  * Static hosts run none of this; they serve the pages only.
  */
+import { createDownloadService } from "./download-server.mjs";
 import { createGithubWebhookService } from "./github-webhook.mjs";
 import { createMcpService } from "./mcp-server.mjs";
 import { createShareService } from "./share-server.mjs";
@@ -21,6 +22,11 @@ export const API_MODULES = [
   {
     prefix: "/api/github/",
     create: (options) => createGithubWebhookService(options.githubWebhookOptions)
+  },
+  {
+    /* The downloader's lookups, streams and server-side joins, with yt-dlp. */
+    prefix: "/api/download/",
+    create: (options) => createDownloadService(options.downloadOptions)
   },
   {
     prefix: "/api/share/",

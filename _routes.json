@@ -11,6 +11,7 @@
     "/deploy/*",
     "/desktop/*",
     "/dev-server.mjs",
+    "/download-server.mjs",
     "/functions/*",
     "/github-webhook.mjs",
     "/mcp-server.mjs",

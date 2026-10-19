@@ -46,6 +46,8 @@ export const PUBLIC_ROOT_FILES = [
   "codecs/png.js", "codecs/png.wasm", "codecs/resize.js", "codecs/resize.wasm", "codecs/vorbis.js",
   "codecs/webp-decode.js", "codecs/webp-decode.wasm", "codecs/webp-encode.js",
   "codecs/webp-encode.wasm",
+  /* the muxer the downloader joins streams with, and its mp3 encoder */
+  "codecs/mux.js", "codecs/mp3-encode.js",
   /* scripts tools name in their `deps` */
   "qrcode.min.js", "drand-tools.js", "drand-client.min.js", "exif-reader.js",
   /* crawler metadata, and the picture link previews show */
