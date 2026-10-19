@@ -44,6 +44,8 @@ if (args.includes('-J')) {
   const format = (saved.requested_formats || [saved]).find(f => f.format_id === value('-f'));
   if (!format) { process.stderr.write('ERROR: [example] x1: Requested format is not available\n'); process.exit(1); }
   process.stdout.write(Buffer.alloc(format.filesize, format.format_id));
+  /* yt-dlp takes a moment to exit after its last byte. */
+  await sleep(300);
 } else if (args.includes('-P')) {
   const saved = JSON.parse(readFileSync(value('--load-info-json'), 'utf8'));
   const ext = args.includes('--audio-format') ? value('--audio-format') : saved.ext || 'mp4';

@@ -415,8 +415,10 @@ export function createDownloadService({
     return child;
   }
 
-  /** Kill a yt-dlp and whatever it started (ffmpeg, the JavaScript runtime). */
+  /** Kill a yt-dlp and whatever it started (ffmpeg, the JavaScript runtime),
+      unless it has already exited, when its process group may be another's. */
   function kill(child) {
+    if (child.exitCode !== null || child.signalCode !== null) return;
     try { process.kill(-child.pid, "SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch {} }
   }
 
@@ -551,7 +553,9 @@ export function createDownloadService({
    * stream that needs no joining.
    *
    * The answer waits for the first bytes, so a stream that fails at once is
-   * an error the page can act on rather than an empty file.
+   * an error the page can act on rather than an empty file. A stream of known
+   * size ends the moment its last byte is sent, not when yt-dlp has exited:
+   * the browser may already be sending its next request on the connection.
    */
   async function stream(req, res, network, job, n, save) {
     const format = (job.info.requested_formats || [job.info])[n];
@@ -562,23 +566,29 @@ export function createDownloadService({
     job.children.add(child);
     const abandon = () => kill(child);
     res.on("close", abandon);
-    child.stdout.once("data", first => {
-      const name = job.filename + "." + (format.ext || "mp4");
-      res.writeHead(200, {
-        "Content-Type": typeOf(format.ext), "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
-        ...(format.filesize ? { "Content-Length": format.filesize } : {}), ...(save ? { "Content-Disposition": disposition(name) } : {})
-      });
-      res.write(first);
-      child.stdout.pipe(res, { end: false });
+    const size = format.filesize || 0;
+    let sent = 0;
+    child.stdout.on("data", chunk => {
+      if (res.writableEnded || res.destroyed) return;
+      if (!res.headersSent) {
+        res.writeHead(200, {
+          "Content-Type": typeOf(format.ext), "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+          ...(size ? { "Content-Length": size } : {}), ...(save ? { "Content-Disposition": disposition(job.filename + "." + (format.ext || "mp4")) } : {})
+        });
+      }
+      const part = size ? chunk.subarray(0, size - sent) : chunk;
+      sent += part.length;
+      if (!res.write(part)) { child.stdout.pause(); res.once("drain", () => child.stdout.resume()); }
+      if (size && sent >= size) res.end();
     });
     const { code, error } = await child.done;
     job.children.delete(child);
     res.off("close", abandon);
-    if (res.destroyed) return;
+    if (res.writableEnded || res.destroyed) return;
     if (!res.headersSent) return reply(res, 502, { error: explain(error) });
     /* A stream cut short ends the connection, not the body, so the browser
        sees a failure rather than a shorter file. */
-    if (code === 0) res.end(); else res.destroy();
+    if (code === 0 && (!size || sent === size)) res.end(); else res.destroy();
   }
 
   /**
