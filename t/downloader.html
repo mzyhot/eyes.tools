@@ -61,15 +61,6 @@
     </div>
   </section>
 
-  <section>
-    <p class="lbl" id="where-label">join and convert</p>
-    <div class="seg" role="radiogroup" aria-labelledby="where-label">
-      <label><input type="radio" name="where" value="device" checked><span>on this device</span></label>
-      <label><input type="radio" name="where" value="server"><span>on the server</span></label>
-    </div>
-    <p class="hint mt-2">on this device, the server only fetches the streams; your browser puts them together. what it can't do, the server does.</p>
-  </section>
-
   <section class="stack-2" id="job" hidden>
     <p id="title"></p>
     <progress id="bar" max="1" hidden></progress>
@@ -80,8 +71,8 @@
 
   <details class="how">
     <summary>how it works</summary>
-    <p class="hint">The link goes to this site's server, which uses yt-dlp to find the video and fetch it from the site, since a browser cannot read another site's pages. On this device, each stream passes through to your browser as it arrives, and joining the picture to its sound, or converting to mp3, happens here; the finished file never exists on the server. On the server, or when this device cannot finish (a stream cut into pieces, a very large file, a browser without the codecs), the server makes the file and keeps it for an hour at most.</p>
-    <p class="hint">YouTube, TikTok, Bluesky, SoundCloud, Twitch and many other sites work. Videos that need an account, live streams, videos over three hours and files over 4 GB do not. Save only what you have the right to keep.</p>
+    <p class="hint">A browser cannot read another site's pages, so the link goes to this site's server, which finds the video with yt-dlp. The file itself then comes straight from the site to your browser wherever the site lets other sites read its files, as X, Bluesky, SoundCloud and Imgur do. YouTube, TikTok and Twitch do not, so for them the server passes each stream on as it arrives, without keeping it. Joining the picture to its sound, or converting to mp3, happens in your browser. Only what your browser cannot finish (a stream in pieces that the site will not hand to it, a file over 1 GB) is made on the server, which deletes it within the hour.</p>
+    <p class="hint">Videos that need an account, live streams, videos over three hours and files over 4 GB cannot be saved here. Save only what you have the right to keep.</p>
   </details>
 
 </main>
@@ -98,6 +89,7 @@ E.tool(function () {
      it fetched itself. */
   var SERVICE = SITE.publicOrigin || "";
   var API = SERVICE + "/api/download/";
+  var SERVER = SITE.name || "the server";
 
   var url = E.qs("#url"), go = E.qs("#go"), err = E.qs("#err"), job = E.qs("#job"), title = E.qs("#title"),
       bar = E.qs("#bar"), status = E.qs("#status"), again = E.qs("#again"), quality = E.qs("#quality");
@@ -105,6 +97,8 @@ E.tool(function () {
   var running = null, saveAgain = null;
 
   var choice = function (name) { return E.qs('input[name="' + name + '"]:checked').value; };
+  var host = function (address) { try { return new URL(address).hostname.replace(/^www\./, ""); } catch (e) { return "the site"; } };
+  var stopped = function () { return new DOMException("stopped", "AbortError"); };
 
   function show(text, fraction) {
     status.textContent = text;
@@ -128,12 +122,12 @@ E.tool(function () {
     try { response = await fetch(API + path, Object.assign({ cache: "no-store" }, options)); }
     catch (e) {
       if (e.name === "AbortError") throw e;
-      throw new Error("could not reach the downloader's server. check the connection and try again.");
+      throw new Error("could not reach " + SERVER + ". check the connection and try again.");
     }
     var data = null;
     try { data = await response.json(); } catch (e) {}
     if (!data) throw new Error("the downloader needs this site's server, which is not here. use it at " + (SITE.url || "the site's own address") + ".");
-    if (!response.ok) throw new Error(data.error || "the downloader's server refused that");
+    if (!response.ok) throw new Error(data.error || SERVER + " refused that");
     return data;
   }
 
@@ -141,16 +135,20 @@ E.tool(function () {
   function pause(ms, signal) {
     return new Promise(function (resolve, reject) {
       var timer = setTimeout(resolve, ms);
-      signal.addEventListener("abort", function () { clearTimeout(timer); reject(new DOMException("stopped", "AbortError")); }, { once: true });
+      signal.addEventListener("abort", function () { clearTimeout(timer); reject(stopped()); }, { once: true });
     });
   }
 
-  /** Read a stream or a file the server sends into a Blob, reporting bytes as they come. */
+  /**
+   * Read a file into a Blob, reporting bytes as they come. From another site
+   * it goes without cookies or a referrer, and fails at once where the site
+   * does not let other sites read it.
+   */
   async function fetchBlob(address, signal, onBytes) {
-    var response = await fetch(address, { cache: "no-store", signal: signal });
+    var response = await fetch(address, { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", signal: signal });
     if (!response.ok) {
       var data = await response.json().catch(function () { return null; });
-      throw new Error((data && data.error) || "the server could not send this stream");
+      throw new Error((data && data.error) || "http " + response.status + " from " + host(address));
     }
     var reader = response.body.getReader(), chunks = [], got = 0;
     for (;;) {
@@ -180,63 +178,92 @@ E.tool(function () {
   }
 
   /**
-   * Fetch the streams through the server and finish them here: joined into
-   * one file, or with the picture dropped, or made into an mp3. A stream that
-   * is already the finished file goes to the browser's downloads untouched.
+   * Get every stream onto the device and finish the file there. Each stream
+   * comes straight from its source when the source allows it, else through
+   * the server, untouched. An HLS stream is fetched by the muxer itself,
+   * segment by segment. A stream that is already the whole file and has to
+   * come through the server goes to the browser's downloads instead, so it
+   * is never held in memory.
    */
   async function onDevice(found, signal) {
     var plan = found.local, query = "?t=" + found.token, name = found.filename + "." + plan.ext;
-    var streams = plan.streams.map(function (s, n) { return API + found.id + "/stream/" + n + query; });
-    if (!plan.process && !SERVICE) {
-      return saved(function () { saveLink(streams[0] + "&save=1", name); }, "saving to your browser's downloads");
-    }
+    var relay = function (n) { return API + found.id + "/stream/" + n + query; };
     var sizes = plan.streams.map(function (s) { return s.size; });
     var total = sizes.every(Boolean) ? sizes.reduce(function (a, b) { return a + b; }, 0) : null, got = sizes.map(function () { return 0; });
+    /* Where each stream came from, for the status line: its source, or the server. */
+    var routes = plan.streams.map(function (s) { return s.direct ? host(s.url) : null; });
+    var route = function () {
+      var relayed = plan.streams.map(function (s, n) { return routes[n] ? null : host(s.url); }).filter(Boolean);
+      var direct = routes.filter(Boolean);
+      return relayed.length ? "through " + SERVER + " (" + relayed.filter(function (h, i, all) { return all.indexOf(h) === i; }).join(", ") + " blocks direct downloads)"
+        : "straight from " + direct.filter(function (h, i, all) { return all.indexOf(h) === i; }).join(" and ");
+    };
     var tracking = function (n) {
       return function (bytes) {
         got[n] = bytes;
         var sum = got.reduce(function (a, b) { return a + b; }, 0);
-        show("fetching through the server · " + amount(sum, total), total ? sum / total : null);
+        show("downloading " + route() + " · " + amount(sum, total), total ? sum / total : null);
       };
     };
-    show("fetching through the server", null);
-    /* The muxer loads while the streams arrive; the mp3 encoder adds to it, so it comes second. */
+
+    if (!plan.process && !plan.streams[0].direct && !SERVICE) {
+      return saved(function () { saveLink(relay(0) + "&save=1", name); }, "saving to your browser's downloads · " + route());
+    }
     var ready = !plan.process ? Promise.resolve() : E.load("codecs/mux.js").then(function () {
+      /* The mp3 encoder adds to the muxer, so it loads second. */
       return plan.container === "mp3" ? E.load("codecs/mp3-encode.js").then(function () { return eyesCodecs["mp3-encode"].init(); }) : null;
     });
     ready.catch(function () {});
-    var blobs = await Promise.all(streams.map(function (address, n) { return fetchBlob(address, signal, tracking(n)); }));
-    var result = blobs[0];
+
+    show("downloading " + route(), null);
+    var parts = await Promise.all(plan.streams.map(async function (s, n) {
+      if (s.hls) return s.url;
+      if (s.direct) {
+        try { return await fetchBlob(s.url, signal, tracking(n)); }
+        catch (e) {
+          if (signal.aborted) throw e;
+          routes[n] = null;
+          got[n] = 0;
+          if (!plan.process && !SERVICE) return null;
+        }
+      }
+      return fetchBlob(relay(n), signal, tracking(n));
+    }));
+    if (parts[0] === null) {
+      return saved(function () { saveLink(relay(0) + "&save=1", name); }, "saving to your browser's downloads · " + route());
+    }
+    var result = parts[0];
     if (plan.process) {
       await ready;
-      var doing = plan.container === "mp3" ? "converting" : plan.video && blobs.length > 1 ? "joining" : "finishing";
-      show(doing + " on this device", 0);
-      result = await eyesCodecs.mux.join(blobs, {
+      var doing = plan.container === "mp3" ? "converting" : plan.video && parts.length > 1 ? "joining" : "finishing";
+      show(doing + " in your browser", plan.streams.some(function (s) { return s.hls; }) ? null : 0);
+      result = await eyesCodecs.mux.join(parts, {
         container: plan.container, video: plan.video, audio: true,
-        onProgress: function (p) { if (!signal.aborted) show(doing + " on this device · " + Math.round(p * 100) + "%", p); }
+        onProgress: function (p) { if (!signal.aborted) show(doing + " in your browser · " + Math.round(p * 100) + "%", p); }
       });
-      if (signal.aborted) throw new DOMException("stopped", "AbortError");
+      if (signal.aborted) throw stopped();
     }
-    saved(function () { E.download(result, name); }, "saved · " + E.bytes(result.size) + " · " + plan.ext);
+    saved(function () { E.download(result, name); }, "saved · " + E.bytes(result.size) + " · " + plan.ext + " · downloaded " + route());
   }
 
   /** Have the server download and finish the file, then take it. */
-  async function onServer(found, signal, note) {
-    var query = "?t=" + found.token;
+  async function onServer(found, signal, reason) {
+    var query = "?t=" + found.token, lead = reason + ", so " + SERVER + " is ";
     var state = await api(found.id + "/process" + query, { method: "POST", signal: signal });
     for (;;) {
-      if (state.state === "failed") throw new Error(state.error || "the server could not finish this file");
+      if (state.state === "failed") throw new Error(state.error || SERVER + " could not finish this file");
       if (state.state === "ready") break;
       var processing = state.state === "processing";
-      show((note ? note + " " : "the server is ") + (processing ? "finishing the file" : "downloading") +
+      show(lead + (processing ? "finishing the file" : "downloading it") +
         (state.downloaded && !processing ? " · " + amount(state.downloaded, state.total) : ""), processing ? null : state.progress);
       await pause(1000, signal);
       state = await api(found.id + query, { signal: signal });
     }
     var address = API + found.id + "/file" + query, name = found.filename + "." + state.ext;
-    if (!SERVICE) return saved(function () { saveLink(address, name); }, "saving to your browser's downloads · " + E.bytes(state.size) + " · " + state.ext);
+    var note = " · " + E.bytes(state.size) + " · " + state.ext + " · made on " + SERVER;
+    if (!SERVICE) return saved(function () { saveLink(address, name); }, "saving to your browser's downloads" + note);
     var file = await fetchBlob(address, signal, function (bytes) { show("receiving · " + amount(bytes, state.size), bytes / state.size); });
-    saved(function () { E.download(file, name); }, "saved · " + E.bytes(file.size) + " · " + state.ext);
+    saved(function () { E.download(file, name); }, "saved" + note);
   }
 
   async function start() {
@@ -251,22 +278,19 @@ E.tool(function () {
     title.textContent = "";
     job.hidden = false;
     go.textContent = "stop";
-    show("looking up the link", null);
+    show("looking the link up on " + SERVER, null);
     try {
       found = await api("probe", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: signal,
         body: JSON.stringify({ url: link, mode: choice("mode"), quality: quality.value, audioFormat: choice("format") })
       });
       title.textContent = [found.title || found.filename, found.site.toLowerCase(), duration(found.duration)].filter(Boolean).join(" · ");
-      var note = "";
-      if (choice("where") === "device" && found.local) {
-        try { return await onDevice(found, signal); }
-        catch (e) {
-          if (signal.aborted) throw e;
-          note = "this device could not finish it, so the server is";
-        }
+      if (!found.local) return await onServer(found, signal, "this one has to be put together from pieces your browser cannot fetch");
+      try { await onDevice(found, signal); }
+      catch (e) {
+        if (signal.aborted) throw e;
+        await onServer(found, signal, "your browser could not finish it (" + (e.message || "it failed") + ")");
       }
-      await onServer(found, signal, note);
     } catch (e) {
       if (signal.aborted) {
         /* Let the server drop what it fetched or made for this one. */

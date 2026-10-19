@@ -31,17 +31,22 @@ test('the browser is told what it can finish itself', () => {
   assert.deepEqual(containerFor(null, 'opus'), { container: 'ogg', ext: 'opus' });
   assert.equal(containerFor('other', 'aac'), null);
 
-  const video = { format_id: 'v', ext: 'mp4', container: 'mp4_dash', protocol: 'https', vcodec: 'avc1.4d401f', acodec: 'none', height: 720, filesize: 10 };
-  const audio = { format_id: 'a', ext: 'm4a', container: 'm4a_dash', protocol: 'https', vcodec: 'none', acodec: 'mp4a.40.2', filesize: 5 };
-  assert.deepEqual(planLocal({ requested_formats: [video, audio] }, 'video', 'original'),
-    { process: true, video: true, container: 'mp4', ext: 'mp4', streams: [{ type: 'video/mp4', size: 10 }, { type: 'audio/mp4', size: 5 }] });
+  const video = { format_id: 'v', url: 'https://cdn.example/v', ext: 'mp4', container: 'mp4_dash', protocol: 'https', vcodec: 'avc1.4d401f', acodec: 'none', height: 720, filesize: 10 };
+  const audio = { format_id: 'a', url: 'https://cdn.example/a', ext: 'm4a', container: 'm4a_dash', protocol: 'https', vcodec: 'none', acodec: 'mp4a.40.2', filesize: 5 };
+  assert.deepEqual(planLocal({ requested_formats: [video, audio] }, 'video', 'original'), { process: true, video: true, container: 'mp4', ext: 'mp4', streams: [
+    { url: 'https://cdn.example/v', hls: false, direct: true, type: 'video/mp4', size: 10 }, { url: 'https://cdn.example/a', hls: false, direct: true, type: 'audio/mp4', size: 5 }] });
+  // What needs a cookie or a referrer comes through the server; an HLS stream only the browser can fetch.
+  assert.equal(planLocal({ ...audio, cookies: 'a=1' }, 'audio', 'original').streams[0].direct, false);
+  assert.equal(planLocal({ ...audio, http_headers: { 'User-Agent': 'x', Referer: 'https://site.example/' } }, 'audio', 'original').streams[0].direct, false);
+  assert.deepEqual(planLocal({ ...audio, protocol: 'm3u8_native', container: undefined }, 'audio', 'original').streams[0], { url: 'https://cdn.example/a', hls: true, direct: true, type: 'audio/mp4', size: 5 });
+  assert.equal(planLocal({ ...audio, protocol: 'm3u8_native', http_headers: { Referer: 'https://site.example/' } }, 'audio', 'original'), null);
   // A file already whole goes to the browser's downloads; a DASH one is remade.
   assert.equal(planLocal({ ...audio, container: undefined, ext: 'mp3', acodec: 'mp3' }, 'audio', 'original').process, false);
   assert.equal(planLocal(audio, 'audio', 'original').ext, 'm4a');
-  assert.deepEqual(planLocal(audio, 'audio', 'mp3'), { process: true, video: false, container: 'mp3', ext: 'mp3', streams: [{ type: 'audio/mp4', size: 5 }] });
+  assert.deepEqual(planLocal(audio, 'audio', 'mp3'), { process: true, video: false, container: 'mp3', ext: 'mp3', streams: [{ url: 'https://cdn.example/a', hls: false, direct: true, type: 'audio/mp4', size: 5 }] });
   // Sound from a video drops the picture; a fragmented stream or a huge one is the server's.
   assert.equal(planLocal({ ...video, acodec: 'mp4a.40.2', container: undefined }, 'audio', 'original').ext, 'm4a');
-  assert.equal(planLocal({ ...video, protocol: 'm3u8_native' }, 'video', 'original'), null);
+  assert.equal(planLocal({ ...video, protocol: 'http_dash_segments' }, 'video', 'original'), null);
   assert.equal(planLocal({ ...video, filesize: 2 ** 31 }, 'video', 'original'), null);
 });
 
@@ -91,7 +96,8 @@ test('two streams are found, passed on untouched, and only a few times', { timeo
   assert.match(job.id, /^[a-f0-9]{24}$/);
   assert.equal(job.title, 'A clip: "quoted" / slashed');
   assert.equal(job.filename, 'A clip quoted slashed');
-  assert.deepEqual(job.local, { process: true, video: true, container: 'mp4', ext: 'mp4', streams: [{ type: 'video/mp4', size: 3000 }, { type: 'audio/mp4', size: 1000 }] });
+  assert.deepEqual(job.local.streams.map(s => [s.url, s.direct, s.size]), [['https://cdn.example/137.mp4', true, 3000], ['https://cdn.example/140.m4a', true, 1000]]);
+  assert.deepEqual([job.local.process, job.local.container, job.local.ext], [true, 'mp4', 'mp4']);
   const lookup = (await f.calls())[0];
   assert.deepEqual(lookup.slice(lookup.indexOf('-f'), lookup.indexOf('-f') + 4), ['-f', 'bv*+ba/b', '-S', 'res:720,+codec:avc:m4a']);
   for (const flag of ['--ignore-config', '--no-playlist', '--use-extractors', '--proxy']) assert.ok(lookup.includes(flag), flag);
@@ -115,7 +121,7 @@ test('a whole file is saved under its title; links are checked and refused plain
   const f = await fixture(t);
   const job = await f.found({ url: 'video.example/one' });
   assert.equal((await f.calls()).at(-1).at(-1), 'https://video.example/one');
-  assert.deepEqual(job.local, { process: false, video: true, container: null, ext: 'mp4', streams: [{ type: 'video/mp4', size: 2000 }] });
+  assert.deepEqual([job.local.process, job.local.ext, job.local.streams[0].direct], [false, 'mp4', false]);
   const saved = await fetch(f.base + job.id + '/stream/0?t=' + job.token + '&save=1');
   assert.equal(saved.headers.get('content-length'), '2000');
   assert.equal(saved.headers.get('content-disposition'), `attachment; filename="A clip quoted slashed.mp4"; filename*=UTF-8''A%20clip%20quoted%20slashed.mp4`);
@@ -136,7 +142,11 @@ test('a whole file is saved under its title; links are checked and refused plain
 
 test('the server finishes what the browser cannot, and reports progress', { timeout: 15000 }, async t => {
   const f = await fixture(t);
-  const job = await f.found({ url: 'https://video.example/hls', mode: 'audio', audioFormat: 'mp3' });
+  const open = await f.found({ url: 'https://video.example/hls' });
+  assert.deepEqual([open.local.process, open.local.streams[0].hls, open.local.streams[0].direct], [true, true, true]);
+  // The browser fetches an HLS stream itself; there is nothing for the server to pass on.
+  assert.equal((await fetch(f.base + open.id + '/stream/0?t=' + open.token)).status, 404);
+  const job = await f.found({ url: 'https://video.example/hls-locked', mode: 'audio', audioFormat: 'mp3' });
   assert.equal(job.local, null);
   assert.equal((await fetch(f.base + job.id + '/file?t=' + job.token)).status, 409);
   const started = await (await fetch(f.base + job.id + '/process?t=' + job.token, { method: 'POST' })).json();

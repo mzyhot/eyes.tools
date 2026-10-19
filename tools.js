@@ -30,6 +30,11 @@
  *   note   Optional. Replaces the footer's "runs in your browser · nothing is
  *          uploaded" for a tool that reaches the network. Say what leaves the
  *          browser and who receives it.
+ *   connect  Optional. Sources the Node server adds to this page's
+ *          `connect-src`, for a tool that fetches from places it cannot list,
+ *          as the downloader fetches media from wherever a video is kept.
+ *          Static hosts and the desktop app keep the site's policy, so the
+ *          tool must still work, by another route, without it.
  *
  * Order is the order visitors see. It is editorial, roughly most-reached first,
  * and the filter re-ranks on exact and prefix matches rather than re-sorting.
@@ -44,9 +49,9 @@ window.TOOLS = [
   { slug: "share",       name: "share",             desc: "send a file straight to someone else's browser",     meta: "send files or text over an encrypted WebRTC connection.",
     alias: "file transfer p2p peer webrtc send receive text encrypted files directly", deps: ["qrcode.min.js"],
     note: "device to device · keep both tabs open" },
-  { slug: "downloader",  name: "downloader",        desc: "save a video or its sound from a link",              meta: "download video or audio from youtube, tiktok, bluesky, soundcloud and more, joined on your device where it can be.",
+  { slug: "downloader",  name: "downloader",        desc: "save a video or its sound from a link",              meta: "download video or audio from youtube, tiktok, x, bluesky, soundcloud and more, straight to your device where the site allows it.",
     alias: "video download downloader save youtube yt-dlp ytdlp cobalt tiktok twitter x instagram reddit soundcloud bluesky vimeo twitch mp4 mp3 m4a audio music media link grab rip",
-    note: "your link goes to this site's server, which fetches the media · joining runs on your device when it can" },
+    note: "links are looked up on this site's server · files come straight from the source when it allows, else through the server", connect: "https:" },
   { slug: "dir",         name: "dir",               desc: "useful places to go on the web",                     meta: "a filterable directory of real, long-lived websites worth knowing.",
     alias: "links directory bookmarks sites index browse websites" },
   { slug: "base64",      name: "base64",            desc: "turn text into base64, or bring it back",            meta: "encode and decode base64 locally.",

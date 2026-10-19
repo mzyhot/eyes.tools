@@ -6,15 +6,18 @@
  * happens to it afterwards is the visitor's choice, as cobalt's local
  * processing does it:
  *
- *   On the device. The server looks the link up once (`probe`), keeps what
- *   yt-dlp found for an hour, and passes each stream to the browser as it
- *   arrives (`stream`), untouched. Joining a video stream to its sound, or
- *   taking the sound out of a video, happens in the browser (codecs/mux.js),
- *   and the finished file never exists on the server. A stream that needs no
- *   joining goes straight to the browser's own downloads.
+ *   On the device, first. The server looks the link up once (`probe`) and
+ *   tells the browser where each stream is. The browser fetches it from the
+ *   source itself wherever the source lets other sites read it (X, Bluesky,
+ *   SoundCloud, Imgur, Reddit's and Vimeo's CDNs do; YouTube's, TikTok's and
+ *   Twitch's do not), and otherwise asks this server to pass it on as it
+ *   arrives, untouched (`stream`). Joining video to sound, taking the sound
+ *   out of a video or making an mp3 happens in the browser (codecs/mux.js),
+ *   and the finished file never exists on the server.
  *
- *   On the server, when the device cannot (a stream cut into fragments, a
- *   conversion to mp3, a browser that runs out of memory) or the visitor asks.
+ *   On the server, only when the device cannot: a fragmented stream its
+ *   source will not let the browser fetch, a file past what a browser should
+ *   hold, a browser without the codecs.
  *   yt-dlp downloads and joins the streams into the job's own folder
  *   (`process`), the page polls for progress, and the finished file is sent
  *   once it is ready (`file`). It is deleted with the job, within the hour,
@@ -168,28 +171,38 @@ export function containerFor(video, audio) {
     vorbis: { container: "ogg", ext: "ogg" } }[audio] || null;
 }
 
+/* Whether a browser might fetch a format straight from its source: only when
+   yt-dlp needs nothing a page cannot send (cookies, a referrer, an origin of
+   the site's own). The source must also allow other sites to read it (CORS),
+   which only the browser's attempt can tell. */
+const fetchable = f => !f.cookies && !Object.keys(f.http_headers || {}).some(name => /^(cookie|referer|origin|authorization)$/i.test(name));
+const isHls = f => /^m3u8/.test(f.protocol || "");
+
 /**
  * What the browser can do with what yt-dlp chose, or null when only the
  * server can finish it.
  *
- * The browser gets each stream whole, can copy tracks between files and can
- * make an mp3, but it cannot reassemble a stream cut into fragments. A single
- * stream already in its final form needs no joining at all and goes to the
- * browser's own downloads.
+ * Each stream is fetched straight from its source where the source allows
+ * it, and otherwise through this server, untouched. An HLS stream the browser
+ * must fetch itself, segment by segment, since only yt-dlp could pass one on;
+ * other fragmented streams are the server's. The browser can copy tracks
+ * between files and make an mp3. A single stream already in its final form
+ * needs no joining at all.
  * @param {object} info One video's info, as `yt-dlp -J` prints it.
  * @param {"video"|"audio"} mode
  * @param {"original"|"mp3"} audioFormat
- * @returns {object|null} `{ process, video, container, ext, streams: [{ type, size }] }`.
+ * @returns {object|null} `{ process, video, container, ext, streams: [{ url, hls, direct, type, size }] }`.
  */
 export function planLocal(info, mode, audioFormat) {
   const formats = info.requested_formats || [info];
-  if (!formats.length || !formats.every(f => /^https?$/.test(f.protocol || "") && !f.fragments && f.format_id)) return null;
+  const usable = f => f.format_id && f.url && (/^https?$/.test(f.protocol || "") ? !f.fragments : isHls(f) && fetchable(f));
+  if (!formats.length || !formats.every(usable)) return null;
   const sizes = formats.map(f => f.filesize || f.filesize_approx || null);
   if (sizes.reduce((sum, size) => sum + (size || 0), 0) > LOCAL_MAX_BYTES) return null;
-  const streams = formats.map((f, at) => ({ type: typeOf(f.ext), size: sizes[at] }));
+  const streams = formats.map((f, at) => ({ url: f.url, hls: isHls(f), direct: fetchable(f), type: typeOf(f.ext), size: sizes[at] }));
   const single = formats[0];
   const mp3 = mode === "audio" && audioFormat === "mp3";
-  const whole = formats.length === 1 && !/_dash$/.test(single.container || "") && !(mode === "audio" && carriesVideo(single)) &&
+  const whole = formats.length === 1 && !isHls(single) && !/_dash$/.test(single.container || "") && !(mode === "audio" && carriesVideo(single)) &&
     !(mp3 && codecFamily(single.acodec) !== "mp3");
   if (whole) return { process: false, video: mode === "video", container: null, ext: single.ext || "mp4", streams };
   const video = mode === "video" ? formats.find(carriesVideo) || null : null;
@@ -563,7 +576,7 @@ export function createDownloadService({
    */
   async function stream(req, res, network, job, n, save) {
     const format = (job.info.requested_formats || [job.info])[n];
-    if (!job.local || !format) throw status(404, "that stream is not part of this download");
+    if (!job.local || !format || job.local.streams[n].hls) throw status(404, "that stream is not part of this download");
     read(job, "stream" + n);
     const child = await ytdlpRun(network, ["--load-info-json", join(job.dir, "info.json"), "-f", String(format.format_id),
       "--max-filesize", String(MAX_BYTES), "--no-part", "--quiet", "-o", "-"], FETCH_MS);

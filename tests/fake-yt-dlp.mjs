@@ -10,10 +10,11 @@ const args = process.argv.slice(2);
 const value = flag => args[args.indexOf(flag) + 1];
 appendFileSync(join(process.cwd(), 'calls.log'), JSON.stringify(args) + '\n');
 
-const video = { format_id: '137', ext: 'mp4', container: 'mp4_dash', protocol: 'https', vcodec: 'avc1.640028', acodec: 'none', width: 1920, height: 1080, filesize: 3000 };
-const audio = { format_id: '140', ext: 'm4a', container: 'm4a_dash', protocol: 'https', vcodec: 'none', acodec: 'mp4a.40.2', filesize: 1000 };
-const whole = { format_id: '18', ext: 'mp4', protocol: 'https', vcodec: 'avc1.42001E', acodec: 'mp4a.40.2', width: 640, height: 360, filesize: 2000 };
-const hls = { format_id: 'hls-720', ext: 'mp4', protocol: 'm3u8_native', vcodec: 'avc1.4d401f', acodec: 'mp4a.40.2', height: 720 };
+const video = { format_id: '137', url: 'https://cdn.example/137.mp4', ext: 'mp4', container: 'mp4_dash', protocol: 'https', vcodec: 'avc1.640028', acodec: 'none', width: 1920, height: 1080, filesize: 3000 };
+const audio = { format_id: '140', url: 'https://cdn.example/140.m4a', ext: 'm4a', container: 'm4a_dash', protocol: 'https', vcodec: 'none', acodec: 'mp4a.40.2', filesize: 1000 };
+const whole = { format_id: '18', url: 'https://cdn.example/18.mp4', ext: 'mp4', protocol: 'https', vcodec: 'avc1.42001E', acodec: 'mp4a.40.2', width: 640, height: 360, filesize: 2000,
+  cookies: 'session=1; Domain=.cdn.example' };
+const hls = { format_id: 'hls-720', url: 'https://cdn.example/720.m3u8', ext: 'mp4', protocol: 'm3u8_native', vcodec: 'avc1.4d401f', acodec: 'mp4a.40.2', height: 720 };
 const base = { id: 'x1', title: 'A clip: "quoted" / slashed', extractor: 'example', extractor_key: 'Example', duration: 61 };
 
 function info(link) {
@@ -21,6 +22,7 @@ function info(link) {
   if (path === '/two') return { ...base, requested_formats: [video, audio], formats: [video, audio] };
   if (path === '/one') return { ...base, ...whole, formats: [whole] };
   if (path === '/hls') return { ...base, ...hls, formats: [hls] };
+  if (path === '/hls-locked') return { ...base, ...hls, http_headers: { Referer: 'https://video.example/' }, formats: [hls] };
   if (path === '/long') return { ...base, ...whole, duration: 4 * 3600 };
   if (path === '/live') return { ...base, ...whole, is_live: true };
   if (path === '/playlist') return { _type: 'playlist', entries: [{ ...base, title: 'first', ...whole }] };

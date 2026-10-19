@@ -31,8 +31,9 @@
  *   resize                 resize(rgba, w, h, toW, toH) → rgba, lanczos3 in linear light
  *   mp3, flac, vorbis, opus  decode(bytes, limit) → Promise of { channels, sampleRate },
  *                          refusing a sound past limit samples, all channels counted
- *   mux                    join(blobs, { container, video, audio, onProgress }) → Promise of a Blob:
- *                          the first video and sound tracks among them in one file, copied
+ *   mux                    join(parts, { container, video, audio, onProgress }) → Promise of a Blob:
+ *                          the first video and sound tracks among them in one file, copied;
+ *                          a part is a Blob or an HLS playlist's address
  *   mp3-encode             lets mux make mp3; loaded after it, since it adds to it
  *
  * Each folder's NOTICES.txt says what every other file there contains and
@@ -177,11 +178,13 @@ const AUDIO = (name, pkg, decoder) => `import { ${decoder} } from ${JSON.stringi
 };`;
 /* The muxer: Mediabunny's conversions, each told to keep one kind of track,
    adding to one output, so a video stream and a sound stream become one file
-   with their packets copied as they are. Only sound bound for an mp3 is
-   re-encoded, which needs mp3-encode. What mp3-encode needs from Mediabunny
-   it takes from here, so the encoder joins this copy's registry. */
-const MUX = `import { ALL_FORMATS, BlobSource, BufferTarget, Conversion, CustomAudioEncoder, EncodedPacket, Input, Logging, MkvOutputFormat,
-  Mp3OutputFormat, Mp4OutputFormat, OggOutputFormat, Output, WebMOutputFormat, registerEncoder } from "mediabunny";
+   with their packets copied as they are. A part is a Blob, or the address of
+   an HLS playlist, which Mediabunny fetches segment by segment itself. Only
+   sound bound for an mp3 is re-encoded, which needs mp3-encode. What
+   mp3-encode needs from Mediabunny it takes from here, so the encoder joins
+   this copy's registry. */
+const MUX = `import { ALL_FORMATS, BlobSource, BufferTarget, Conversion, CustomAudioEncoder, EncodedPacket, HLS_FORMATS, Input, Logging, MkvOutputFormat,
+  Mp3OutputFormat, Mp4OutputFormat, OggOutputFormat, Output, UrlSource, WebMOutputFormat, registerEncoder } from "mediabunny";
 const FORMATS = {
   mp4: () => new Mp4OutputFormat({ fastStart: "in-memory" }), webm: () => new WebMOutputFormat(), mkv: () => new MkvOutputFormat(),
   ogg: () => new OggOutputFormat(), mp3: () => new Mp3OutputFormat()
@@ -194,7 +197,9 @@ const FORMATS = {
     const output = new Output({ format: FORMATS[container](), target: new BufferTarget() });
     const conversions = [];
     for (const part of parts) {
-      const input = new Input({ source: new BlobSource(part), formats: ALL_FORMATS });
+      const input = typeof part === "string"
+        ? new Input({ source: new UrlSource(part, { requestInit: { credentials: "omit", referrerPolicy: "no-referrer" } }), formats: HLS_FORMATS })
+        : new Input({ source: new BlobSource(part), formats: ALL_FORMATS });
       const takeVideo = video && !!(await input.getPrimaryVideoTrack());
       const takeAudio = audio && !!(await input.getPrimaryAudioTrack());
       if (!takeVideo && !takeAudio) continue;
