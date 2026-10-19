@@ -183,20 +183,42 @@ const AUDIO = (name, pkg, decoder) => `import { ${decoder} } from ${JSON.stringi
    container follows the codecs the tracks really hold, as yt-dlp's own
    mp4/webm/mkv would: webm for the open codecs, mp4 where it plays almost
    everywhere, Matroska for the rest; sound alone keeps its own kind of file.
+   An mp4's index goes at its end, as ffmpeg writes it by default, and the
+   output goes straight into Blob pieces, a later write over an earlier one
+   splicing it, so the page never holds the finished file itself and the
+   browser may keep it on disk; the inputs are let go once joined.
    Only sound bound for an mp3 is re-encoded, which needs mp3-encode. What
    mp3-encode needs from Mediabunny it takes from here, so the encoder joins
    this copy's registry. */
-const MUX = `import { ALL_FORMATS, BlobSource, BufferTarget, Conversion, CustomAudioEncoder, EncodedPacket, HLS_FORMATS, Input, Logging, MkvOutputFormat,
-  Mp3OutputFormat, Mp4OutputFormat, OggOutputFormat, Output, UrlSource, WebMOutputFormat, registerEncoder } from "mediabunny";
+const MUX = `import { ALL_FORMATS, BlobSource, Conversion, CustomAudioEncoder, EncodedPacket, HLS_FORMATS, Input, Logging, MkvOutputFormat,
+  Mp3OutputFormat, Mp4OutputFormat, OggOutputFormat, Output, StreamTarget, UrlSource, WebMOutputFormat, registerEncoder } from "mediabunny";
+/* A file built of Blob pieces by position. */
+function pieces() {
+  let list = [];
+  return {
+    write({ data, position }) {
+      const end = position + data.byteLength, kept = [];
+      for (const piece of list) {
+        const pieceEnd = piece.at + piece.blob.size;
+        if (pieceEnd <= position || piece.at >= end) { kept.push(piece); continue; }
+        if (piece.at < position) kept.push({ at: piece.at, blob: piece.blob.slice(0, position - piece.at) });
+        if (pieceEnd > end) kept.push({ at: end, blob: piece.blob.slice(end - piece.at) });
+      }
+      kept.push({ at: position, blob: new Blob([data]) });
+      list = kept.sort((a, b) => a.at - b.at);
+    },
+    blob: type => new Blob(list.map(piece => piece.blob), { type })
+  };
+}
 const OPEN_VIDEO = ["vp8", "vp9", "av1"], MP4_VIDEO = ["avc", "hevc", "vp9", "av1"], MP4_AUDIO = ["aac", "mp3", "opus", "flac", "ac3", "eac3"];
 function container(video, audio, mp3) {
   if (mp3) return [new Mp3OutputFormat(), "mp3"];
   if (video) {
     if (OPEN_VIDEO.includes(video) && (!audio || audio === "opus" || audio === "vorbis")) return [new WebMOutputFormat(), "webm"];
-    if (MP4_VIDEO.includes(video) && (!audio || MP4_AUDIO.includes(audio))) return [new Mp4OutputFormat({ fastStart: "in-memory" }), "mp4"];
+    if (MP4_VIDEO.includes(video) && (!audio || MP4_AUDIO.includes(audio))) return [new Mp4OutputFormat({ fastStart: false }), "mp4"];
     return [new MkvOutputFormat(), "mkv"];
   }
-  if (audio === "aac") return [new Mp4OutputFormat({ fastStart: "in-memory" }), "m4a"];
+  if (audio === "aac") return [new Mp4OutputFormat({ fastStart: false }), "m4a"];
   if (audio === "mp3") return [new Mp3OutputFormat(), "mp3"];
   if (audio === "opus" || audio === "vorbis") return [new OggOutputFormat(), audio === "opus" ? "opus" : "ogg"];
   return [new MkvOutputFormat(), "mka"];
@@ -220,7 +242,8 @@ function container(video, audio, mp3) {
     if (!takes.length) throw new Error("these streams hold nothing to keep");
     const codec = async kind => { const take = takes.find(t => t[kind]); return take ? take[kind].getCodec() : null; };
     const [format, ext] = container(await codec("videoTrack"), await codec("audioTrack"), mp3);
-    const output = new Output({ format, target: new BufferTarget() });
+    const file = pieces();
+    const output = new Output({ format, target: new StreamTarget(new WritableStream({ write: chunk => file.write(chunk) }), { chunked: true }) });
     const conversions = [];
     for (const { input, videoTrack, audioTrack } of takes) {
       const conversion = await Conversion.init({
@@ -238,7 +261,8 @@ function container(video, audio, mp3) {
     await output.start();
     await Promise.all(conversions.map(conversion => conversion.execute()));
     await output.finalize();
-    return { blob: new Blob([output.target.buffer], { type: format.mimeType }), ext };
+    for (const take of takes) take.input.dispose();
+    return { blob: file.blob(format.mimeType), ext };
   }
 };`;
 /* mp3-encode's imports of Mediabunny, answered by the muxer's. */

@@ -142,7 +142,9 @@ E.tool(function () {
   /**
    * Read a file into a Blob, reporting bytes as they come. From another site
    * it goes without cookies or a referrer, and fails at once where the site
-   * does not let other sites read it.
+   * does not let other sites read it. What arrives is packed into a Blob
+   * every few megabytes, so the page never holds the whole file itself and
+   * the browser may keep it on disk.
    */
   async function fetchBlob(address, signal, onBytes) {
     var response = await fetch(address, { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", signal: signal });
@@ -150,15 +152,18 @@ E.tool(function () {
       var data = await response.json().catch(function () { return null; });
       throw new Error((data && data.error) || "http " + response.status + " from " + host(address));
     }
-    var reader = response.body.getReader(), chunks = [], got = 0;
+    var reader = response.body.getReader(), pieces = [], chunks = [], held = 0, got = 0;
     for (;;) {
       var part = await reader.read();
       if (part.done) break;
       chunks.push(part.value);
+      held += part.value.length;
       got += part.value.length;
+      if (held >= 16777216) { pieces.push(new Blob(chunks)); chunks = []; held = 0; }
       onBytes(got);
     }
-    return new Blob(chunks, { type: response.headers.get("Content-Type") || "" });
+    pieces.push(new Blob(chunks));
+    return new Blob(pieces, { type: response.headers.get("Content-Type") || "" });
   }
 
   /** Hand the browser a same-origin address to save, through its own downloads. */
@@ -238,10 +243,13 @@ E.tool(function () {
       await ready;
       var doing = plan.mp3 ? "converting" : plan.video && parts.length > 1 ? "joining" : "finishing";
       show(doing + " in your browser", plan.streams.some(function (s) { return s.hls; }) ? null : 0);
-      result = await eyesCodecs.mux.join(parts, {
+      var input = parts;
+      parts = null;
+      result = await eyesCodecs.mux.join(input, {
         video: plan.video, audio: true, mp3: plan.mp3,
         onProgress: function (p) { if (!signal.aborted) show(doing + " in your browser · " + Math.round(p * 100) + "%", p); }
       });
+      input = null;
       if (signal.aborted) throw stopped();
     }
     saved(function () { E.download(result.blob, label(result.ext)); }, "saved · " + E.bytes(result.blob.size) + " · " + result.ext + " · downloaded " + route());
