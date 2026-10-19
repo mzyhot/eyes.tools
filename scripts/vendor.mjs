@@ -31,9 +31,9 @@
  *   resize                 resize(rgba, w, h, toW, toH) → rgba, lanczos3 in linear light
  *   mp3, flac, vorbis, opus  decode(bytes, limit) → Promise of { channels, sampleRate },
  *                          refusing a sound past limit samples, all channels counted
- *   mux                    join(parts, { container, video, audio, onProgress }) → Promise of a Blob:
- *                          the first video and sound tracks among them in one file, copied;
- *                          a part is a Blob or an HLS playlist's address
+ *   mux                    join(parts, { video, audio, mp3, onProgress }) → Promise of { blob, ext }:
+ *                          the first video and sound tracks among them in one file, copied, in
+ *                          the container their codecs suit; a part is a Blob or an HLS playlist's address
  *   mp3-encode             lets mux make mp3; loaded after it, since it adds to it
  *
  * Each folder's NOTICES.txt says what every other file there contains and
@@ -179,41 +179,58 @@ const AUDIO = (name, pkg, decoder) => `import { ${decoder} } from ${JSON.stringi
 /* The muxer: Mediabunny's conversions, each told to keep one kind of track,
    adding to one output, so a video stream and a sound stream become one file
    with their packets copied as they are. A part is a Blob, or the address of
-   an HLS playlist, which Mediabunny fetches segment by segment itself. Only
-   sound bound for an mp3 is re-encoded, which needs mp3-encode. What
+   an HLS playlist, which Mediabunny fetches segment by segment itself. The
+   container follows the codecs the tracks really hold, as yt-dlp's own
+   mp4/webm/mkv would: webm for the open codecs, mp4 where it plays almost
+   everywhere, Matroska for the rest; sound alone keeps its own kind of file.
+   Only sound bound for an mp3 is re-encoded, which needs mp3-encode. What
    mp3-encode needs from Mediabunny it takes from here, so the encoder joins
    this copy's registry. */
 const MUX = `import { ALL_FORMATS, BlobSource, BufferTarget, Conversion, CustomAudioEncoder, EncodedPacket, HLS_FORMATS, Input, Logging, MkvOutputFormat,
   Mp3OutputFormat, Mp4OutputFormat, OggOutputFormat, Output, UrlSource, WebMOutputFormat, registerEncoder } from "mediabunny";
-const FORMATS = {
-  mp4: () => new Mp4OutputFormat({ fastStart: "in-memory" }), webm: () => new WebMOutputFormat(), mkv: () => new MkvOutputFormat(),
-  ogg: () => new OggOutputFormat(), mp3: () => new Mp3OutputFormat()
-};
+const OPEN_VIDEO = ["vp8", "vp9", "av1"], MP4_VIDEO = ["avc", "hevc", "vp9", "av1"], MP4_AUDIO = ["aac", "mp3", "opus", "flac", "ac3", "eac3"];
+function container(video, audio, mp3) {
+  if (mp3) return [new Mp3OutputFormat(), "mp3"];
+  if (video) {
+    if (OPEN_VIDEO.includes(video) && (!audio || audio === "opus" || audio === "vorbis")) return [new WebMOutputFormat(), "webm"];
+    if (MP4_VIDEO.includes(video) && (!audio || MP4_AUDIO.includes(audio))) return [new Mp4OutputFormat({ fastStart: "in-memory" }), "mp4"];
+    return [new MkvOutputFormat(), "mkv"];
+  }
+  if (audio === "aac") return [new Mp4OutputFormat({ fastStart: "in-memory" }), "m4a"];
+  if (audio === "mp3") return [new Mp3OutputFormat(), "mp3"];
+  if (audio === "opus" || audio === "vorbis") return [new OggOutputFormat(), audio === "opus" ? "opus" : "ogg"];
+  return [new MkvOutputFormat(), "mka"];
+}
 (globalThis.eyesCodecs = globalThis.eyesCodecs || {}).mux = {
   init: () => Promise.resolve(),
   mediabunny: { CustomAudioEncoder, EncodedPacket, Logging, registerEncoder },
-  join: async (parts, { container, video = true, audio = true, onProgress }) => {
-    if (!FORMATS[container]) throw new Error("no such container: " + container);
-    const output = new Output({ format: FORMATS[container](), target: new BufferTarget() });
-    const conversions = [];
+  join: async (parts, { video = true, audio = true, mp3 = false, onProgress }) => {
+    const takes = [];
     for (const part of parts) {
       const input = typeof part === "string"
         ? new Input({ source: new UrlSource(part, { requestInit: { credentials: "omit", referrerPolicy: "no-referrer" } }), formats: HLS_FORMATS })
         : new Input({ source: new BlobSource(part), formats: ALL_FORMATS });
-      const takeVideo = video && !!(await input.getPrimaryVideoTrack());
-      const takeAudio = audio && !!(await input.getPrimaryAudioTrack());
-      if (!takeVideo && !takeAudio) continue;
-      video = video && !takeVideo;
-      audio = audio && !takeAudio;
+      const videoTrack = video && !mp3 ? await input.getPrimaryVideoTrack() : null;
+      const audioTrack = audio ? await input.getPrimaryAudioTrack() : null;
+      if (!videoTrack && !audioTrack) continue;
+      if (videoTrack) video = false;
+      if (audioTrack) audio = false;
+      takes.push({ input, videoTrack, audioTrack });
+    }
+    if (!takes.length) throw new Error("these streams hold nothing to keep");
+    const codec = async kind => { const take = takes.find(t => t[kind]); return take ? take[kind].getCodec() : null; };
+    const [format, ext] = container(await codec("videoTrack"), await codec("audioTrack"), mp3);
+    const output = new Output({ format, target: new BufferTarget() });
+    const conversions = [];
+    for (const { input, videoTrack, audioTrack } of takes) {
       const conversion = await Conversion.init({
         input, output, composable: true,
-        video: takeVideo ? {} : { discard: true },
-        audio: takeAudio ? (container === "mp3" ? { codec: "mp3", bitrate: 256000 } : {}) : { discard: true }
+        video: videoTrack ? {} : { discard: true },
+        audio: audioTrack ? (mp3 ? { codec: "mp3", bitrate: 256000 } : {}) : { discard: true }
       });
-      if (!conversion.isValid) throw new Error("this browser cannot join these streams");
+      if (!conversion.isValid) throw new Error("this browser cannot read these streams");
       conversions.push(conversion);
     }
-    if (!conversions.length) throw new Error("these streams hold nothing to keep");
     const done = conversions.map(() => 0);
     conversions.forEach((conversion, at) => {
       conversion.onProgress = value => { done[at] = value; if (onProgress) onProgress(done.reduce((a, b) => a + b, 0) / done.length); };
@@ -221,7 +238,7 @@ const FORMATS = {
     await output.start();
     await Promise.all(conversions.map(conversion => conversion.execute()));
     await output.finalize();
-    return new Blob([output.target.buffer], { type: output.format.mimeType });
+    return { blob: new Blob([output.target.buffer], { type: format.mimeType }), ext };
   }
 };`;
 /* mp3-encode's imports of Mediabunny, answered by the muxer's. */

@@ -132,8 +132,8 @@ const TYPES = {
 const typeOf = ext => TYPES[ext] || "application/octet-stream";
 
 /**
- * A codec as yt-dlp names it, reduced to the family that decides a container,
- * or null for none or unknown.
+ * A codec as yt-dlp names it, reduced to its family, or null for none or
+ * unknown.
  * @param {string|null|undefined} codec Such as `avc1.64002A` or `mp4a.40.2`.
  */
 export function codecFamily(codec) {
@@ -147,29 +147,10 @@ export function codecFamily(codec) {
 
 /* yt-dlp writes "none" for a track a format lacks and leaves the codec out
    when it does not know it; then a format that names a size carries video,
-   and one not marked silent may carry sound. */
+   and one not marked silent may carry sound. The browser reads the real
+   codecs when it joins the streams. */
 const carriesVideo = f => f.vcodec ? f.vcodec !== "none" : f.video_ext ? f.video_ext !== "none" : !!(f.width || f.height);
 const carriesAudio = f => f.acodec ? f.acodec !== "none" : f.audio_ext !== "none";
-
-/**
- * The container a joined file goes in, chosen from its codecs as yt-dlp's
- * own `mp4/webm/mkv` would: webm for the open codecs, mp4 where it plays
- * almost everywhere, Matroska for the rest. Sound alone keeps its own kind
- * of file. Null when a codec is unknown, so the server decides.
- * @param {string|null} video Codec family, or null for no video.
- * @param {string|null} audio Codec family, or null for no sound.
- * @returns {{container: string, ext: string}|null}
- */
-export function containerFor(video, audio) {
-  if (video === "other" || audio === "other") return null;
-  if (video) {
-    if (["vp8", "vp9", "av1"].includes(video) && (!audio || audio === "opus" || audio === "vorbis")) return { container: "webm", ext: "webm" };
-    if (["avc", "hevc", "vp9", "av1"].includes(video) && (!audio || ["aac", "mp3", "opus", "flac", "ac3", "eac3"].includes(audio))) return { container: "mp4", ext: "mp4" };
-    return { container: "mkv", ext: "mkv" };
-  }
-  return { aac: { container: "mp4", ext: "m4a" }, mp3: { container: "mp3", ext: "mp3" }, opus: { container: "ogg", ext: "opus" },
-    vorbis: { container: "ogg", ext: "ogg" } }[audio] || null;
-}
 
 /* Whether a browser might fetch a format straight from its source: only when
    yt-dlp needs nothing a page cannot send (cookies, a referrer, an origin of
@@ -187,11 +168,13 @@ const isHls = f => /^m3u8/.test(f.protocol || "");
  * must fetch itself, segment by segment, since only yt-dlp could pass one on;
  * other fragmented streams are the server's. The browser can copy tracks
  * between files and make an mp3. A single stream already in its final form
- * needs no joining at all.
+ * needs no joining at all; anything else the browser's muxer joins, in the
+ * container the codecs it finds in the streams suit.
  * @param {object} info One video's info, as `yt-dlp -J` prints it.
  * @param {"video"|"audio"} mode
  * @param {"original"|"mp3"} audioFormat
- * @returns {object|null} `{ process, video, container, ext, streams: [{ url, hls, direct, type, size }] }`.
+ * @returns {object|null} `{ process, video, mp3, ext, streams: [{ url, hls, direct, type, size }] }`,
+ *   with `ext` only for a file that needs no joining.
  */
 export function planLocal(info, mode, audioFormat) {
   const formats = info.requested_formats || [info];
@@ -204,14 +187,10 @@ export function planLocal(info, mode, audioFormat) {
   const mp3 = mode === "audio" && audioFormat === "mp3";
   const whole = formats.length === 1 && !isHls(single) && !/_dash$/.test(single.container || "") && !(mode === "audio" && carriesVideo(single)) &&
     !(mp3 && codecFamily(single.acodec) !== "mp3");
-  if (whole) return { process: false, video: mode === "video", container: null, ext: single.ext || "mp4", streams };
-  const video = mode === "video" ? formats.find(carriesVideo) || null : null;
-  const audio = formats.find(f => f !== video && carriesAudio(f)) || (video && carriesAudio(video) ? video : null);
-  if (!video && !audio) return null;
-  if (mp3) return { process: true, video: false, container: "mp3", ext: "mp3", streams };
-  const chosen = containerFor(video ? codecFamily(video.vcodec) || "other" : null, audio ? codecFamily(audio.acodec) || "other" : null);
-  if (!chosen) return null;
-  return { process: true, video: !!video, ...chosen, streams };
+  if (whole) return { process: false, video: mode === "video", mp3, ext: single.ext || "mp4", streams };
+  const video = mode === "video" && !mp3 && formats.some(carriesVideo);
+  if (!video && !formats.some(carriesAudio)) return null;
+  return { process: true, video, mp3, ext: null, streams };
 }
 
 /**

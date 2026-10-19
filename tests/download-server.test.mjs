@@ -4,7 +4,7 @@ import { createServer, request } from 'node:http';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { codecFamily, containerFor, createDownloadService, explain, fileStem, isPublicAddress, planLocal } from '../download-server.mjs';
+import { codecFamily, createDownloadService, explain, fileStem, isPublicAddress, planLocal } from '../download-server.mjs';
 
 const FAKE = [process.execPath, new URL('./fake-yt-dlp.mjs', import.meta.url).pathname];
 
@@ -24,16 +24,10 @@ async function fixture(t, options = {}) {
 test('the browser is told what it can finish itself', () => {
   assert.deepEqual(['avc1.64002A', 'hev1.1.6.L93', 'vp09.00.40.08', 'av01.0.08M.08', 'mp4a.40.2', 'opus', 'none', null, 'xyz'].map(codecFamily),
     ['avc', 'hevc', 'vp9', 'av1', 'aac', 'opus', null, null, 'other']);
-  assert.deepEqual(containerFor('avc', 'aac'), { container: 'mp4', ext: 'mp4' });
-  assert.deepEqual(containerFor('vp9', 'opus'), { container: 'webm', ext: 'webm' });
-  assert.deepEqual(containerFor('vp9', 'aac'), { container: 'mp4', ext: 'mp4' });
-  assert.deepEqual(containerFor(null, 'aac'), { container: 'mp4', ext: 'm4a' });
-  assert.deepEqual(containerFor(null, 'opus'), { container: 'ogg', ext: 'opus' });
-  assert.equal(containerFor('other', 'aac'), null);
 
   const video = { format_id: 'v', url: 'https://cdn.example/v', ext: 'mp4', container: 'mp4_dash', protocol: 'https', vcodec: 'avc1.4d401f', acodec: 'none', height: 720, filesize: 10 };
   const audio = { format_id: 'a', url: 'https://cdn.example/a', ext: 'm4a', container: 'm4a_dash', protocol: 'https', vcodec: 'none', acodec: 'mp4a.40.2', filesize: 5 };
-  assert.deepEqual(planLocal({ requested_formats: [video, audio] }, 'video', 'original'), { process: true, video: true, container: 'mp4', ext: 'mp4', streams: [
+  assert.deepEqual(planLocal({ requested_formats: [video, audio] }, 'video', 'original'), { process: true, video: true, mp3: false, ext: null, streams: [
     { url: 'https://cdn.example/v', hls: false, direct: true, type: 'video/mp4', size: 10 }, { url: 'https://cdn.example/a', hls: false, direct: true, type: 'audio/mp4', size: 5 }] });
   // What needs a cookie or a referrer comes through the server; an HLS stream only the browser can fetch.
   assert.equal(planLocal({ ...audio, cookies: 'a=1' }, 'audio', 'original').streams[0].direct, false);
@@ -42,10 +36,12 @@ test('the browser is told what it can finish itself', () => {
   assert.equal(planLocal({ ...audio, protocol: 'm3u8_native', http_headers: { Referer: 'https://site.example/' } }, 'audio', 'original'), null);
   // A file already whole goes to the browser's downloads; a DASH one is remade.
   assert.equal(planLocal({ ...audio, container: undefined, ext: 'mp3', acodec: 'mp3' }, 'audio', 'original').process, false);
-  assert.equal(planLocal(audio, 'audio', 'original').ext, 'm4a');
-  assert.deepEqual(planLocal(audio, 'audio', 'mp3'), { process: true, video: false, container: 'mp3', ext: 'mp3', streams: [{ url: 'https://cdn.example/a', hls: false, direct: true, type: 'audio/mp4', size: 5 }] });
+  assert.deepEqual([planLocal(audio, 'audio', 'original').process, planLocal(audio, 'audio', 'original').video], [true, false]);
+  assert.deepEqual(planLocal(audio, 'audio', 'mp3'), { process: true, video: false, mp3: true, ext: null, streams: [{ url: 'https://cdn.example/a', hls: false, direct: true, type: 'audio/mp4', size: 5 }] });
+  // A codec yt-dlp does not know is the browser's to read, as X's HLS sound is.
+  assert.equal(planLocal({ requested_formats: [{ ...video, protocol: 'm3u8_native' }, { ...audio, protocol: 'm3u8_native', acodec: null, audio_ext: 'mp4' }] }, 'video', 'original').process, true);
   // Sound from a video drops the picture; a fragmented stream or a huge one is the server's.
-  assert.equal(planLocal({ ...video, acodec: 'mp4a.40.2', container: undefined }, 'audio', 'original').ext, 'm4a');
+  assert.deepEqual(Object.values(planLocal({ ...video, acodec: 'mp4a.40.2', container: undefined }, 'audio', 'original')).slice(0, 2), [true, false]);
   assert.equal(planLocal({ ...video, protocol: 'http_dash_segments' }, 'video', 'original'), null);
   assert.equal(planLocal({ ...video, filesize: 2 ** 31 }, 'video', 'original'), null);
 });
@@ -97,7 +93,7 @@ test('two streams are found, passed on untouched, and only a few times', { timeo
   assert.equal(job.title, 'A clip: "quoted" / slashed');
   assert.equal(job.filename, 'A clip quoted slashed');
   assert.deepEqual(job.local.streams.map(s => [s.url, s.direct, s.size]), [['https://cdn.example/137.mp4', true, 3000], ['https://cdn.example/140.m4a', true, 1000]]);
-  assert.deepEqual([job.local.process, job.local.container, job.local.ext], [true, 'mp4', 'mp4']);
+  assert.deepEqual([job.local.process, job.local.video, job.local.ext], [true, true, null]);
   const lookup = (await f.calls())[0];
   assert.deepEqual(lookup.slice(lookup.indexOf('-f'), lookup.indexOf('-f') + 4), ['-f', 'bv*+ba/b', '-S', 'res:720,+codec:avc:m4a']);
   for (const flag of ['--ignore-config', '--no-playlist', '--use-extractors', '--proxy']) assert.ok(lookup.includes(flag), flag);

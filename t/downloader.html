@@ -186,7 +186,8 @@ E.tool(function () {
    * is never held in memory.
    */
   async function onDevice(found, signal) {
-    var plan = found.local, query = "?t=" + found.token, name = found.filename + "." + plan.ext;
+    var plan = found.local, query = "?t=" + found.token, name = found.filename + "." + (plan.ext || "mp4");
+    var label = function (ext) { return found.filename + "." + ext; };
     var relay = function (n) { return API + found.id + "/stream/" + n + query; };
     var sizes = plan.streams.map(function (s) { return s.size; });
     var total = sizes.every(Boolean) ? sizes.reduce(function (a, b) { return a + b; }, 0) : null, got = sizes.map(function () { return 0; });
@@ -211,7 +212,7 @@ E.tool(function () {
     }
     var ready = !plan.process ? Promise.resolve() : E.load("codecs/mux.js").then(function () {
       /* The mp3 encoder adds to the muxer, so it loads second. */
-      return plan.container === "mp3" ? E.load("codecs/mp3-encode.js").then(function () { return eyesCodecs["mp3-encode"].init(); }) : null;
+      return plan.mp3 ? E.load("codecs/mp3-encode.js").then(function () { return eyesCodecs["mp3-encode"].init(); }) : null;
     });
     ready.catch(function () {});
 
@@ -232,18 +233,18 @@ E.tool(function () {
     if (parts[0] === null) {
       return saved(function () { saveLink(relay(0) + "&save=1", name); }, "saving to your browser's downloads · " + route());
     }
-    var result = parts[0];
+    var result = { blob: parts[0], ext: plan.ext };
     if (plan.process) {
       await ready;
-      var doing = plan.container === "mp3" ? "converting" : plan.video && parts.length > 1 ? "joining" : "finishing";
+      var doing = plan.mp3 ? "converting" : plan.video && parts.length > 1 ? "joining" : "finishing";
       show(doing + " in your browser", plan.streams.some(function (s) { return s.hls; }) ? null : 0);
       result = await eyesCodecs.mux.join(parts, {
-        container: plan.container, video: plan.video, audio: true,
+        video: plan.video, audio: true, mp3: plan.mp3,
         onProgress: function (p) { if (!signal.aborted) show(doing + " in your browser · " + Math.round(p * 100) + "%", p); }
       });
       if (signal.aborted) throw stopped();
     }
-    saved(function () { E.download(result, name); }, "saved · " + E.bytes(result.size) + " · " + plan.ext + " · downloaded " + route());
+    saved(function () { E.download(result.blob, label(result.ext)); }, "saved · " + E.bytes(result.blob.size) + " · " + result.ext + " · downloaded " + route());
   }
 
   /** Have the server download and finish the file, then take it. */
