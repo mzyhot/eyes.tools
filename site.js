@@ -24,7 +24,6 @@ window.SITE = {
   description: "small tools for text, code, images and everyday use",
   /* Address-bar colour. Matches `--color-paper`; the site has one theme, dark. */
   themeColor: "#070707",
-  icon: "favicon.svg",
 
   /* What a link preview shows, in a chat app or a search result, where the
      page's scripts never run: the site's name in plain letters, since the

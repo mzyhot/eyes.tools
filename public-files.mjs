@@ -14,7 +14,7 @@
  */
 export const PUBLIC_ROOT_FILES = [
   /* pages */
-  "index.html", "404.html", "favicon.svg",
+  "index.html", "404.html",
   /* the shared layer, in load order */
   "fonts.css", "tokens.css", "s.css", "site.js", "tools.js", "s.js",
   /* the typeface `fonts.css` names, one file per script */

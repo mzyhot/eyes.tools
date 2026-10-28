@@ -30,7 +30,6 @@ s.js              shared runtime: the `E` global, and the chrome built from the 
 index.js          the index: filter field and registry-driven list
 index.html        an empty page index.js fills
 redirect.js       drives the compatibility stubs (t/json.html, t/lines.html, t/units.html)
-favicon.svg       one eye
 preview.png       the picture a link preview shows (site.js names it)
 404.html          an empty page s.js fills from site.js
 t/*.html          one file per tool: its markup and its script, nothing else

@@ -203,7 +203,6 @@ export function previewTags(site, tool) {
     ["title", tool ? tool.name + (site.titleSuffix || "") : site.title],
     ["meta", { name: "description", content: description }],
     ["link", { rel: "canonical", href: url }],
-    ["link", { rel: "icon", type: "image/svg+xml", href: "/" + site.icon }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: site.name }],
     ["meta", { property: "og:title", content: tool ? tool.name : site.name }],

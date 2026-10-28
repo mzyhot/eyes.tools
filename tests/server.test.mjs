@@ -116,7 +116,7 @@ test('pages carry their link preview in the HTML, before any script runs', async
   assert.equal(picture.status, 200);
   assert.equal(picture.headers.get('content-type'), 'image/png');
   assert.equal(picture.headers.get('cross-origin-resource-policy'), 'cross-origin');
-  assert.equal((await fetch(base + '/favicon.svg')).headers.get('cross-origin-resource-policy'), 'same-origin');
+  assert.equal((await fetch(base + '/s.css')).headers.get('cross-origin-resource-policy'), 'same-origin');
   await picture.arrayBuffer();
   // What the registries say is text, never markup.
   const tags = previewTags({ ...site, url: 'https://example.test' }, { slug: 'x', name: '</title><script>', meta: '"><b>' });

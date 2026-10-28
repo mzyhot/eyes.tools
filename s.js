@@ -370,7 +370,7 @@
     return window.TOOLS.filter(function (t) { return t.slug === slug; })[0] || null;
   }
 
-  /** Title, description, icon and address-bar colour, from the registry or `site.js`. */
+  /** Title, description and address-bar colour, from the registry or `site.js`. */
   function buildHead(entry, kind) {
     var copy = kind === "not-found" ? SITE.notFound || {} : null;
     document.title = entry ? entry.name + (SITE.titleSuffix || "")
@@ -378,9 +378,6 @@
     var description = entry ? entry.meta || entry.desc : copy ? null : SITE.description;
     if (description && !E.qs('meta[name="description"]')) {
       document.head.appendChild(E.el("meta", { name: "description", content: description }));
-    }
-    if (SITE.icon && !E.qs('link[rel="icon"]')) {
-      document.head.appendChild(E.el("link", { rel: "icon", type: "image/svg+xml", href: E.base + SITE.icon }));
     }
     if (SITE.themeColor && !E.qs('meta[name="theme-color"]')) {
       document.head.appendChild(E.el("meta", { name: "theme-color", content: SITE.themeColor }));
