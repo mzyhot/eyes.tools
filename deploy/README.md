@@ -77,6 +77,25 @@ site needs the flag, and devices meet by link only, because the proxy's address
 is never used as a network. Never expose a trusted proxy or origin port directly
 to the internet.
 
+Behind another reverse proxy (nginx, Caddy, Traefik, HAProxy, a load balancer),
+list its addresses or ranges in `SHARE_TRUSTED_PROXIES` and name the header it
+sets in `SHARE_PROXY_HEADER`: `x-forwarded-for` (the default), `forwarded`,
+`x-real-ip`, or another that holds addresses. A request from a listed address
+is placed by that header, read from the right, so whatever a visitor wrote
+into it themselves is passed over; a request from anywhere else is placed by
+its own address. List every proxy in the chain, and make sure the nearest one
+appends to the header or replaces it, never just passes on what it was sent:
+
+```
+SHARE_TRUSTED_PROXIES=127.0.0.1,::1
+SHARE_PROXY_HEADER=x-forwarded-for
+```
+
+A device is placed again each time its event stream reopens, so a phone that
+moves from mobile data to the Wi-Fi finds the devices there. An IPv6 address
+that carries an IPv4 one (IPv4-mapped, 6to4, Teredo) is placed on that IPv4
+network.
+
 `SHARE_ALLOWED_ORIGINS` lists origins, besides the site's own, whose pages may use
 the share service. The desktop app serves its pages itself and uses this
 service only for rooms and connection setup, so to serve it set:
@@ -97,7 +116,14 @@ default, lets it through with no rule opening `/api/share/*`.
   request bodies, and the public Host.
 - `/api/share/events` is an unbuffered `text/event-stream` response with caching
   disabled. Heartbeats arrive every 15 seconds; the browser reconnects after
-  45 seconds without data. Avoid a proxy read timeout below that interval.
+  45 seconds without data. Avoid a proxy read timeout below that interval. A
+  browser that hears nothing for 10 seconds after opening the stream (because
+  something on its network buffers it) asks with `?poll=1` instead, in requests
+  held up to 20 seconds each, so a read timeout above that keeps those working.
+- `/share-download.js` is a service worker that saves received files to the
+  browser's downloads as they arrive, under `/share-download/`. Serve it as
+  JavaScript, uncached or revalidated, and leave `/share-download/` unrouted:
+  the worker answers it, and the pages' `frame-src 'self'` lets them open it.
 - Exclude `/api/*` and `/mcp` from CDN and proxy caching. A join request should return JSON,
   never an HTML page or a cached response.
 - Do not transform HTML/JavaScript or inject inline scripts at the edge: inline
@@ -168,8 +194,11 @@ Then visit your public HTTPS site in two browsers and verify:
 2. The link connects devices on different networks, and two devices on one
    Wi-Fi find each other without it (needs `SHARE_TRUST_CLOUDFLARE=1` behind
    Cloudflare; Private Relay, a VPN or IPv6 on one device can still split them).
-3. A binary file and a text message arrive intact after the receiver accepts.
-4. Cancelling a transfer leaves no partial download; retry works.
+3. A binary file and a text message arrive intact after the receiver accepts,
+   the file starting in the browser's downloads (as `.part` or `.crdownload`)
+   as soon as it is accepted.
+4. Cancelling a transfer, from either side, fails its partial download and
+   leaves the devices connected; retry works.
 5. The room still works after leaving both tabs open for at least two minutes.
 6. Taking a new link, and closing one device for half a minute, both leave the
    old link connecting nobody.

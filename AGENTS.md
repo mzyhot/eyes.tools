@@ -28,7 +28,9 @@
   allows `'wasm-unsafe-eval'`.
 - `dev-server.mjs` is both the local and self-hosted production server.
   `share-server.mjs` provides only discovery and WebRTC signaling; shared file
-  contents must never pass through it.
+  contents must never pass through it. `share-download.js` is the service
+  worker share saves received files through; it answers only
+  `/share-download/`, so it never stands in front of any page.
 - Preserve the existing visual contract in `_dev/CONTRACT.md` and match the
   surrounding code's style and comment density.
 

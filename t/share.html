@@ -97,8 +97,8 @@ body[data-tool="share"] [hidden] { display: none !important; }
   </section>
   <details class="share-help">
     <summary>can't see the other device?</summary>
-    <p class="hint">On the same Wi-Fi, devices with share open appear by themselves. A VPN, Private Relay, or IPv6 on only one of them can hide them from each other; then open the link, or scan the code, on the other device. The link works from any network. It stops working when this page closes, when you take a new link, or half a minute after a connection drops.</p>
-    <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Received files are saved to this browser's storage as they arrive, so a transfer can be as large as the space it allows; in a private window, or a browser without that storage, they are held in memory, up to 256 MB at a time. Remove received files to free space.</p>
+    <p class="hint">On the same Wi-Fi, devices with share open appear by themselves, and a device that moves to another network finds the devices there. A VPN, Private Relay, or IPv6 on only one of them can hide them from each other; then open the link, or scan the code, on the other device. The link works from any network. It stops working when this page closes, when you take a new link, or half a minute after a connection drops.</p>
+    <p class="hint">The receiver chooses what to accept. Keep both tabs open until the transfer finishes. Accepted files go to your downloads as they arrive, the way any download does, so a transfer can be as large as your disk. Safari, and a browser that holds the downloads back, keep them in this browser's storage until you download them; where there is none, as in some private windows, they are held in memory, up to 256 MB at a time. Remove received files to free space.</p>
     <p class="hint">Files travel over an encrypted WebRTC connection and stay out of this site's server storage. The server only introduces the two devices and passes the connection details. A relay may carry encrypted data when configured.</p>
     <button class="tbtn" id="retry" type="button">refresh devices</button>
   </details>
@@ -120,13 +120,28 @@ E.tool(function () {
   'use strict';
   const $ = s => document.querySelector(s);
   /* A transfer held in memory, where received files live when this browser
-     has no storage for them, is bounded by LIMIT, and all of them by RETAIN. */
-  const LIMIT = 256 * 1024 * 1024, RETAIN = 512 * 1024 * 1024, CHUNK = 16384;
-  /* Receiver-paced sending, as ShareDrop did it: the receiver confirms every
-     BLOCK chunks once they are stored, and the sender stays at most WINDOW
-     chunks ahead of that, so a slow disk holds the sender back instead of the
-     transfer piling up in memory. */
-  const BLOCK = 64, WINDOW = 4 * BLOCK;
+     can neither save them as they arrive nor store them, is bounded by LIMIT,
+     and all of them by RETAIN. */
+  const LIMIT = 256 * 1024 * 1024, RETAIN = 512 * 1024 * 1024;
+  /* One message on the data channel. A page from before larger messages sends
+     and takes CHUNK; this one takes up to CHUNK_MAX, the most a browser's
+     channel carries in one message, and says so when it accepts. */
+  const CHUNK = 16384, CHUNK_MAX = 262144;
+  /* Receiver-paced sending, as ShareDrop did it: the receiver confirms what
+     it has stored every ACK_BYTES or ACK_CHUNKS, whichever comes first, and
+     the sender stays at most WINDOW bytes ahead of that, so a slow disk holds
+     the sender back instead of the transfer piling up in memory. A page from
+     before this confirms every 64 chunks, which the window also allows. */
+  const ACK_BYTES = 1024 * 1024, ACK_CHUNKS = 16, WINDOW = 16 * 1024 * 1024;
+  /* The channel's own send buffer is kept between BUFFER_LOW and BUFFER_HIGH,
+     so the link never idles while the page catches up. Browsers close a
+     channel whose buffer passes 16 MB. */
+  const BUFFER_HIGH = 8 * 1024 * 1024, BUFFER_LOW = 2 * 1024 * 1024;
+  /* Files are read this much at a time, the next read under way while one is sent. */
+  const READ = 4 * 1024 * 1024;
+  /* How long the other device has to answer an offer, and to show any sign of
+     life during a transfer. */
+  const ANSWER_MS = 120000, STALL_MS = 60000;
   /* Automatic reconnection gives up after this many consecutive failures; after
      that, pressing send on the device tries again. */
   const MAX_RETRIES = 5;
@@ -148,13 +163,24 @@ E.tool(function () {
      returning from the background can tell a silently dead stream from a live one.
      wake: cuts the current reconnect backoff short. */
   let lastBeat = 0, wake = null;
+  /* collecting: this page asks for its events in short requests, having found
+     that its network holds a long response back. Once found, it stays.
+     reopening: the stream was closed on purpose, to be placed again. */
+  let collecting = false, reopening = false;
   const random = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b.toString(16).padStart(2, '0')).join('');
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const error = message => { $('#err').textContent = message || ''; };
   function safeName(value) { return String(value || 'file').normalize('NFC').replace(/[\u0000-\u001f\u007f\\/:\u202a-\u202e\u2066-\u2069]/g, '_').trim().slice(0, 180) || 'file'; }
   const button = (label, action, primary = false) => {
     const b = E.el('button', { class: primary ? 'btn -sm' : 'tbtn', type: 'button', text: label });
     b.addEventListener('click', action); return b;
   };
+  /* iPadOS presents itself as a Mac, one with a touch screen. */
+  function deviceType() {
+    const ua = navigator.userAgent;
+    if (/iPad|Tablet/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) || (/Android/.test(ua) && !/Mobi/.test(ua))) return 'tablet';
+    return /Mobi|Android|iPhone/i.test(ua) ? 'phone' : 'computer';
+  }
   function activity() { return [...peers.values()].some(p => p.outgoing || p.incoming || p.queue.length); }
   function render() {
     $('#empty').hidden = peers.size > 0;
@@ -188,10 +214,15 @@ E.tool(function () {
     $('#empty-note').textContent = note || LINK_NOTE;
     discover();
   }
+  /** Say how the other device will arrive, unless a notice is showing. */
+  function place(nearby) {
+    if ([LINK_NOTE, NEARBY_NOTE].includes($('#empty-note').textContent)) $('#empty-note').textContent = nearby ? NEARBY_NOTE : LINK_NOTE;
+    $('#device-where').textContent = nearby ? 'nearby or in this room' : 'in this room';
+  }
   async function api(path, body, current = session) {
     const response = await fetch(SERVICE + '/api/share/' + path + (current ? '?id=' + current.id : ''), {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(current ? { Authorization: 'Bearer ' + current.token } : {}) },
-      body: JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout(15000)
+      body: JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout?.(15000)
     });
     let data; try { data = await response.json(); } catch { throw new Error('unexpected reply from the sharing service (http ' + response.status + '). check the connection and try again.'); }
     if (!response.ok) throw new Error(data.error || 'could not reach the sharing service');
@@ -204,13 +235,30 @@ E.tool(function () {
   }
   /* The lower session id always makes the offer, so two devices never both do. */
   const initiator = p => !!session && session.id < p.id;
+  /**
+   * The ICE servers this browser takes. WebKit refuses a TURN address that
+   * names its transport (`?transport=tcp`), which every other engine takes,
+   * and refuses it by failing the whole connection; so an address it refuses
+   * is tried without the transport, and dropped if it is refused still.
+   */
+  function iceServers(current) {
+    const takes = (...servers) => { try { new RTCPeerConnection({ iceServers: servers }).close(); return true; } catch { return false; } };
+    if (!current.ice) current.ice = takes(...current.iceServers) ? current.iceServers : current.iceServers.map(server => {
+      const urls = [].concat(server.urls).flatMap(url => takes({ ...server, urls: url }) ? [url] : takes({ ...server, urls: url.split('?')[0] }) ? [url.split('?')[0]] : []);
+      return { ...server, urls: [...new Set(urls)] };
+    }).filter(server => server.urls.length);
+    return current.ice;
+  }
   function addPeer(info) {
     if (!info || info.id === session.id) return;
     const known = peers.get(info.id);
     if (known) {
       /* Seen again after dropping out of discovery: it is back. If its direct
-         connection did not survive, start over with a fresh retry budget. */
+         connection did not survive, start over with a fresh retry budget, and
+         a connection still being made starts again, since what was signalled
+         to it while it was away may never have arrived. */
       known.away = false; known.attempts = 0;
+      if (known.pc && known.dc?.readyState !== 'open' && initiator(known)) known.reset('connection restarted');
       if (!known.pc && initiator(known)) known.connect().catch(e => known.fail(e.message));
       render(); return;
     }
@@ -227,6 +275,7 @@ E.tool(function () {
     dropPeer(id);
   }
   function onEvent(type, data) {
+    if (type === 'here') { place(!!data.nearby); return; }
     if (type === 'peers') {
       /* A snapshot arrives on every (re)connection. Anyone missing from it left
          while this tab was not listening. */
@@ -241,6 +290,16 @@ E.tool(function () {
       if (p) p.readChain = p.readChain.then(() => p.signal(data.signal)).catch(e => p.fail(e.message));
     }
   }
+  /** Act on every complete event in `text`, and return what is left of it. */
+  function readEvents(text) {
+    let end;
+    while ((end = text.indexOf('\n\n')) !== -1) {
+      const event = text.slice(0, end); text = text.slice(end + 2);
+      const type = event.match(/^event: (.+)$/m)?.[1], data = event.match(/^data: (.+)$/m)?.[1];
+      if (type && data) onEvent(type, JSON.parse(data));
+    }
+    return text;
+  }
   /* A sleep that can be cut short, so returning to the tab or regaining the
      network reconnects now instead of at the end of a backoff. */
   function nap(ms) {
@@ -250,6 +309,14 @@ E.tool(function () {
     });
   }
   const hurry = () => { if (wake) wake(); };
+  /* A device that moves network, from the Wi-Fi to mobile data or back, opens
+     its stream again at once, and the service places it on the network it is
+     on now, among the devices there. */
+  function reopen() {
+    if (stopped || !session) return;
+    if (online && stream) { reopening = true; stream.abort(); }
+    hurry();
+  }
 
   /**
    * Join discovery and stay joined.
@@ -260,6 +327,12 @@ E.tool(function () {
    * direct connection and any transfer in flight. Only when the server has
    * already expired the session (it holds one for about 45 seconds without a
    * stream) does this rejoin as a new device.
+   *
+   * The service speaks as soon as a stream opens. One that stays silent is
+   * being held back by something on the way, a company proxy or an antivirus
+   * web shield that waits for a response to end before passing it on, so the
+   * page asks for its events in short requests from then on, each answered
+   * with whatever has happened since the last.
    */
   async function discover() {
     const version = ++epoch;
@@ -270,17 +343,15 @@ E.tool(function () {
     online = false; render();
     let backoff = 1000;
     while (!stopped && version === epoch) {
-      let watchdog;
+      let watchdog, quiet;
+      const mode = collecting;
       try {
         if (!session) {
-          const device = /iPad|Tablet/i.test(navigator.userAgent) ? 'tablet' : /Mobi|Android/i.test(navigator.userAgent) ? 'phone' : 'computer';
-          const joined = await api('join', { device, ...(room ? { room } : {}) }, null);
+          const joined = await api('join', { device: deviceType(), ...(room ? { room } : {}) }, null);
           if (version !== epoch || stopped) { api('leave', {}, joined).catch(() => {}); return; }
           session = joined;
           $('#your-name').textContent = joined.name;
-          /* Say how the other device will arrive, unless a notice is showing. */
-          if ([LINK_NOTE, NEARBY_NOTE].includes($('#empty-note').textContent)) $('#empty-note').textContent = joined.nearby ? NEARBY_NOTE : LINK_NOTE;
-          $('#device-where').textContent = joined.nearby ? 'nearby or in this room' : 'in this room';
+          place(joined.nearby);
           /* Arriving without a link, the service mints one from this session's
              own id. It is the page's address from here on, so a reload rejoins
              the same room rather than opening another. */
@@ -294,7 +365,8 @@ E.tool(function () {
         const connection = stream = new AbortController();
         const armWatchdog = () => { lastBeat = Date.now(); clearTimeout(watchdog); watchdog = setTimeout(() => connection.abort(), 45000); };
         armWatchdog();
-        const response = await fetch(SERVICE + '/api/share/events?id=' + current.id, { headers: { Authorization: 'Bearer ' + current.token }, signal: connection.signal, cache: 'no-store' });
+        if (!mode) quiet = setTimeout(() => { collecting = true; connection.abort(); }, 10000);
+        const response = await fetch(SERVICE + '/api/share/events?' + (mode ? 'poll=1&' : '') + 'id=' + current.id, { headers: { Authorization: 'Bearer ' + current.token }, signal: connection.signal, cache: 'no-store' });
         if (response.status === 401) {
           /* Gone longer than the server's grace period. Peers have already been
              told this device left, so its connections are dead either way. */
@@ -303,27 +375,31 @@ E.tool(function () {
           continue;
         }
         if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream')) throw new Error('the sharing service is unavailable');
+        if (mode) {
+          const text = await response.text();
+          if (version !== epoch || stopped) return;
+          if (!online) { online = true; error(''); render(); }
+          backoff = 1000; lastBeat = Date.now();
+          readEvents(text);
+          continue;
+        }
         online = true; backoff = 1000; error(''); render();
         const reader = response.body.getReader(), decoder = new TextDecoder();
         let buffer = '';
         while (version === epoch && !stopped) {
           const { value, done } = await reader.read();
           if (done) throw new Error('connection lost');
-          armWatchdog();
-          buffer += decoder.decode(value, { stream: true });
-          let end;
-          while ((end = buffer.indexOf('\n\n')) !== -1) {
-            const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
-            const type = event.match(/^event: (.+)$/m)?.[1], data = event.match(/^data: (.+)$/m)?.[1];
-            if (type && data) onEvent(type, JSON.parse(data));
-          }
+          clearTimeout(quiet); armWatchdog();
+          buffer = readEvents(buffer + decoder.decode(value, { stream: true }));
           if (buffer.length > 131072) throw new Error('invalid discovery response');
         }
       } catch (e) {
         if (version !== epoch || stopped) return;
+        /* Closed on purpose, to reopen or to switch to short requests: straight back. */
+        if (reopening || collecting !== mode) { reopening = false; continue; }
         online = false; render(); error(e.message === 'connection lost' || e.name === 'AbortError' ? 'reconnecting to your devices…' : e.message);
       } finally {
-        clearTimeout(watchdog);
+        clearTimeout(watchdog); clearTimeout(quiet);
       }
       if (version !== epoch || stopped) return;
       stream?.abort();
@@ -331,7 +407,95 @@ E.tool(function () {
     }
   }
   /**
-   * Where received files go.
+   * Saving as files arrive.
+   *
+   * Where the browser allows it, a received file goes to its downloads while
+   * it is still arriving. `share-download.js`, a service worker, answers a
+   * request for the file with a stream this page fills, and the browser
+   * writes that into a partial file (`.part`, `.crdownload`) that becomes the
+   * file when the last byte lands. Nothing waits in memory or in this site's
+   * storage, so a transfer is as large as the disk.
+   *
+   * Safari and every iPhone browser run WebKit, which takes no download from a
+   * service worker; an Android web view hands each download to its app, which
+   * cannot reach one; and a copy served by the desktop app has no worker of
+   * its own. Those, a private window without workers, and any file whose
+   * download the browser holds back, are kept in the storage below instead.
+   */
+  const CAN_SAVE = !SERVICE && window.isSecureContext && 'serviceWorker' in navigator && !!window.ReadableStream &&
+    !/; wv\)/.test(navigator.userAgent) && !(/AppleWebKit/.test(navigator.userAgent) && !/Chrome\/|Chromium\//.test(navigator.userAgent));
+  async function openSaves() {
+    if (!CAN_SAVE) return null;
+    try {
+      const registration = await navigator.serviceWorker.register(E.base + 'share-download.js', { scope: E.base + 'share-download/' });
+      if (!registration.active) await new Promise((resolve, reject) => {
+        const worker = registration.installing || registration.waiting;
+        if (!worker) { reject(new Error('no worker')); return; }
+        const timer = setTimeout(reject, 10000);
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'activated') { clearTimeout(timer); resolve(); }
+          if (worker.state === 'redundant') { clearTimeout(timer); reject(new Error('no worker')); }
+        });
+      });
+      return { registration, scope: new URL(registration.scope).pathname };
+    } catch { return null; }
+  }
+  /* undefined until known; then the worker's registration and scope, or null. */
+  let saves;
+  const saving = openSaves().then(value => saves = value);
+  /* A browser stops an idle worker after about half a minute, and bytes moving
+     through a port do not count, so while a download is open it is reminded. */
+  let opened = 0, keepAlive = null;
+  function hold(change) {
+    opened += change;
+    if (opened > 0 && !keepAlive) keepAlive = setInterval(() => saves?.registration.active?.postMessage({ t: 'ping' }), 10000);
+    if (opened <= 0) { clearInterval(keepAlive); keepAlive = null; opened = 0; }
+  }
+  /**
+   * Start one file's download, to be filled as it arrives. It has the shape
+   * of a place to store a file (`open`, `write`, `stored`, `end`) plus
+   * `start`, which settles true once the browser has begun the download,
+   * `abort`, and `oncancel`, for the person cancelling it in the browser.
+   */
+  function save(name, size) {
+    const channel = new MessageChannel(), port = channel.port1, id = random(12);
+    let sent = 0, taken = 0, waiters = [], settled = false, frame = null;
+    const release = () => { for (const w of waiters) w.resolve(); waiters = []; };
+    const settle = () => {
+      if (settled) return; settled = true; hold(-1);
+      /* Taking the frame away while the browser is still saving can cancel the download. */
+      setTimeout(() => frame.remove(), 60000);
+    };
+    const download = {
+      started: false, oncancel: null,
+      open() {},
+      write(chunk) { port.postMessage({ t: 'chunk', chunk, n: ++sent }, [chunk]); },
+      stored() {
+        if (taken >= sent || settled) return Promise.resolve();
+        const n = sent; return new Promise(resolve => waiters.push({ n, resolve }));
+      },
+      end() { port.postMessage({ t: 'end' }); const done = download.stored(); settle(); return done.then(() => null); },
+      abort() { if (!settled) port.postMessage({ t: 'abort' }); settle(); release(); }
+    };
+    download.start = new Promise(resolve => {
+      port.onmessage = ({ data }) => {
+        if (data.t === 'started') { download.started = true; resolve(true); }
+        else if (data.t === 'more') {
+          taken = Math.max(taken, data.n);
+          waiters = waiters.filter(w => { if (w.n > taken) return true; w.resolve(); return false; });
+        }
+        else if (data.t === 'cancelled') { settle(); release(); download.oncancel?.(); }
+        else if (data.t === 'refused') resolve(false);
+      };
+    });
+    hold(1);
+    saves.registration.active.postMessage({ t: 'save', id, name, size }, [channel.port2]);
+    frame = E.el('iframe', { hidden: true, title: 'download ' + name, src: saves.scope + id + '/' + encodeURIComponent(name) });
+    document.body.append(frame);
+    return download;
+  }
+  /**
+   * Where received files are stored when they cannot be saved as they arrive.
    *
    * As ShareDrop did, received bytes are written to disk as they arrive rather
    * than held in memory, so a transfer needs free space, not free memory, and
@@ -364,12 +528,16 @@ E.tool(function () {
         const access = await (await folder.getFileHandle(file, { create: true })).createSyncAccessHandle();
         await access.truncate(0); open.set(file, { access, at: 0 });
       },
+      /* Chunks come a megabyte or so at a time, so the page posts a message per
+         megabyte rather than per chunk. */
       write({ file, data }) {
         const entry = open.get(file);
         if (!entry) throw new Error('no such file');
-        /* A short write is a full disk. */
-        if (entry.access.write(data, { at: entry.at }) !== data.byteLength) throw new DOMException('short write', 'QuotaExceededError');
-        entry.at += data.byteLength;
+        for (const chunk of data) {
+          /* A short write is a full disk. */
+          if (entry.access.write(chunk, { at: entry.at }) !== chunk.byteLength) throw new DOMException('short write', 'QuotaExceededError');
+          entry.at += chunk.byteLength;
+        }
       },
       /* Older engines return promises from these; awaiting covers both. */
       async close({ file }) {
@@ -405,7 +573,7 @@ E.tool(function () {
         pending.delete(data.seq); 'error' in data ? p.reject(new Error(data.error)) : p.resolve(data.result);
       };
       worker.onerror = e => { e.preventDefault(); for (const p of pending.values()) p.reject(new Error('could not save the received file.')); pending.clear(); };
-      await Promise.race([call('init', { tab }), new Promise((_, reject) => setTimeout(reject, 10000))]);
+      await Promise.race([call('init', { tab }), sleep(10000).then(() => { throw new Error('storage timed out'); })]);
       if (navigator.locks) navigator.locks.query().then(({ held }) => call('sweep', {
         keep: held.map(lock => lock.name).filter(name => name.startsWith('eyes-share-')).map(name => name.slice('eyes-share-'.length))
       })).catch(() => {});
@@ -416,8 +584,9 @@ E.tool(function () {
   /* undefined until the storage is known; then the storage, or false. */
   let disk;
   const storage = openStorage().then(value => disk = value);
-  /** Why `size` more bytes cannot be received now, or '' when they can. */
+  /** Why `size` more bytes cannot be kept here now, or '' when they can. */
   async function capacity(size) {
+    if (!size) return '';
     if (!await storage) {
       if (size > LIMIT) return 'this browser can take up to 256 MB at a time.';
       return retained + reserved + size > RETAIN ? 'remove received files to make room first.' : '';
@@ -427,33 +596,79 @@ E.tool(function () {
     if (!estimate?.quota) return '';
     return estimate.quota - estimate.usage - reserved < size ? 'not enough space on this device for that transfer.' : '';
   }
+  /** Files kept in memory, for a browser with no storage. */
+  function memoryStore(report) {
+    let chunks = [], bytes = 0;
+    const store = {
+      held: 0,
+      open() { chunks = []; },
+      write(chunk) {
+        if ((bytes += chunk.byteLength) > LIMIT) { chunks = []; report(new Error('this browser can take up to 256 MB at a time.')); return; }
+        chunks.push(chunk);
+      },
+      stored: () => Promise.resolve(),
+      end(index, type) { const blob = new Blob(chunks, { type }); chunks = []; store.held += blob.size; return Promise.resolve(blob); },
+      discard() { chunks = []; }
+    };
+    return store;
+  }
+  /** Files kept in this site's storage, by the storage worker. */
+  function diskStore(batch, report) {
+    const names = [];
+    let file = null, last = Promise.resolve(), pending = [], size = 0;
+    const run = (op, args, transfer) => { last = disk.call(op, args, transfer); last.catch(report); return last; };
+    const flush = () => { if (pending.length) run('write', { file, data: pending }, pending); pending = []; size = 0; };
+    return {
+      held: 0,
+      open(index) { file = names[index] = batch.id + '-' + index; run('open', { file }); },
+      write(chunk) { pending.push(chunk); if ((size += chunk.byteLength) >= ACK_BYTES) flush(); },
+      stored() { flush(); return last; },
+      end() { flush(); return run('close', { file }); },
+      discard() { pending = []; for (const name of names) if (name) disk.call('remove', { file: name }).catch(() => {}); }
+    };
+  }
   /**
    * Where one incoming batch's bytes go, in the order they arrive: `open` and
-   * `write` a file, `end` it to get the finished file, and `stored` settles
-   * once everything written so far is safe. `report` hears any failure.
+   * `write` a file, `end` it to get the finished file (null for one saved to
+   * the downloads), and `stored` settles once everything written so far is
+   * safe. A file goes to its download if the browser has begun it, and
+   * otherwise is kept here. `report` hears any failure.
    */
   function sink(batch, report) {
-    if (!disk) {
-      let chunks = [];
-      return {
-        memory: true,
-        open() { chunks = []; },
-        write(chunk) { if (chunks.length >= 65536) throw new Error('received unexpected file data'); chunks.push(chunk); },
-        stored: () => Promise.resolve(),
-        end(index, type) { const blob = new Blob(chunks, { type }); chunks = []; return Promise.resolve(blob); },
-        discard() { chunks = []; }
-      };
-    }
-    const names = [];
-    let last = Promise.resolve();
-    const run = (op, args, transfer) => { last = disk.call(op, args, transfer); last.catch(report); return last; };
+    const keep = disk ? diskStore(batch, report) : memoryStore(report);
+    let current = keep;
     return {
-      memory: false,
-      open(index) { names[index] = batch.id + '-' + index; run('open', { file: names[index] }); },
-      write(chunk, index) { run('write', { file: names[index], data: chunk }, [chunk]); },
-      stored: () => last,
-      end(index) { return run('close', { file: names[index] }); },
-      discard() { for (const file of names) if (file) disk.call('remove', { file }).catch(() => {}); }
+      open(index) {
+        /* A download the browser has not begun, as when it is still asking
+           whether this site may save several files, is let go. */
+        const download = batch.saving.get(index);
+        if (download && !download.started) { download.abort(); batch.saving.delete(index); }
+        current = batch.saving.get(index) || keep;
+        current.open(index);
+      },
+      write(chunk, index) { current.write(chunk, index); },
+      stored: () => current === keep ? keep.stored() : Promise.all([keep.stored(), current.stored()]),
+      end(index, type) { return current.end(index, type); },
+      held: () => keep.held,
+      discard() { keep.discard(); for (const download of batch.saving.values()) download.abort(); }
+    };
+  }
+  /**
+   * Progress for a row: percent and speed, redrawn at most four times a
+   * second, since a fast transfer passes hundreds of chunks between frames.
+   */
+  function meter(ui, total) {
+    let drawn = 0, from = 0, fromBytes = 0, rate = 0;
+    return (verb, bytes) => {
+      const now = performance.now();
+      if (bytes < total && now - drawn < 250) return;
+      if (drawn && now > from) {
+        const sample = (bytes - fromBytes) / ((now - from) / 1000);
+        rate = rate ? rate * 0.6 + sample * 0.4 : sample;
+      }
+      drawn = from = now; fromBytes = bytes;
+      const ratio = total ? bytes / total : 1;
+      ui.update(verb + ' · ' + Math.floor(ratio * 100) + '%' + (rate > 0 && bytes < total ? ' · ' + E.bytes(Math.round(rate)) + '/s' : ''), ratio);
     };
   }
   function transferRow(name, detail) {
@@ -465,7 +680,7 @@ E.tool(function () {
     const progress = E.el('progress', { max: 1, value: 0, 'aria-label': name + ' transfer progress' });
     const actions = E.el('div', { class: 'row' });
     row.append(title, meta, state, progress, actions); $('#transfers').prepend(row);
-    return { row, state, progress, actions, update(text, value) { if (state.textContent !== text) state.textContent = text; if (value !== undefined) progress.value = value; },
+    return { row, meta, state, progress, actions, update(text, value) { if (state.textContent !== text) state.textContent = text; if (value !== undefined) progress.value = value; },
       finish(text) { state.textContent = text; progress.hidden = true; actions.replaceChildren(button('dismiss', () => { row.remove(); $('#transfers-section').hidden = !$('#transfers').children.length; })); } };
   }
   class Peer {
@@ -474,8 +689,9 @@ E.tool(function () {
       this.pc = null; this.dc = null; this.connection = ''; this.pendingICE = []; this.readChain = Promise.resolve(); this.sendChain = Promise.resolve();
       this.queue = []; this.outgoing = null; this.incoming = null; this.closed = false;
       /* away: dropped out of discovery but still directly connected.
-         attempts: consecutive failed connections, for the retry backoff. */
-      this.away = false; this.attempts = 0; this.retryTimer = null; this.lastError = '';
+         attempts: consecutive failed connections, for the retry backoff.
+         restartTimer: a lost path being looked for again. */
+      this.away = false; this.attempts = 0; this.retryTimer = null; this.restartTimer = null; this.lastError = '';
       this.tile = E.el('li', { class: 'device' });
       this.label = E.el('span', { class: 'device__action', text: 'connecting…' });
       const head = E.el('div', { class: 'device__head' }, [
@@ -495,7 +711,14 @@ E.tool(function () {
       this.tile.append(head, E.el('div', { class: 'device__buttons' }, [this.sendButton, this.textButton])); $('#devices').append(this.tile);
       this.tile.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); this.tile.dataset.drag = 'true'; } });
       this.tile.addEventListener('dragleave', e => { if (!this.tile.contains(e.relatedTarget)) delete this.tile.dataset.drag; });
-      this.tile.addEventListener('drop', e => { e.preventDefault(); delete this.tile.dataset.drag; this.files([...e.dataTransfer.files]); });
+      this.tile.addEventListener('drop', e => {
+        e.preventDefault(); delete this.tile.dataset.drag;
+        /* A dropped folder arrives as a file that cannot be read. */
+        const entries = [...e.dataTransfer.items].filter(item => item.kind === 'file').map(item => item.webkitGetAsEntry?.());
+        const all = [...e.dataTransfer.files], files = all.filter((file, i) => !entries[i]?.isDirectory);
+        this.files(files);
+        if (files.length < all.length) error('share sends files, not folders. open the folder and drop the files inside it.');
+      });
     }
     status(text) { this.label.textContent = text; }
     async emit(signal) {
@@ -507,7 +730,7 @@ E.tool(function () {
       return this.sendChain;
     }
     setup(connection) {
-      const pc = new RTCPeerConnection({ iceServers: session.iceServers });
+      const pc = new RTCPeerConnection({ iceServers: iceServers(session) });
       this.pc = pc; this.connection = connection; this.status('connecting…'); this.pendingICE = [];
       this.timer = setTimeout(() => this.fail('could not connect to ' + this.name + '. some networks need a relay server.'), 30000);
       pc.onicecandidate = e => {
@@ -515,12 +738,34 @@ E.tool(function () {
       };
       pc.onconnectionstatechange = () => {
         if (this.pc !== pc) return;
-        if (pc.connectionState === 'failed') this.fail('connection to ' + this.name + ' failed.');
-        if (pc.connectionState === 'disconnected') this.status('reconnecting…');
-        if (pc.connectionState === 'connected' && this.dc?.readyState === 'open') this.status('ready');
+        const state = pc.connectionState;
+        if (state === 'connected') { clearTimeout(this.restartTimer); this.restartTimer = null; if (this.dc?.readyState === 'open') this.status('ready'); }
+        if (state === 'disconnected' || state === 'failed') this.recover(pc, state === 'failed' ? 0 : 3000);
       };
       pc.ondatachannel = e => { if (this.pc === pc && !this.dc) this.attach(e.channel); else e.channel.close(); };
       return pc;
+    }
+    /**
+     * A connection whose path stops working, as when a phone leaves the Wi-Fi
+     * for mobile data or a router restarts, looks for a new path without
+     * closing: the channel and any transfer on it carry on once one is found.
+     * Only the side that makes offers restarts the search; both give it 20
+     * seconds before starting over. A connection that never opened just fails.
+     */
+    recover(pc, wait) {
+      if (this.restartTimer) return;
+      if (this.dc?.readyState !== 'open') { if (pc.connectionState === 'failed') this.fail('connection to ' + this.name + ' failed.'); return; }
+      this.status('reconnecting…');
+      const failed = () => { if (this.pc === pc) this.fail('connection to ' + this.name + ' failed.'); };
+      this.restartTimer = setTimeout(async () => {
+        if (this.pc !== pc || pc.connectionState === 'connected') { this.restartTimer = null; return; }
+        this.restartTimer = setTimeout(() => { this.restartTimer = null; if (pc.connectionState !== 'connected') failed(); }, 20000);
+        if (!initiator(this) || pc.signalingState !== 'stable') return;
+        try {
+          await pc.setLocalDescription(await pc.createOffer({ iceRestart: true }));
+          await this.emit({ connection: this.connection, description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+        } catch { failed(); }
+      }, wait);
     }
     async connect() {
       clearTimeout(this.retryTimer);
@@ -538,26 +783,29 @@ E.tool(function () {
           if (session.id < this.id && this.pc.signalingState === 'have-local-offer') return;
           this.reset('connection restarted');
         }
+        /* The same connection offering again is looking for a new path. */
         const pc = this.pc || this.setup(data.connection);
         await pc.setRemoteDescription(data.description);
-        for (const ice of this.pendingICE.splice(0)) await pc.addIceCandidate(ice);
+        for (const ice of this.pendingICE.splice(0)) await pc.addIceCandidate(ice).catch(() => {});
         await pc.setLocalDescription(await pc.createAnswer());
         await this.emit({ connection: this.connection, description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
       } else if (data.description?.type === 'answer') {
-        if (!this.pc || data.connection !== this.connection) return;
+        if (!this.pc || data.connection !== this.connection || this.pc.signalingState !== 'have-local-offer') return;
         await this.pc.setRemoteDescription(data.description);
-        for (const ice of this.pendingICE.splice(0)) await this.pc.addIceCandidate(ice);
+        for (const ice of this.pendingICE.splice(0)) await this.pc.addIceCandidate(ice).catch(() => {});
       } else if (data.candidate) {
         // Outbound signals are serialized, but ICE may still precede an offer.
+        // A candidate from a search a restart has replaced is refused; it was
+        // only ever one more path to try, so that is no failure.
         if (!this.pc) this.setup(data.connection);
         if (data.connection !== this.connection) return;
-        if (this.pc.remoteDescription) await this.pc.addIceCandidate(data.candidate);
+        if (this.pc.remoteDescription) await this.pc.addIceCandidate(data.candidate).catch(() => {});
         else if (this.pendingICE.length < 100) this.pendingICE.push(data.candidate);
       }
     }
     attach(dc) {
       if (dc.label !== 'eyes-share-v2' || !dc.ordered) { dc.close(); return; }
-      this.dc = dc; dc.binaryType = 'arraybuffer'; dc.bufferedAmountLowThreshold = 262144;
+      this.dc = dc; dc.binaryType = 'arraybuffer'; dc.bufferedAmountLowThreshold = BUFFER_LOW;
       dc.onopen = () => {
         clearTimeout(this.timer); this.attempts = 0; this.status('ready');
         /* Connected again: retract this device's own connection error, but never
@@ -576,14 +824,19 @@ E.tool(function () {
     }
     control(data) { if (this.dc?.readyState !== 'open') throw new Error('device is not connected'); this.dc.send(JSON.stringify(data)); }
     reset(message) {
-      clearTimeout(this.timer); const dc = this.dc, pc = this.pc; this.dc = null; this.pc = null;
+      clearTimeout(this.timer); clearTimeout(this.restartTimer); this.restartTimer = null;
+      const dc = this.dc, pc = this.pc; this.dc = null; this.pc = null;
       if (dc) { dc.onclose = null; dc.onerror = null; dc.onmessage = null; dc.close(); }
       pc?.close();
       if (this.outgoing) this.finishOutgoing(message);
       if (this.incoming) this.finishIncoming(message);
-      for (const item of this.queue) item.ui.finish(message);
-      this.queue = []; this.sendChain = Promise.resolve(); this.pendingICE = []; render();
+      /* Batches not yet offered wait for the next connection; only a device
+         that has gone, or stopped trying, takes them with it. */
+      if (this.closed) this.dropQueue(message);
+      else for (const item of this.queue) item.ui.update('waiting to reconnect…');
+      this.sendChain = Promise.resolve(); this.pendingICE = []; render();
     }
+    dropQueue(message) { for (const item of this.queue) item.ui.finish(message); this.queue = []; render(); }
     fail(message) {
       if (this.closed) return;
       this.reset(message); this.lastError = message; error(message);
@@ -598,7 +851,7 @@ E.tool(function () {
     retry() {
       clearTimeout(this.retryTimer);
       if (this.closed || this.away) return;
-      if (++this.attempts > MAX_RETRIES) { this.status('not connected · send to retry'); return; }
+      if (++this.attempts > MAX_RETRIES) { this.status('not connected · send to retry'); this.dropQueue(this.lastError || 'not connected'); return; }
       this.status('reconnecting…');
       if (!initiator(this)) return;
       const wait = Math.min(15000, 1000 * 2 ** (this.attempts - 1));
@@ -633,20 +886,24 @@ E.tool(function () {
       if (this.outgoing || !this.queue.length || this.dc?.readyState !== 'open') return;
       const batch = this.outgoing = this.queue.shift(); batch.state = 'offered';
       batch.ui.update('waiting for ' + this.name + ' to accept');
-      /* `paced` offers acknowledgements; a page from before them leaves it out
-         and is sent to without waiting, as it expects. */
-      this.control({ t: 'offer', id: batch.id, items: batch.items.map(({ name, size, kind }) => ({ name, size, kind })), paced: true });
-      batch.timer = setTimeout(() => this.cancelOutgoing(batch, "no response. send again when they're ready."), 120000);
+      /* `paced` offers acknowledgements and `stop` takes a receiver's request
+         to stop; a page from before either leaves it out and gets what it expects. */
+      this.control({ t: 'offer', id: batch.id, items: batch.items.map(({ name, size, kind }) => ({ name, size, kind })), paced: true, stop: true });
+      batch.timer = setTimeout(() => this.cancelOutgoing(batch, "no response. send again when they're ready."), ANSWER_MS);
     }
     finishOutgoing(message) {
       const batch = this.outgoing; if (!batch) return;
-      batch.cancelled = true; clearTimeout(batch.timer); batch.ui.finish(message); this.outgoing = null; render();
+      batch.cancelled = true; clearTimeout(batch.timer); batch.wake?.(); batch.ui.finish(message); this.outgoing = null; render();
     }
+    /**
+     * Cancel a batch this side is sending. The channel is ordered, so the
+     * cancel arrives after every chunk already sent, and the receiver drops
+     * them with the batch; the connection, and anything coming the other way,
+     * carries on.
+     */
     cancelOutgoing(batch, message = 'cancelled') {
-      batch.cancelled = true; clearTimeout(batch.timer);
+      batch.cancelled = true; clearTimeout(batch.timer); batch.wake?.();
       if (this.outgoing === batch) {
-        // Close the channel to discard already-buffered binary chunks safely.
-        if (batch.state === 'sending' || batch.state === 'receipt') { this.fail(message + '.'); return; }
         try { this.control({ t: 'cancel', id: batch.id }); } catch {}
         this.finishOutgoing(message); this.pump();
       } else { this.queue = this.queue.filter(item => item !== batch); batch.ui.finish(message); }
@@ -655,12 +912,35 @@ E.tool(function () {
     finishIncoming(message) {
       const batch = this.incoming; if (!batch) return;
       clearTimeout(batch.timer);
-      if (batch.accepted) reserved -= batch.size;
-      batch.sink?.discard(); batch.files = []; batch.ui.finish(message); this.incoming = null; render();
+      if (batch.accepted) reserved -= batch.kept;
+      batch.sink?.discard(); for (const download of batch.saving.values()) download.abort();
+      batch.files = []; batch.ui.finish(message); this.incoming = null; render();
     }
-    incomingTimeout(batch) {
-      clearTimeout(batch.timer);
-      batch.timer = setTimeout(() => { if (this.incoming === batch) this.fail('transfer timed out. please send again.'); }, 60000);
+    /**
+     * Stop receiving: ask the sender to stop, which it answers once it has,
+     * and drop whatever was already on its way. A sender from before this can
+     * only be stopped by closing the connection. `reason` is what the sender
+     * is shown.
+     */
+    stopIncoming(b, message, reason = message) {
+      if (this.incoming !== b || b.stopping) return;
+      /* Not yet accepted: nothing has been sent, so this is a refusal. */
+      if (!b.accepted) { try { this.control({ t: 'reject', id: b.id, reason }); } catch {} this.finishIncoming(message); return; }
+      if (!b.stoppable) { this.fail(message); return; }
+      b.stopping = message; b.sink?.discard();
+      b.ui.update('stopping…'); b.ui.actions.replaceChildren();
+      try { this.control({ t: 'stop', id: b.id, reason }); } catch { this.fail(message); }
+    }
+    /* The sender has STALL_MS to show signs of life, counted from the last it sent. */
+    watch(b) {
+      clearTimeout(b.timer); b.seen = Date.now();
+      const check = () => {
+        if (this.incoming !== b) return;
+        const quiet = Date.now() - b.seen;
+        if (quiet >= STALL_MS) this.fail('transfer timed out. please send again.');
+        else b.timer = setTimeout(check, STALL_MS - quiet);
+      };
+      b.timer = setTimeout(check, STALL_MS);
     }
     offer(data) {
       if (this.incoming) { this.control({ t: 'reject', id: data.id, reason: 'busy with another transfer' }); return; }
@@ -670,12 +950,15 @@ E.tool(function () {
         return { name: safeName(item.name), size: item.size, kind: item.kind };
       });
       const size = items.reduce((n, f) => n + f.size, 0);
-      /* Held in memory, the bounds are known at once; on disk, the space is
-         checked when the transfer is accepted. */
-      if (disk === false && size > LIMIT) { this.control({ t: 'reject', id: data.id, reason: 'too large for this browser; it takes up to 256 MB' }); return; }
-      if (disk === false && size + retained + reserved > RETAIN) { this.control({ t: 'reject', id: data.id, reason: 'not enough space; remove received files first' }); return; }
+      /* Files saved to the downloads as they arrive need no room here. What is
+         held in memory is bounded at once; on disk, the space is checked when
+         the transfer is accepted. */
+      const kept = saves ? items.reduce((n, f) => f.kind === 'file' ? n : n + f.size, 0) : size;
+      if (disk === false && kept > LIMIT) { this.control({ t: 'reject', id: data.id, reason: 'too large for this browser; it takes up to 256 MB' }); return; }
+      if (disk === false && kept + retained + reserved > RETAIN) { this.control({ t: 'reject', id: data.id, reason: 'not enough space; remove received files first' }); return; }
       const title = items.length === 1 ? items[0].name : items.length + ' files';
-      const batch = this.incoming = { id: data.id, items, size, paced: data.paced === true, accepted: false, index: 0, fileBytes: 0, bytes: 0, count: 0, sink: null, files: [], ui: transferRow(title, 'from ' + this.name + ' · ' + E.bytes(size)) };
+      const batch = this.incoming = { id: data.id, items, size, kept: 0, paced: data.paced === true, stoppable: data.stop === true, accepted: false,
+        index: 0, fileBytes: 0, bytes: 0, count: 0, ackedBytes: 0, ackedCount: 0, saving: new Map(), sink: null, files: [], ui: transferRow(title, 'from ' + this.name + ' · ' + E.bytes(size)) };
       batch.ui.update(this.name + ' wants to send ' + (items[0].kind === 'text' ? 'text' : items.length === 1 ? 'a file' : 'files'));
       batch.ui.progress.hidden = true;
       if (items.length > 1) {
@@ -691,120 +974,177 @@ E.tool(function () {
       batch.ui.actions.append(button('accept', async () => {
         if (this.incoming !== batch || batch.accepted || batch.checking) return;
         batch.checking = true;
-        const problem = await capacity(size);
+        await saving;
+        /* Files go to the downloads where the browser allows; the rest is kept here, and has to fit. */
+        const direct = saves?.registration.active ? items.map((item, i) => item.kind === 'file' ? i : -1).filter(i => i >= 0) : [];
+        const kept = items.reduce((n, item, i) => direct.includes(i) ? n : n + item.size, 0);
+        const problem = await capacity(kept);
+        if (this.incoming !== batch || batch.accepted) { batch.checking = false; return; }
+        if (problem) { batch.checking = false; error(problem); return; }
+        for (const i of direct) {
+          const download = save(items[i].name, items[i].size);
+          download.oncancel = () => this.stopIncoming(batch, 'download cancelled', 'the download was cancelled');
+          batch.saving.set(i, download);
+        }
+        /* The first file is about to arrive: give its download a moment to begin. */
+        if (direct.length) await Promise.race([batch.saving.get(direct[0]).start, sleep(3000)]);
         batch.checking = false;
-        if (this.incoming !== batch || batch.accepted) return;
-        if (problem) { error(problem); return; }
-        if (!answer({ t: 'accept', id: batch.id, ...(batch.paced ? { paced: true } : {}) })) { this.fail('device is not connected.'); return; }
-        batch.accepted = true; reserved += size;
-        batch.sink = sink(batch, e => { if (this.incoming === batch) this.fail(e.message); });
+        if (this.incoming !== batch) return;
+        if (!answer({ t: 'accept', id: batch.id, chunk: CHUNK_MAX, ...(batch.paced ? { paced: true } : {}) })) { this.fail('device is not connected.'); return; }
+        batch.accepted = true; batch.kept = kept; reserved += kept;
+        batch.sink = sink(batch, e => this.stopIncoming(batch, e.message, 'the other device could not save it'));
+        batch.meter = meter(batch.ui, size);
+        if (direct.length) batch.ui.meta.textContent += ' · saving to downloads';
         batch.ui.progress.hidden = false; batch.ui.update('receiving…', 0);
-        batch.ui.actions.replaceChildren(button('cancel', () => this.fail('transfer cancelled.')));
-        this.incomingTimeout(batch); render();
+        batch.ui.actions.replaceChildren(button('cancel', () => this.stopIncoming(batch, 'transfer cancelled.', 'cancelled by ' + session?.name)));
+        this.watch(batch); render();
       }, true), button('decline', () => { answer({ t: 'reject', id: batch.id, reason: 'declined' }); this.finishIncoming('declined'); }));
-      batch.timer = setTimeout(() => { if (this.incoming === batch && !batch.accepted) { answer({ t: 'reject', id: batch.id, reason: 'no response' }); this.finishIncoming('request expired'); } }, 120000);
+      batch.timer = setTimeout(() => { if (this.incoming === batch && !batch.accepted) { answer({ t: 'reject', id: batch.id, reason: 'no response' }); this.finishIncoming('request expired'); } }, ANSWER_MS);
       render();
     }
+    /** One chunk of the file arriving now. */
+    data(raw) {
+      const b = this.incoming;
+      if (!(raw instanceof ArrayBuffer) || !raw.byteLength || raw.byteLength > CHUNK_MAX || !b?.accepted) throw new Error('received unexpected file data');
+      b.seen = Date.now();
+      /* Already on its way when this side asked the sender to stop. */
+      if (b.stopping) return;
+      if (!b.started || b.fileBytes + raw.byteLength > b.items[b.index].size) throw new Error('received unexpected file data');
+      /* The chunk moves to where it is saved; count it first. */
+      const length = raw.byteLength;
+      b.sink.write(raw, b.index); b.fileBytes += length; b.bytes += length; b.count++;
+      if (b.paced && (b.bytes - b.ackedBytes >= ACK_BYTES || b.count - b.ackedCount >= ACK_CHUNKS)) this.acknowledge(b);
+      b.meter('receiving', b.bytes);
+    }
     message(raw) {
-      if (typeof raw !== 'string') {
-        const b = this.incoming;
-        if (!(raw instanceof ArrayBuffer) || !raw.byteLength || raw.byteLength > CHUNK || !b?.accepted || !b.started || b.fileBytes + raw.byteLength > b.items[b.index].size) throw new Error('received unexpected file data');
-        /* The chunk moves to the storage worker; count it first. */
-        const length = raw.byteLength;
-        b.sink.write(raw, b.index); b.fileBytes += length; b.bytes += length; this.incomingTimeout(b);
-        if (b.paced && ++b.count % BLOCK === 0) this.acknowledge(b, b.count);
-        const percent = b.size ? Math.floor(b.bytes / b.size * 100) : 100;
-        b.ui.update('receiving · ' + percent + '%', b.size ? b.bytes / b.size : 1); return;
-      }
+      if (typeof raw !== 'string') { this.data(raw); return; }
       if (raw.length > 65536) throw new Error('transfer message too large');
       const data = JSON.parse(raw);
       if (!data || typeof data.t !== 'string') throw new Error('invalid transfer message');
       if (data.t === 'offer') { this.offer(data); return; }
       const out = this.outgoing, incoming = this.incoming;
-      if (data.t === 'accept' && out?.id === data.id && out.state === 'offered') { clearTimeout(out.timer); out.paced = data.paced === true; this.transmit(out).catch(e => { if (this.outgoing === out) this.fail(e.message); }); return; }
-      if (data.t === 'reject' && out?.id === data.id && out.state === 'offered') { this.finishOutgoing('not sent · ' + String(data.reason || 'declined').slice(0, 120)); this.pump(); return; }
-      if (data.t === 'cancel' && incoming?.id === data.id) { this.finishIncoming('sender cancelled'); return; }
-      if (data.t === 'ack' && out?.id === data.id && out.state === 'sending' && out.paced) {
+      const mine = out?.id === data.id, theirs = incoming?.id === data.id;
+      if (data.t === 'accept' && mine && out.state === 'offered') {
+        clearTimeout(out.timer); out.paced = data.paced === true;
+        out.chunk = this.chunkSize(data.chunk); out.window = Math.max(64, Math.floor(WINDOW / out.chunk)); out.meter = meter(out.ui, out.size);
+        /* Whatever stops the sending, short of the connection closing, ends this batch alone. */
+        this.transmit(out).catch(e => {
+          if (this.outgoing !== out) return;
+          if (this.dc?.readyState === 'open') this.cancelOutgoing(out, 'not sent · ' + e.message); else this.fail(e.message);
+        });
+        return;
+      }
+      if (data.t === 'reject' && mine && out.state === 'offered') { this.finishOutgoing('not sent · ' + String(data.reason || 'declined').slice(0, 120)); this.pump(); return; }
+      if (data.t === 'ack' && mine && out.state === 'sending' && out.paced) {
         if (!Number.isSafeInteger(data.n) || data.n < out.acked || data.n > out.sentChunks) throw new Error('invalid transfer acknowledgement');
         out.acked = data.n; out.wake?.(); return;
       }
-      if (data.t === 'file' && incoming?.id === data.id && incoming.accepted) {
-        if (incoming.started || data.index !== incoming.index || incoming.index >= incoming.items.length) throw new Error('invalid file order');
-        incoming.started = true; incoming.sink.open(incoming.index); this.incomingTimeout(incoming); return;
+      if (data.t === 'stop' && mine && (out.state === 'sending' || out.state === 'receipt')) {
+        this.control({ t: 'stopped', id: out.id });
+        this.finishOutgoing('not sent · ' + (String(data.reason || '').slice(0, 120) || 'stopped by ' + this.name)); this.pump(); return;
       }
-      if (data.t === 'file-end' && incoming?.id === data.id && incoming.accepted) {
+      if (data.t === 'received' && mine && out.state === 'receipt') { this.finishOutgoing('sent to ' + this.name); this.pump(); return; }
+      if (data.t === 'cancel' && theirs) { this.finishIncoming('sender cancelled'); return; }
+      if (data.t === 'stopped' && theirs && incoming.stopping) { this.finishIncoming(incoming.stopping); return; }
+      if (theirs && incoming.stopping && ['file', 'file-end', 'done'].includes(data.t)) return;
+      if (data.t === 'file' && theirs && incoming.accepted) {
+        if (incoming.started || data.index !== incoming.index || incoming.index >= incoming.items.length) throw new Error('invalid file order');
+        incoming.started = true; incoming.sink.open(incoming.index); incoming.seen = Date.now(); return;
+      }
+      if (data.t === 'file-end' && theirs && incoming.accepted) {
         const b = incoming;
         if (!b.started || data.index !== b.index || b.fileBytes !== b.items[b.index].size) throw new Error('received file is incomplete');
         b.files.push(b.sink.end(b.index, b.items[b.index].kind === 'text' ? 'text/plain;charset=utf-8' : 'application/octet-stream'));
-        b.fileBytes = 0; b.started = false; b.index++; this.incomingTimeout(b); return;
+        b.fileBytes = 0; b.started = false; b.index++; b.seen = Date.now(); return;
       }
-      if (data.t === 'done' && incoming?.id === data.id && incoming.accepted && !incoming.done) {
+      if (data.t === 'done' && theirs && incoming.accepted && !incoming.done) {
         if (incoming.index !== incoming.items.length || incoming.bytes !== incoming.size) throw new Error('transfer is incomplete');
         /* The receipt waits for the last file to be stored. */
-        const b = incoming; b.done = true;
+        const b = incoming; b.done = true; b.meter('receiving', b.bytes);
         Promise.all(b.files).then(files => {
-          if (this.incoming !== b) return;
+          if (this.incoming !== b || b.stopping) return;
           b.files = files; this.control({ t: 'received', id: b.id }); this.received(b);
-        }).catch(e => { if (this.incoming === b) this.fail(e.message || 'could not save the received file.'); });
+        }).catch(e => { if (this.incoming === b) this.stopIncoming(b, e.message || 'could not save the received file.', 'the other device could not save it'); });
         return;
       }
-      if (data.t === 'received' && out?.id === data.id && out.state === 'receipt') { this.finishOutgoing('sent to ' + this.name); this.pump(); return; }
-      // Late cancellation/acknowledgment may arrive after a user cancels an offer.
-      if (['cancel', 'reject', 'accept', 'received', 'ack'].includes(data.t)) return;
+      // Late answers may arrive after either side has cancelled.
+      if (['cancel', 'reject', 'accept', 'received', 'ack', 'stop', 'stopped'].includes(data.t)) return;
       throw new Error('unexpected transfer message');
     }
-    /** Tell the sender its first `n` chunks are stored, once they are. */
-    acknowledge(b, n) {
-      b.sink.stored().then(() => { if (this.incoming === b) this.control({ t: 'ack', id: b.id, n }); }).catch(() => {});
+    /** Tell the sender everything it has sent so far is stored, once it is. */
+    acknowledge(b) {
+      const n = b.count; b.ackedBytes = b.bytes; b.ackedCount = n;
+      b.sink.stored().then(() => { if (this.incoming === b && !b.stopping) this.control({ t: 'ack', id: b.id, n }); }).catch(() => {});
     }
-    /** Wait until the receiver has stored enough for another chunk to go. */
-    async credit(batch, dc) {
-      if (batch.sentChunks - batch.acked < WINDOW) return;
-      await new Promise((resolve, reject) => {
+    /** The largest message both ends take: what the receiver accepts, within what the connection carries. */
+    chunkSize(offered) {
+      const limit = this.pc?.sctp?.maxMessageSize;
+      if (!Number.isSafeInteger(offered) || offered <= CHUNK || !limit) return CHUNK;
+      return Math.max(CHUNK, Math.min(offered, CHUNK_MAX, limit));
+    }
+    /** Wait, while the receiver is a full window behind, for it to store more. */
+    credit(batch, dc) {
+      return new Promise((resolve, reject) => {
         const done = error => { clearTimeout(timer); batch.wake = null; dc.removeEventListener('close', close); error ? reject(error) : resolve(); };
         const close = () => done(new Error('connection closed during transfer'));
-        const timer = setTimeout(() => done(new Error('the receiver stopped responding')), 60000);
-        batch.wake = () => { if (batch.sentChunks - batch.acked < WINDOW) done(); };
+        const timer = setTimeout(() => done(new Error('the receiver stopped responding')), STALL_MS);
+        batch.wake = () => { if (batch.cancelled || batch.sentChunks - batch.acked < batch.window) done(); };
         dc.addEventListener('close', close);
       });
     }
-    async buffer(dc) {
-      if (dc.readyState !== 'open') throw new Error('connection closed during transfer');
-      if (dc.bufferedAmount <= 1048576) return;
-      await new Promise((resolve, reject) => {
+    /** Wait, while the channel's send buffer is full, for it to drain. */
+    drain(dc) {
+      return new Promise((resolve, reject) => {
         const done = error => { clearTimeout(timer); dc.removeEventListener('bufferedamountlow', low); dc.removeEventListener('close', close); error ? reject(error) : resolve(); };
-        const low = () => { if (dc.bufferedAmount <= dc.bufferedAmountLowThreshold) done(); };
+        const low = () => { if (dc.bufferedAmount <= BUFFER_LOW) done(); };
         const close = () => done(new Error('connection closed during transfer'));
-        const timer = setTimeout(() => done(new Error('the receiver stopped responding')), 30000);
+        const timer = setTimeout(() => done(new Error('the receiver stopped responding')), STALL_MS);
         dc.addEventListener('bufferedamountlow', low); dc.addEventListener('close', close); low();
       });
     }
     async transmit(batch) {
-      batch.state = 'sending'; batch.sentChunks = 0; batch.acked = 0; const dc = this.dc; let sent = 0;
-      const check = () => { if (batch.cancelled || this.outgoing !== batch || this.dc !== dc || dc.readyState !== 'open') throw new Error('transfer cancelled'); };
-      const chunkSize = Math.min(CHUNK, this.pc.sctp?.maxMessageSize || CHUNK);
+      batch.state = 'sending'; batch.sentChunks = 0; batch.acked = 0;
+      const dc = this.dc;
+      const halted = () => batch.cancelled || this.outgoing !== batch || this.dc !== dc || dc.readyState !== 'open';
+      let sent = 0;
       for (let i = 0; i < batch.items.length; i++) {
-        check(); this.control({ t: 'file', id: batch.id, index: i });
+        if (halted()) return;
+        this.control({ t: 'file', id: batch.id, index: i });
         const file = batch.items[i].blob;
-        for (let offset = 0; offset < file.size; offset += chunkSize) {
-          check(); await this.buffer(dc);
-          if (batch.paced) { await this.credit(batch, dc); check(); }
-          const data = await file.slice(offset, offset + chunkSize).arrayBuffer(); check(); dc.send(data); sent += data.byteLength; batch.sentChunks++;
-          batch.ui.update('sending · ' + (batch.size ? Math.floor(sent / batch.size * 100) : 100) + '%', batch.size ? sent / batch.size : 1);
+        /* Each block is read while the one before it is sent. */
+        const read = offset => { const block = file.slice(offset, offset + READ).arrayBuffer(); block.catch(() => {}); return block; };
+        let next = file.size ? read(0) : null;
+        for (let offset = 0; offset < file.size; offset += READ) {
+          let block;
+          try { block = new Uint8Array(await next); } catch { throw new Error('could not read ' + batch.items[i].name); }
+          next = offset + READ < file.size ? read(offset + READ) : null;
+          for (let at = 0; at < block.byteLength; at += batch.chunk) {
+            if (dc.bufferedAmount > BUFFER_HIGH) await this.drain(dc);
+            if (batch.paced && batch.sentChunks - batch.acked >= batch.window) await this.credit(batch, dc);
+            if (halted()) return;
+            const piece = block.subarray(at, at + batch.chunk);
+            dc.send(piece); sent += piece.byteLength; batch.sentChunks++;
+            batch.meter('sending', sent);
+          }
         }
-        check(); this.control({ t: 'file-end', id: batch.id, index: i });
+        if (halted()) return;
+        this.control({ t: 'file-end', id: batch.id, index: i });
       }
-      check(); batch.state = 'receipt'; this.control({ t: 'done', id: batch.id }); batch.ui.update('finishing…', 1);
-      batch.timer = setTimeout(() => { if (this.outgoing === batch) this.fail('receipt timed out. ask the receiver whether it arrived.'); }, 60000);
+      if (halted()) return;
+      batch.state = 'receipt'; this.control({ t: 'done', id: batch.id }); batch.ui.update('finishing…', 1);
+      batch.timer = setTimeout(() => { if (this.outgoing === batch) this.fail('receipt timed out. ask the receiver whether it arrived.'); }, STALL_MS);
     }
     received(batch) {
-      /* Only files held in memory count against RETAIN; stored ones use disk. */
-      const held = batch.sink.memory ? batch.size : 0;
-      clearTimeout(batch.timer); reserved -= batch.size; retained += held; this.incoming = null;
+      /* Only files held in memory count against RETAIN; stored ones use disk,
+         and saved ones are the browser's. */
+      const held = batch.sink.held();
+      clearTimeout(batch.timer); reserved -= batch.kept; retained += held; this.incoming = null;
       batch.ui.update('received from ' + this.name, 1); batch.ui.progress.hidden = true; batch.ui.actions.replaceChildren();
       const links = E.el('div', { class: 'received-files stack-2' }); const urls = [];
       batch.items.forEach((item, i) => {
-        const blob = batch.files[i], url = URL.createObjectURL(blob); urls.push(url);
+        const blob = batch.files[i];
+        if (!blob) { links.append(E.el('p', { class: 'download-file', text: item.name + ' · saved to downloads' })); return; }
+        const url = URL.createObjectURL(blob); urls.push(url);
         const link = E.el('a', { class: 'download-file', href: url, download: safeName(item.name), text: 'download ' + item.name }); links.append(link);
         if (item.kind === 'text') blob.text().then(value => {
           if (!batch.ui.row.isConnected) return;
@@ -812,7 +1152,8 @@ E.tool(function () {
         }).catch(() => error('could not read the received text'));
       });
       batch.ui.actions.before(links);
-      batch.ui.actions.append(button('remove', () => { urls.forEach(url => URL.revokeObjectURL(url)); retained -= held; batch.sink.discard(); batch.files = []; batch.ui.row.remove(); $('#transfers-section').hidden = !$('#transfers').children.length; }));
+      const forget = () => { urls.forEach(url => URL.revokeObjectURL(url)); retained -= held; batch.sink.discard(); batch.files = []; batch.ui.row.remove(); $('#transfers-section').hidden = !$('#transfers').children.length; };
+      batch.ui.actions.append(button(urls.length ? 'remove' : 'dismiss', forget));
       render();
     }
   }
@@ -867,7 +1208,12 @@ E.tool(function () {
     if (online && Date.now() - lastBeat > 20000) stream?.abort();
     hurry();
   });
-  window.addEventListener('online', hurry);
+  window.addEventListener('online', reopen);
+  /* Where the browser says what kind of network it is on (Android does), a
+     change of kind is a change of network. */
+  const network = navigator.connection;
+  let networkType = network?.type;
+  network?.addEventListener?.('change', () => { if (network.type !== networkType) { networkType = network.type; reopen(); } });
   window.addEventListener('hashchange', () => { if (readRoom()) { showRoom(); discover(); } });
   if (!window.isSecureContext || !window.RTCPeerConnection || !window.crypto?.subtle) {
     $('#status').textContent = 'unavailable';

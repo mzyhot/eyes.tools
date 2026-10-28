@@ -22,8 +22,8 @@ export const PUBLIC_ROOT_FILES = [
   "fonts/geist-cyrillic-ext.woff2", "fonts/geist-vietnamese.woff2",
   "fonts/geist-mono-latin.woff2", "fonts/geist-mono-latin-ext.woff2", "fonts/geist-mono-cyrillic.woff2",
   "fonts/geist-mono-cyrillic-ext.woff2", "fonts/geist-mono-vietnamese.woff2", "fonts/geist-mono-symbols2.woff2",
-  /* page scripts */
-  "index.js", "redirect.js",
+  /* page scripts, and the service worker share saves received files through */
+  "index.js", "redirect.js", "share-download.js",
   /* clean code's formatters, each loaded the first time its language is
      picked; scripts/vendor-formatters.mjs makes them */
   "fmt/clang-format.js", "fmt/clang-format.wasm", "fmt/gofmt.js", "fmt/gofmt.wasm", "fmt/lua.js",

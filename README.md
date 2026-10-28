@@ -15,9 +15,10 @@ footer, the fonts, the scripts a tool loads) comes from two registries, so a
 change lands in one place. Share gives every visitor a room and a link to pass
 on, shows devices on the same network to each other without one, and a small
 in-memory service introduces the devices and relays their connection setup.
-File contents travel between browsers, never through it, and are written to the
-receiver's browser storage as they arrive, so their size is bounded by disk
-rather than memory.
+File contents travel between browsers, never through it, and go into the
+receiver's downloads as they arrive, the way any download does, so their size
+is bounded by disk rather than memory. Where a browser cannot save a download
+that way, as Safari cannot, they are written to its storage instead.
 
 ```
 site.js           the site registry: wordmark, copy, footers, shortcuts
@@ -30,6 +31,7 @@ s.js              shared runtime: the `E` global, and the chrome built from the 
 index.js          the index: filter field and registry-driven list
 index.html        an empty page index.js fills
 redirect.js       drives the compatibility stubs (t/json.html, t/lines.html, t/units.html)
+share-download.js the service worker share saves received files to the downloads through
 preview.png       the picture a link preview shows (site.js names it)
 404.html          an empty page s.js fills from site.js
 t/*.html          one file per tool: its markup and its script, nothing else

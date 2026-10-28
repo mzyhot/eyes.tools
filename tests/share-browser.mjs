@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createHash, randomBytes, randomFillSync } from 'node:crypto';
 import { createServer as createTcpServer, connect as tcpConnect } from 'node:net';
+import { createServer as createHttpServer, request as httpRequest } from 'node:http';
 import { createEyesServer } from '../dev-server.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
@@ -14,12 +15,16 @@ const errors = [], requests = [];
 /* Every page opens a room of its own; a second device joins by opening the
    first one's link. Devices on one network also find each other, but only
    when the service knows the network, never from loopback, which is all
-   this suite connects from, so here every meeting is by link except the one
-   test that sets a trusted visitor address. */
-async function page({ holdPeerConnectionOpen = false, link = '', noStorage = false, address = '' } = {}) {
+   this suite connects from, so here every meeting is by link except the
+   tests that set a trusted visitor address.
+   Chromium saves received files to its downloads as they arrive. A page
+   with `noDownloads` cannot, as Safari cannot, and keeps them in its storage,
+   or with `noStorage` too, in memory. */
+async function page({ holdPeerConnectionOpen = false, link = '', noStorage = false, noDownloads = false, address = '' } = {}) {
   const context = await browser.newContext({ acceptDownloads: true, ...(address ? { extraHTTPHeaders: { 'CF-Connecting-IP': address } } : {}) });
   /* A browser without the private file system, as a private window may be. */
   if (noStorage) await context.addInitScript(() => { if (globalThis.StorageManager) delete StorageManager.prototype.getDirectory; });
+  if (noDownloads) await context.addInitScript(() => { delete Navigator.prototype.serviceWorker; });
   if (holdPeerConnectionOpen) await context.addInitScript(() => {
     /* Model a deliberate departure whose remote data channel remains open.
        This is the ordering that made a permanent leave look temporary. */
@@ -87,10 +92,44 @@ async function cuttableProxy(target) {
     close() { for (const socket of sockets) socket.destroy(); server.close(); }
   };
 }
+/** A proxy that holds every response back until it ends, headers and all,
+    as some company proxies and antivirus web shields do. */
+async function bufferingProxy(target) {
+  const upstream = new URL(target);
+  const server = createHttpServer((req, res) => {
+    const forward = httpRequest({ host: upstream.hostname, port: upstream.port, path: req.url, method: req.method, headers: req.headers }, reply => {
+      const chunks = [];
+      reply.on('data', chunk => chunks.push(chunk));
+      reply.on('end', () => { res.writeHead(reply.statusCode, reply.headers); res.end(Buffer.concat(chunks)); });
+    });
+    forward.on('error', () => res.destroy());
+    res.on('close', () => forward.destroy());
+    req.pipe(forward);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  return { base: 'http://127.0.0.1:' + server.address().port, close() { server.closeAllConnections(); server.close(); } };
+}
 async function download(p, name, expected) {
   const ready = p.waitForEvent('download'); await p.getByRole('link', { name: 'download ' + name, exact: true }).click();
   const file = await ready; assert.equal(file.suggestedFilename(), name);
   assert.equal(digest(await readFile(await file.path())), digest(expected));
+}
+/** The next `count` downloads a page begins. */
+function downloads(p, count) {
+  const begun = [];
+  return new Promise(resolve => {
+    const add = file => { begun.push(file); if (begun.length === count) { p.off('download', add); resolve(begun); } };
+    p.on('download', add);
+  });
+}
+/** Accept the offer on `p` and check every file it saves, by name, against `expected`. */
+async function accept(p, expected) {
+  const begun = downloads(p, Object.keys(expected).length);
+  await p.getByRole('button', { name: 'accept', exact: true }).click();
+  for (const file of await begun) {
+    assert.ok(file.suggestedFilename() in expected, file.suggestedFilename());
+    assert.equal(digest(await readFile(await file.path())), digest(expected[file.suggestedFilename()]));
+  }
 }
 try {
   const a = await page({ holdPeerConnectionOpen: true });
@@ -100,11 +139,10 @@ try {
   console.log('PASS a room and its link on arrival, then a real WebRTC connection');
   const payload = randomBytes(2 * 1024 * 1024 + 7);
   await choose(a, [{ name: 'random.bin', mimeType: 'application/octet-stream', buffer: payload }, { name: 'empty.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) }]);
-  await b.getByRole('button', { name: 'accept', exact: true }).click();
-  await b.getByRole('link', { name: 'download random.bin', exact: true }).waitFor();
-  await download(b, 'random.bin', payload); await download(b, 'empty.txt', Buffer.alloc(0));
+  await accept(b, { 'random.bin': payload, 'empty.txt': Buffer.alloc(0) });
+  await b.locator('.download-file').filter({ hasText: 'random.bin · saved to downloads' }).waitFor();
   await a.locator('.transfer__state').filter({ hasText: /^sent to/ }).waitFor();
-  console.log('PASS batched binary + zero-byte file, exact SHA-256, sender receipt');
+  console.log('PASS batched binary + zero-byte file saved to downloads, exact SHA-256, sender receipt');
 
   await b.getByRole('button', { name: /^send text to / }).click();
   await b.locator('#text').fill('hello from the other device, 𓁹 <script>not executable</script>');
@@ -138,10 +176,7 @@ try {
 
   // Simultaneous transfers work in both directions over one ordered channel.
   await Promise.all([choose(a, [{ name: 'from-a.txt', mimeType: 'text/plain', buffer: Buffer.from('alpha') }]), choose(b, [{ name: 'from-b.txt', mimeType: 'text/plain', buffer: Buffer.from('beta') }])]);
-  await Promise.all([a.getByRole('button', { name: 'accept', exact: true }).click(), b.getByRole('button', { name: 'accept', exact: true }).click()]);
-  await a.getByRole('link', { name: 'download from-b.txt', exact: true }).waitFor();
-  await b.getByRole('link', { name: 'download from-a.txt', exact: true }).waitFor();
-  await download(a, 'from-b.txt', Buffer.from('beta')); await download(b, 'from-a.txt', Buffer.from('alpha'));
+  await Promise.all([accept(a, { 'from-b.txt': Buffer.from('beta') }), accept(b, { 'from-a.txt': Buffer.from('alpha') })]);
   console.log('PASS simultaneous bidirectional transfers');
 
   for (const width of [320, 375, 414, 768, 1280]) {
@@ -171,44 +206,84 @@ try {
   await Promise.all([connected(a), connected(b)]);
   assert.equal(await a.evaluate(() => document.querySelectorAll('.device').length), idsBefore, 'no duplicate device appeared');
   await choose(a, [{ name: 'after-blip.txt', mimeType: 'text/plain', buffer: Buffer.from('still here') }]);
-  await b.getByRole('button', { name: 'accept', exact: true }).click();
-  await download(b, 'after-blip.txt', Buffer.from('still here'));
+  await accept(b, { 'after-blip.txt': Buffer.from('still here') });
   const direct = new URL(b.url()); direct.host = new URL(base).host;
   await b.goto(direct.href); await Promise.all([connected(a), connected(b)]);
   proxy.close();
   console.log('PASS discovery stream loss resumes the same session and keeps working');
+  // Slow the sender's reads, so there is time to cancel in the middle.
   await a.evaluate(() => {
-    const read = Blob.prototype.arrayBuffer;
-    Blob.prototype.arrayBuffer = async function () { await new Promise(r => setTimeout(r, 4)); return read.call(this); };
+    const read = globalThis.__read = Blob.prototype.arrayBuffer;
+    Blob.prototype.arrayBuffer = async function () { await new Promise(r => setTimeout(r, 400)); return read.call(this); };
   });
-  await choose(a, [{ name: 'cancel-during.bin', mimeType: 'application/octet-stream', buffer: Buffer.alloc(16 * 1024 * 1024, 37) }]);
+  /* Count every time either side loses its channel: cancelling one transfer
+     must not take the connection, or anything else on it, down with it. */
+  for (const p of [a, b]) await p.evaluate(() => {
+    globalThis.__drops = 0;
+    new MutationObserver(() => { if (document.querySelector('.device__action')?.textContent !== 'ready') globalThis.__drops++; })
+      .observe(document.querySelector('#devices'), { subtree: true, characterData: true, childList: true });
+  });
+  await choose(a, [{ name: 'cancel-during.bin', mimeType: 'application/octet-stream', buffer: Buffer.alloc(32 * 1024 * 1024, 37) }]);
+  const partial = downloads(b, 1);
   await b.getByRole('button', { name: 'accept', exact: true }).click();
   await b.locator('.transfer__state').filter({ hasText: /^receiving ·/ }).waitFor();
   await b.getByRole('button', { name: 'cancel', exact: true }).click();
   await b.locator('.transfer__state').filter({ hasText: 'transfer cancelled.' }).waitFor();
-  // Cancelling closes the channel on purpose; both sides reconnect on their own.
-  await Promise.all([connected(a), connected(b)]);
+  await a.locator('.transfer__state').filter({ hasText: /^not sent · cancelled by / }).waitFor();
+  // The browser marks the half-saved download failed rather than keeping it.
+  assert.ok(await (await partial)[0].failure(), 'the partial download fails');
   assert.equal(await b.getByRole('link', { name: 'download cancel-during.bin', exact: true }).count(), 0);
   await choose(a, [{ name: 'after-cancel.txt', mimeType: 'text/plain', buffer: Buffer.from('clean retry') }]);
-  await b.getByRole('button', { name: 'accept', exact: true }).click();
-  await b.getByRole('link', { name: 'download after-cancel.txt', exact: true }).waitFor();
-  await download(b, 'after-cancel.txt', Buffer.from('clean retry'));
-  console.log('PASS mid-transfer receiver cancellation, no partial download, retry');
+  await accept(b, { 'after-cancel.txt': Buffer.from('clean retry') });
+  console.log('PASS mid-transfer receiver cancellation stops the sender, fails the partial download, keeps the connection');
 
-  // A transfer larger than memory would allow goes to disk as it arrives,
-  // paced by the receiver's acknowledgements, and removing it frees the space.
+  // The sender cancelling in the middle drops the batch on both sides, and the connection carries on.
+  await choose(a, [{ name: 'sender-cancels.bin', mimeType: 'application/octet-stream', buffer: Buffer.alloc(32 * 1024 * 1024, 41) }]);
+  const dropped = downloads(b, 1);
+  await b.getByRole('button', { name: 'accept', exact: true }).click();
+  await a.locator('.transfer__state').filter({ hasText: /^sending ·/ }).waitFor();
+  await a.getByRole('button', { name: 'cancel', exact: true }).click();
+  await b.locator('.transfer__state').filter({ hasText: 'sender cancelled' }).waitFor();
+  assert.ok(await (await dropped)[0].failure(), 'the partial download fails');
+  await a.evaluate(() => { Blob.prototype.arrayBuffer = globalThis.__read; });
+  await choose(b, [{ name: 'the-other-way.txt', mimeType: 'text/plain', buffer: Buffer.from('both ways') }]);
+  await accept(a, { 'the-other-way.txt': Buffer.from('both ways') });
+  assert.deepEqual(await Promise.all([a, b].map(p => p.evaluate(() => globalThis.__drops))), [0, 0], 'no reconnection');
+  console.log('PASS mid-transfer sender cancellation, without reconnecting');
+
+  // A transfer larger than memory would allow is saved to the downloads as it
+  // arrives: the download begins before the first byte, and nothing is kept
+  // in this site's storage on the way.
   const bigPath = output + '/big.bin', big = randomFillSync(Buffer.allocUnsafe(300 * 1024 * 1024 + 5));
   await writeFile(bigPath, big);
   const before = await stored(a);
   await choose(b, [bigPath]);
+  const begun = downloads(a, 1);
   await a.getByRole('button', { name: 'accept', exact: true }).click();
-  await a.getByRole('link', { name: 'download big.bin', exact: true }).waitFor({ timeout: 240000 });
-  assert.ok((await stored(a)).bytes >= before.bytes + big.length, 'the file is on disk');
-  await download(a, 'big.bin', big);
+  const [saving] = await begun;
+  assert.doesNotMatch(await a.locator('.transfer__state').first().textContent(), /^received/, 'the download begins while the file is still arriving');
+  assert.equal(saving.suggestedFilename(), 'big.bin');
+  assert.equal(digest(await readFile(await saving.path())), digest(big));
+  await a.locator('.download-file').filter({ hasText: 'big.bin · saved to downloads' }).waitFor({ timeout: 240000 });
   await b.locator('.transfer__state').filter({ hasText: /^sent to/ }).first().waitFor();
-  await a.locator('.transfer').filter({ hasText: 'big.bin' }).getByRole('button', { name: 'remove', exact: true }).click();
-  await storedUntil(a, now => now.bytes < before.bytes + big.length);
-  console.log('PASS 300 MB received to disk with receiver pacing, exact SHA-256, removed from disk');
+  assert.ok((await stored(a)).bytes < before.bytes + 1024 * 1024, 'nothing kept in storage');
+  console.log('PASS 300 MB saved to downloads as it arrived, with receiver pacing, exact SHA-256');
+
+  // Where the browser cannot save a download as it arrives, as Safari cannot,
+  // the same transfer goes to this site's storage, and removing it frees the space.
+  const keeper = await page({ link: await roomLink(a), noDownloads: true });
+  await Promise.all([connected(a, 2), connected(b, 2), connected(keeper, 2)]);
+  const keeperName = await keeper.locator('#your-name').textContent(), held = await stored(keeper);
+  await choose(b, [bigPath], 'send files to ' + keeperName);
+  await keeper.getByRole('button', { name: 'accept', exact: true }).click();
+  await keeper.getByRole('link', { name: 'download big.bin', exact: true }).waitFor({ timeout: 240000 });
+  assert.ok((await stored(keeper)).bytes >= held.bytes + big.length, 'the file is on disk');
+  await download(keeper, 'big.bin', big);
+  await keeper.locator('.transfer').filter({ hasText: 'big.bin' }).getByRole('button', { name: 'remove', exact: true }).click();
+  await storedUntil(keeper, now => now.bytes < held.bytes + big.length);
+  await keeper.goto('about:blank'); await keeper.context().close();
+  await Promise.all([connected(a), connected(b)]);
+  console.log('PASS 300 MB received to storage without downloads, exact SHA-256, removed from disk');
 
   // A folder left by a closed tab is cleared by the next one; a live tab's is not.
   await a.evaluate(async () => {
@@ -225,7 +300,7 @@ try {
 
   // Without the storage, received files live in memory as before: more than
   // 256 MB is turned away at once, and a smaller transfer still arrives.
-  const memory = await page({ link: await roomLink(a), noStorage: true });
+  const memory = await page({ link: await roomLink(a), noStorage: true, noDownloads: true });
   await Promise.all([connected(a, 2), connected(b, 2), connected(memory, 2)]);
   const memoryName = await memory.locator('#your-name').textContent();
   await choose(b, [bigPath], 'send files to ' + memoryName);
@@ -272,11 +347,32 @@ try {
     await elsewhere.waitForFunction(() => document.querySelector('#status').textContent === 'room open');
     assert.equal(await elsewhere.locator('.device').count(), 0, 'another network sees nobody');
     await choose(first, [{ name: 'nearby.txt', mimeType: 'text/plain', buffer: Buffer.from('same wi-fi') }]);
-    await second.getByRole('button', { name: 'accept', exact: true }).click();
-    await download(second, 'nearby.txt', Buffer.from('same wi-fi'));
+    await accept(second, { 'nearby.txt': Buffer.from('same wi-fi') });
+    console.log('PASS devices on one known network meet without a link, others do not');
+
+    // A device that moves to that network, as a phone joining the Wi-Fi does,
+    // finds the devices there without reloading.
+    assert.equal(await elsewhere.locator('#device-where').textContent(), 'nearby or in this room');
+    await elsewhere.context().setExtraHTTPHeaders({ 'CF-Connecting-IP': '203.0.113.7' });
+    await elsewhere.evaluate(() => window.dispatchEvent(new Event('online')));
+    await Promise.all([connected(first, 2), connected(second, 2), connected(elsewhere, 2)]);
     for (const p of [first, second, elsewhere]) await p.context().close();
   } finally { await nearby.close(); }
-  console.log('PASS devices on one known network meet without a link, others do not');
+  console.log('PASS a device that changes network finds the devices on the new one');
+
+  // Behind something that holds the event stream back until it ends, the
+  // pages hear nothing, then collect their events in short requests instead.
+  const holding = await bufferingProxy(base);
+  try {
+    const first = await page({ link: holding.base + '/share' });
+    const second = await page({ link: (await roomLink(first)).replace(base, holding.base) });
+    await Promise.all([connected(first), connected(second)]);
+    assert.ok(requests.some(r => r.url.startsWith(holding.base) && r.url.includes('/events?poll=1&')), 'collected in short requests');
+    await choose(first, [{ name: 'held-back.txt', mimeType: 'text/plain', buffer: Buffer.from('through a buffering proxy') }]);
+    await accept(second, { 'held-back.txt': Buffer.from('through a buffering proxy') });
+    for (const p of [first, second]) await p.context().close();
+  } finally { holding.close(); }
+  console.log('PASS a network that holds the event stream back still finds devices');
 
   // A web view without WebRTC, as Ubuntu's WebKitGTK is. The site
   // says what share needs; a copy served elsewhere, as the desktop app is,

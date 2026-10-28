@@ -12,9 +12,10 @@ use std::fs;
 use std::path::Path;
 
 /// Published files the app never serves, kept out of the binary: crawlers'
-/// files, the picture link previews show, and the not-found page, since Tauri
-/// answers an address with nothing at it with the index.
-const WEB_ONLY: [&str; 4] = ["robots.txt", "sitemap.xml", "preview.png", "404.html"];
+/// files, the picture link previews show, the not-found page, since Tauri
+/// answers an address with nothing at it with the index, and share's download
+/// worker, since the app's share keeps received files in its own storage.
+const WEB_ONLY: [&str; 5] = ["robots.txt", "sitemap.xml", "preview.png", "404.html", "share-download.js"];
 
 fn main() {
     let desktop = Path::new(env!("CARGO_MANIFEST_DIR"));
