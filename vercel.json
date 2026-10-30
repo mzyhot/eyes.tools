@@ -49,6 +49,10 @@
       "destination": "/t/dir.html"
     },
     {
+      "source": "/downloader",
+      "destination": "/t/downloader.html"
+    },
+    {
       "source": "/dump",
       "destination": "/t/dump.html"
     },

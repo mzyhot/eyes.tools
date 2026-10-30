@@ -165,11 +165,23 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        before: { type: "string" },
-        after: { type: "string" },
+        before: { type: "string", maxLength: 2000000, description: "The old text." },
+        after: { type: "string", maxLength: 2000000, description: "The new text." },
         ignoreSurroundingSpaces: { type: "boolean", default: false, description: "Treat lines that differ only in leading or trailing spaces as the same." }
       },
-      required: ["before", "after"]
+      required: ["before", "after"],
+      additionalProperties: false,
+      examples: [{ before: "apples\npears\nplums", after: "apples\nplums\ncherries" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        added: { type: "integer", description: "Lines only in after." },
+        removed: { type: "integer", description: "Lines only in before." },
+        diff: { type: "string", description: "Every line, marked: two spaces when both have it, + only in after, - only in before." }
+      },
+      required: ["added", "removed", "diff"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {

@@ -50,7 +50,8 @@
         /* ── core ────────────────────────────────────────────────────
            Pure: no DOM and no E. The site's MCP server (mcp-server.mjs)
            runs this block on its own, so an agent that never opens the page
-           gets the same answers. AGENT_TOOLS is what both offer. */
+           gets the same answers. AGENT_TOOLS is what both offer; media.js
+           writes the PNG. */
 
         var LEFT = [
           "0001101", "0011001", "0010011", "0111101", "0100011",
@@ -134,22 +135,80 @@
             }).join("") + "</svg>";
         }
 
+        /* The digits for the PNG, five pixels by seven, one string per row:
+           the image draws them, as the svg's text does, with no font to load. */
+        var DIGITS = [
+          ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+          ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+          ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+          ["11111", "00010", "00100", "00010", "00001", "10001", "01110"],
+          ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+          ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
+          ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
+          ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+          ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+          ["01110", "10001", "10001", "01111", "00001", "00010", "01100"]
+        ];
+        /* Pixels per unit of the layout, and per dot of a digit. */
+        var PNG_SCALE = 4, DOT = 6;
+
+        /* The layout as black-on-white pixels: bars as the svg places them, each
+           digit centred in the share of the line the svg's textLength gives it. */
+        function pixels(value) {
+          var parts = layout(value), width = WIDTH * PNG_SCALE, height = HEIGHT * PNG_SCALE;
+          var px = new Uint8Array(width * height * 4).fill(255);
+          function ink(x, y, w, h) {
+            for (var row = y; row < y + h; row++) for (var col = x; col < x + w; col++) {
+              var at = (row * width + col) * 4;
+              px[at] = px[at + 1] = px[at + 2] = 0;
+            }
+          }
+          parts.bars.forEach(function (bar) { ink(bar.x * PNG_SCALE, 8 * PNG_SCALE, SCALE * PNG_SCALE, bar.height * PNG_SCALE); });
+          var glyphWidth = 5 * DOT, top = 98 * PNG_SCALE - 7 * DOT;
+          parts.digits.forEach(function (digit) {
+            var count = digit.text.length, advance = digit.length ? digit.length * PNG_SCALE / count : glyphWidth;
+            var start = digit.anchor === "end" ? digit.x * PNG_SCALE - glyphWidth : digit.x * PNG_SCALE;
+            for (var i = 0; i < count; i++) {
+              var left = Math.round(start + i * advance + (advance - glyphWidth) / 2);
+              DIGITS[+digit.text[i]].forEach(function (line, row) {
+                for (var dot = 0; dot < 5; dot++) if (line[dot] === "1") ink(left + dot * DOT, top + row * DOT, DOT, DOT);
+              });
+            }
+          });
+          return { data: px, width: width, height: height };
+        }
+
         var AGENT_TOOLS = [{
           name: "make_ean13_barcode",
           title: "make an ean-13 barcode",
           description: "Make an EAN-13 retail barcode from 12 digits (the check digit is added) or 13 (the " +
-            "check digit is verified). For a 12-digit UPC-A code, put a 0 in front. Returns the number and " +
-            "the barcode as svg markup.",
+            "check digit is verified). For a 12-digit UPC-A code, put a 0 in front. Returns the number, the " +
+            "barcode as a PNG image to show or print, and the same barcode as svg markup.",
           input: {
             type: "object",
-            properties: { digits: { type: "string", description: "12 or 13 digits; spaces and hyphens are ignored." } },
-            required: ["digits"]
+            properties: { digits: { type: "string", minLength: 1, maxLength: 40, description: "12 or 13 digits; spaces and hyphens are ignored." } },
+            required: ["digits"],
+            additionalProperties: false,
+            examples: [{ digits: "400638133393" }]
+          },
+          output: {
+            type: "object",
+            properties: {
+              number: { type: "string", pattern: "^[0-9]{13}$", description: "All 13 digits, check digit last." },
+              image: Media.FILE,
+              svg: { type: "string", description: "The barcode as svg markup, drawn in a monospace font." }
+            },
+            required: ["number", "image", "svg"],
+            additionalProperties: false
           },
           readOnly: true,
           compute: function (args) {
             var value = ean13(args.digits == null ? "" : args.digits);
             if (!value) throw new Error("give 12 or 13 digits");
-            return { number: value, svg: svgMarkup(value, "#000000", "#ffffff", "monospace") };
+            var drawn = pixels(value);
+            return Media.png(drawn.data, drawn.width, drawn.height).then(function (png) {
+              return { number: value, image: Media.file(value + ".png", "image/png", png), svg: svgMarkup(value, "#000000", "#ffffff", "monospace") };
+            });
           }
         }];
 
@@ -255,7 +314,7 @@
         run();
 
         /* For agents in the browser: the barcode is drawn on the page too, and
-           the agent gets the core's standalone svg, as it would from /mcp. */
+           the agent gets the core's answer, image and svg, as from /mcp. */
         E.agentTools(AGENT_TOOLS, {
           make_ean13_barcode: function (args) {
             var answer = AGENT_TOOLS[0].compute(args);

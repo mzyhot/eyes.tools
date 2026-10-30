@@ -36,13 +36,21 @@
        innermost loop.
      · A column's frequency bands map to canvas rows the same way for every
        column, so that mapping is computed once per render rather than per pixel.
-     · The picture is assembled in one ImageData buffer and handed to the canvas
+     · The picture is assembled in one pixel buffer and handed to the canvas
        in a single putImageData, rather than as ~460,000 one-pixel fillRect
        calls each preceded by a globalAlpha and fillStyle change. */
 E.tool(function () {
   "use strict";
-  var c = E.qs("#canvas"), figure = E.qs("#frame"), ctx = c.getContext("2d"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl"), activeContext = null, filename = "spectrogram", loadSeq = 0, N = 1024, MAX_FILE = 150 * 1024 * 1024;
-  var HALF = N / 2;
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E, only media.js and the decoders in codecs/ it loads.
+     The site's MCP server (mcp-server.mjs) runs this block on its own, so an
+     agent that never opens the page gets a spectrogram drawn by the same code.
+     The page decodes with the browser's own codecs, which read more formats;
+     the server decodes wav itself and mp3, flac, vorbis and opus with the
+     decoders. AGENT_TOOLS is what the page and the server both offer. */
+
+  var N = 1024, HALF = N / 2;
 
   /* ── precomputed transform tables ─────────────────────────────────────
      REV[i] is i with its log2(N) bits reversed, the permutation the in-place
@@ -101,6 +109,180 @@ E.tool(function () {
   }
 
   /**
+   * Draw a spectrogram into pixels: magnitude as ink over paper, time left to
+   * right, frequency bottom to top.
+   * @param {Float32Array[]} tracks Each channel's samples, all one length.
+   * @param {number} width
+   * @param {number} height
+   * @param {number[]} paper [r, g, b] where it is silent.
+   * @param {number[]} ink [r, g, b] where it is loudest.
+   * @param {Uint8Array|Uint8ClampedArray} px width × height × 4 bytes, all written.
+   */
+  function paint(tracks, width, height, paper, ink, px) {
+    var channelCount = tracks.length, length = tracks[0].length;
+    var re = new Float64Array(N), im = new Float64Array(N), power = new Float64Array(HALF), y, bin;
+
+    /* Which frequency bins each row covers. Identical for every column, so it
+       is resolved once instead of once a column. */
+    var bandLow = new Uint16Array(height), bandHigh = new Uint16Array(height);
+    for (y = 0; y < height; y++) {
+      bandLow[y] = Math.floor(y * HALF / height);
+      bandHigh[y] = Math.min(HALF, Math.ceil((y + 1) * HALF / height));
+    }
+
+    /* Start at paper, then write only the pixels that carry signal. */
+    for (var at = 0; at < px.length; at += 4) {
+      px[at] = paper[0]; px[at + 1] = paper[1]; px[at + 2] = paper[2]; px[at + 3] = 255;
+    }
+
+    var perChannel = 1 / channelCount;
+    var scale = 1 / (N / 4);
+    var lastFrame = Math.max(0, length - N), span = Math.max(1, width - 1);
+
+    for (var x = 0; x < width; x++) {
+      var frame = Math.round(x / span * lastFrame);
+      power.fill(0);
+      for (var channel = 0; channel < channelCount; channel++) {
+        var samples = tracks[channel], i;
+        for (i = 0; i < N; i++) re[i] = (samples[frame + i] || 0) * WINDOW[i];
+        im.fill(0);
+        fft(re, im);
+        for (bin = 0; bin < HALF; bin++) power[bin] += (re[bin] * re[bin] + im[bin] * im[bin]) * perChannel;
+      }
+      for (y = 0; y < height; y++) {
+        var high = bandHigh[y], peak = 0;
+        for (bin = bandLow[y]; bin < high; bin++) if (power[bin] > peak) peak = power[bin];
+        var magnitude = Math.sqrt(peak) * scale;
+        var alpha = (20 * Math.log10(magnitude + 1e-8) + 80) / 80;
+        if (alpha <= 0.02) continue;
+        if (alpha > 1) alpha = 1;
+        /* Source-over of ink at this alpha onto paper, done arithmetically. */
+        var offset = ((height - 1 - y) * width + x) * 4;
+        px[offset] = paper[0] + (ink[0] - paper[0]) * alpha;
+        px[offset + 1] = paper[1] + (ink[1] - paper[1]) * alpha;
+        px[offset + 2] = paper[2] + (ink[2] - paper[2]) * alpha;
+      }
+    }
+  }
+
+  /* An agent's sound: 10 MB of file, and at most SAMPLE_LIMIT samples once
+     decoded, all channels counted, about six minutes of cd stereo. */
+  var AUDIO_CAP = 10 * 1024 * 1024, SAMPLE_LIMIT = 32000000;
+  var TOO_LONG = "that sound is too long to draw here: up to about six minutes of stereo. the spectrogram page draws longer ones in a browser";
+  var DECODERS = { "audio/mpeg": "mp3", "audio/flac": "flac", "audio/ogg": "vorbis", "audio/opus": "opus" };
+
+  /* PCM or float wav, read here: the most common sound file needs no decoder. */
+  function wav(bytes) {
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), at = 12, format = null, data = null;
+    while (at + 8 <= bytes.length) {
+      var id = String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]), size = view.getUint32(at + 4, true), body = at + 8;
+      if (id === "fmt " && size >= 16) {
+        format = { code: view.getUint16(body, true), channels: view.getUint16(body + 2, true), rate: view.getUint32(body + 4, true), bits: view.getUint16(body + 14, true) };
+        if (format.code === 0xfffe && size >= 26) format.code = view.getUint16(body + 24, true);
+      }
+      if (id === "data") { data = { at: body, size: Math.min(size, bytes.length - body) }; break; }
+      at = body + size + (size & 1);
+    }
+    if (!format || !data || !format.channels || !format.rate) throw new Error("that wav could not be read");
+    var pcm = format.code === 1 && [8, 16, 24, 32].indexOf(format.bits) >= 0, float = format.code === 3 && (format.bits === 32 || format.bits === 64);
+    if (!pcm && !float) throw new Error("that wav holds an encoding this does not read; send pcm or float wav, or mp3, flac, ogg or opus");
+    var step = format.bits / 8, frames = Math.floor(data.size / (step * format.channels));
+    if (frames * format.channels > SAMPLE_LIMIT) throw new Error(TOO_LONG);
+    var channels = [], c, f;
+    for (c = 0; c < format.channels; c++) channels.push(new Float32Array(frames));
+    for (f = 0; f < frames; f++) {
+      for (c = 0; c < format.channels; c++) {
+        var o = data.at + (f * format.channels + c) * step, value;
+        if (float) value = format.bits === 32 ? view.getFloat32(o, true) : view.getFloat64(o, true);
+        else if (format.bits === 8) value = (bytes[o] - 128) / 128;
+        else if (format.bits === 16) value = view.getInt16(o, true) / 32768;
+        else if (format.bits === 24) value = ((bytes[o] | bytes[o + 1] << 8 | bytes[o + 2] << 16) << 8 >> 8) / 8388608;
+        else value = view.getInt32(o, true) / 2147483648;
+        channels[c][f] = value;
+      }
+    }
+    return { channels: channels, sampleRate: format.rate };
+  }
+
+  function decodeAudio(bytes) {
+    var type = Media.type(bytes);
+    if (type === "audio/wav") return Promise.resolve().then(function () { return wav(bytes); });
+    if (!DECODERS[type]) {
+      throw new Error("send wav, mp3, flac, ogg vorbis or opus" + (type ? "; this is " + type : "") + ". the spectrogram page reads more, such as m4a and webm, in a browser");
+    }
+    return Media.codec(DECODERS[type]).then(function (codec) {
+      return codec.decode(bytes, SAMPLE_LIMIT);
+    }).catch(function (e) {
+      throw new Error(e && e.name === "RangeError" ? TOO_LONG : "that " + DECODERS[type] + " file could not be decoded");
+    });
+  }
+
+  /* The picture's facts, as the page writes them under it. */
+  function facts(length, rate, channels, width, height) {
+    return { duration: Math.round(length / rate * 1000) / 1000, sampleRate: rate, channels: channels, frequencyMax: rate / 2, width: width, height: height };
+  }
+
+  function spectrogram(args) {
+    var width = args.width == null ? 960 : Number(args.width), height = args.height == null ? 480 : Number(args.height);
+    var bytes = Media.bytes(args.audio, "audio", AUDIO_CAP);
+    return decodeAudio(bytes).then(function (audio) {
+      var length = audio.channels.length ? audio.channels[0].length : 0;
+      if (!length || !audio.sampleRate) throw new Error("that sound has nothing in it to draw");
+      var px = new Uint8Array(width * height * 4);
+      paint(audio.channels, width, height, [0, 0, 0], [255, 255, 255], px);
+      return Media.png(px, width, height).then(function (png) {
+        var answer = facts(length, audio.sampleRate, audio.channels.length, width, height);
+        answer.image = Media.file("spectrogram.png", "image/png", png);
+        return answer;
+      });
+    });
+  }
+
+  var AGENT_TOOLS = [{
+    name: "make_spectrogram",
+    title: "draw a spectrogram",
+    description: "Draw a sound's spectrogram: time left to right, frequency from 0 at the bottom to half the sample rate " +
+      "at the top, louder as brighter (white on black, 80 dB of range). Returns the picture as a PNG image with the " +
+      "sound's length, sample rate and channels. Send the sound as base64, up to 10 MB and about six minutes of stereo: " +
+      "wav, mp3, flac, ogg vorbis or opus. On the spectrogram page, the browser reads more formats (m4a, aac, webm) and " +
+      "the file the visitor chose is drawn when none is sent.",
+    input: {
+      type: "object",
+      properties: {
+        audio: {
+          type: "string", contentEncoding: "base64", contentMediaType: "audio/*", maxLength: 14000000,
+          description: "The sound, as base64 or a data: URL. On the spectrogram page, leave it out to use the file the visitor chose."
+        },
+        width: { type: "integer", minimum: 64, maximum: 2048, default: 960, description: "Pixels across: one column of the transform each." },
+        height: { type: "integer", minimum: 64, maximum: 1024, default: 480, description: "Pixels from 0 Hz to the top frequency." }
+      },
+      required: ["audio"],
+      additionalProperties: false,
+      examples: [{ audio: "data:audio/wav;base64,UklGRiQCAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQACAAAAACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3gAAJSHgLiUhAADb3iDR294AACUh4C4lIQAA294g0dveAAAlIeAuJSEAANveINHb3g==", width: 256, height: 128 }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        duration: { type: "number", description: "Seconds." },
+        sampleRate: { type: "number", description: "Samples a second." },
+        channels: { type: "integer" },
+        frequencyMax: { type: "number", description: "The frequency at the top edge, in hertz: half the sample rate." },
+        width: { type: "integer" },
+        height: { type: "integer" },
+        image: Media.FILE
+      },
+      required: ["duration", "sampleRate", "channels", "frequencyMax", "width", "height", "image"],
+      additionalProperties: false
+    },
+    readOnly: true,
+    compute: spectrogram
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
+  var c = E.qs("#canvas"), figure = E.qs("#frame"), ctx = c.getContext("2d"), fileInput = E.qs("#file"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl"), activeContext = null, filename = "spectrogram", loadSeq = 0, drawn = null, MAX_FILE = 150 * 1024 * 1024;
+
+  /**
    * Resolve a CSS colour token to its opaque RGB channels, by painting it and
    * reading the pixel back. The design tokens are oklch, which no amount of
    * string parsing would turn into channel values.
@@ -128,6 +310,7 @@ E.tool(function () {
     meta.textContent = "";
     download.disabled = true;
     figure.hidden = true;
+    drawn = null;
     if (!ctx) return;
     var paper = getComputedStyle(document.documentElement).getPropertyValue("--color-paper").trim();
     ctx.globalAlpha = 1;
@@ -136,74 +319,29 @@ E.tool(function () {
   }
 
   /**
-   * Draw the whole spectrogram for a decoded buffer.
+   * Draw the whole spectrogram for a decoded buffer, in the page's colours.
    * @param {AudioBuffer} audio Decoded audio.
    */
   function draw(audio) {
     if (!ctx || !audio || !audio.numberOfChannels || !audio.length || !audio.sampleRate) return;
-    var channelCount = audio.numberOfChannels, tracks = [], length = audio.length, rate = audio.sampleRate;
-    for (var ch = 0; ch < channelCount; ch++) tracks.push(audio.getChannelData(ch));
-
-    var width = c.width, height = c.height;
+    var tracks = [], length = audio.length, rate = audio.sampleRate;
+    for (var ch = 0; ch < audio.numberOfChannels; ch++) tracks.push(audio.getChannelData(ch));
     var style = getComputedStyle(document.documentElement);
-    var paper = rgb(style.getPropertyValue("--color-paper").trim());
-    var ink = rgb(style.getPropertyValue("--color-ink").trim());
-    var re = new Float64Array(N), im = new Float64Array(N), power = new Float64Array(HALF);
-
-    /* Which frequency bins each canvas row covers. Identical for every column,
-       so it is resolved once instead of 960 times. */
-    var bandLow = new Uint16Array(height), bandHigh = new Uint16Array(height);
-    for (var y = 0; y < height; y++) {
-      bandLow[y] = Math.floor(y * HALF / height);
-      bandHigh[y] = Math.min(HALF, Math.ceil((y + 1) * HALF / height));
-    }
-
-    /* Start at paper, then write only the pixels that carry signal. */
-    var image = ctx.createImageData(width, height), px = image.data;
-    for (var at = 0; at < px.length; at += 4) {
-      px[at] = paper[0]; px[at + 1] = paper[1]; px[at + 2] = paper[2]; px[at + 3] = 255;
-    }
-
-    var perChannel = 1 / channelCount;
-    var scale = 1 / (N / 4);
-    var lastFrame = Math.max(0, length - N), span = Math.max(1, width - 1);
-
-    for (var x = 0; x < width; x++) {
-      var frame = Math.round(x / span * lastFrame);
-      power.fill(0);
-      for (var channel = 0; channel < channelCount; channel++) {
-        var samples = tracks[channel], i;
-        for (i = 0; i < N; i++) re[i] = (samples[frame + i] || 0) * WINDOW[i];
-        im.fill(0);
-        fft(re, im);
-        for (var bin = 0; bin < HALF; bin++) power[bin] += (re[bin] * re[bin] + im[bin] * im[bin]) * perChannel;
-      }
-      for (y = 0; y < height; y++) {
-        var high = bandHigh[y], peak = 0;
-        for (bin = bandLow[y]; bin < high; bin++) if (power[bin] > peak) peak = power[bin];
-        var magnitude = Math.sqrt(peak) * scale;
-        var alpha = (20 * Math.log10(magnitude + 1e-8) + 80) / 80;
-        if (alpha <= 0.02) continue;
-        if (alpha > 1) alpha = 1;
-        /* Source-over of ink at this alpha onto paper, done arithmetically. */
-        var offset = ((height - 1 - y) * width + x) * 4;
-        px[offset] = paper[0] + (ink[0] - paper[0]) * alpha;
-        px[offset + 1] = paper[1] + (ink[1] - paper[1]) * alpha;
-        px[offset + 2] = paper[2] + (ink[2] - paper[2]) * alpha;
-      }
-    }
+    var image = ctx.createImageData(c.width, c.height);
+    paint(tracks, c.width, c.height, rgb(style.getPropertyValue("--color-paper").trim()), rgb(style.getPropertyValue("--color-ink").trim()), image.data);
     ctx.globalAlpha = 1;
     ctx.putImageData(image, 0, 0);
     figure.hidden = false;
+    drawn = facts(length, rate, tracks.length, c.width, c.height);
 
-    meta.textContent = "time → 0–" + (length / rate).toFixed(2) + " s · frequency ↑ 0–" + Math.round(rate / 2).toLocaleString() + " hz · " + channelCount + " channel" + (channelCount === 1 ? "" : "s");
+    meta.textContent = "time → 0–" + (length / rate).toFixed(2) + " s · frequency ↑ 0–" + Math.round(rate / 2).toLocaleString() + " hz · " + tracks.length + " channel" + (tracks.length === 1 ? "" : "s");
     c.setAttribute("aria-label", "audio spectrogram: time from 0 to " + (length / rate).toFixed(2) + " seconds, left to right, and frequency from 0 to " + Math.round(rate / 2).toLocaleString() + " hertz, bottom to top. brighter pixels are stronger frequencies.");
     download.disabled = false;
   }
 
   /* Each load gets a sequence number so a slow decode cannot draw over a file
      chosen after it, and the audio context is closed either way. */
-  E.on(E.qs("#file"), "change", function () {
+  E.on(fileInput, "change", function () {
     var file = this.files && this.files[0], seq = ++loadSeq;
     closeContext(activeContext); activeContext = null; clear();
     if (!file) return;
@@ -225,6 +363,43 @@ E.tool(function () {
   });
   E.on(window, "pagehide", function () { loadSeq++; closeContext(activeContext); activeContext = null; });
   clear();
+
+  /* For agents in the browser: a sound the agent sends goes in the page's file
+     field, as if the visitor had chosen it, and the browser decodes and draws
+     it; with none, the visitor's own is used. The agent gets the picture the
+     download button gives, in the page's colours, with its facts. */
+  function fromPage(args, signal) {
+    if (args.width != null || args.height != null) {
+      c.width = args.width == null ? 960 : Number(args.width);
+      c.height = args.height == null ? 480 : Number(args.height);
+    }
+    if (args.audio != null) {
+      var bytes = Media.bytes(args.audio, "audio", AUDIO_CAP);
+      E.giveFile(fileInput, new File([bytes], "sound from the agent", { type: Media.type(bytes) || "" }));
+    } else if (fileInput.files && fileInput.files[0]) {
+      E.giveFile(fileInput, fileInput.files);
+    } else {
+      throw new Error("no sound is chosen on the page; send one as base64, or ask the visitor to choose or drop one");
+    }
+    var seq = loadSeq;
+    return new Promise(function (resolve, reject) {
+      (function wait() {
+        if (signal && signal.aborted) { reject(new Error("cancelled")); return; }
+        if (seq !== loadSeq) { reject(new Error("another file was chosen meanwhile")); return; }
+        if (error.textContent) { reject(new Error(error.textContent)); return; }
+        if (!drawn) { setTimeout(wait, 50); return; }
+        c.toBlob(function (blob) {
+          if (!blob) { reject(new Error("the browser could not create a png")); return; }
+          blob.arrayBuffer().then(function (buffer) {
+            var answer = Object.assign({}, drawn);
+            answer.image = Media.file(filename + "-spectrogram.png", "image/png", new Uint8Array(buffer));
+            resolve(answer);
+          }, reject);
+        }, "image/png");
+      })();
+    });
+  }
+  E.agentTools(AGENT_TOOLS, { make_spectrogram: fromPage }, ["audio"]);
 });
 </script>
 </body>

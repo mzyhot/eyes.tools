@@ -93,10 +93,25 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        dice: { type: "integer", minimum: 1, maximum: 100, default: 1 },
-        sides: { type: "integer", minimum: 2, maximum: 1000000, default: 6 },
-        source: { type: "string", enum: SOURCES, default: "csrng" }
-      }
+        dice: { type: "integer", minimum: 1, maximum: 100, default: 1, description: "How many dice." },
+        sides: { type: "integer", minimum: 2, maximum: 1000000, default: 6, description: "Sides on each, numbered from 1." },
+        source: { type: "string", enum: SOURCES, default: "csrng", description: "csrng: Web Crypto, fit for secrets. trng: a drand beacon, verified, that anyone can check later by its round; reaches the network. prng: Math.random, predictable." }
+      },
+      additionalProperties: false,
+      examples: [{ dice: 2, sides: 6 }, { dice: 1, sides: 20, source: "trng" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        rolls: { type: "array", items: { type: "integer", minimum: 1 } },
+        total: { type: "integer" },
+        source: { type: "string", enum: ["csrng", "trng", "prng"] },
+        verified: { type: "boolean", description: "True for trng: the beacon's signature was checked." },
+        round: { type: "integer", description: "trng only: the drand round drawn from." },
+        chainHash: { type: "string", description: "trng only: the drand chain the round belongs to." }
+      },
+      required: ["rolls", "total", "source", "verified"],
+      additionalProperties: false
     },
     readOnly: true,
     network: true,

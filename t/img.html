@@ -22,6 +22,247 @@
 <script>
 E.tool(function () {
   "use strict";
+
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E, only media.js and the codecs in codecs/ it loads.
+     The site's MCP server (mcp-server.mjs) runs this block on its own, so an
+     agent that never opens the page can resize an image too. The page itself
+     resizes with the browser's canvas, which reads whatever the browser does
+     (avif, svg, bmp, ico…) and writes avif where it can; an agent's call on
+     the page goes through the page's own fields. AGENT_TOOLS is what the page
+     and the server both offer. */
+
+  var IMAGE_CAP = 10 * 1024 * 1024, MAX_SIDE = 12000, CORE_MAX_PIXELS = 16000000;
+  var WRITES = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" };
+  var EXTENSION = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/avif": "avif", "image/gif": "gif" };
+
+  /* An image's size from its header, so a huge one is refused before it is
+     decoded; null when the header does not say. */
+  function measure(bytes, type) {
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    try {
+      if (type === "image/png") return [view.getUint32(16), view.getUint32(20)];
+      if (type === "image/gif") return [view.getUint16(6, true), view.getUint16(8, true)];
+      if (type === "image/webp") {
+        var chunk = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
+        if (chunk === "VP8 ") return [view.getUint16(26, true) & 0x3fff, view.getUint16(28, true) & 0x3fff];
+        if (chunk === "VP8L") { var bits = view.getUint32(21, true); return [(bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1]; }
+        if (chunk === "VP8X") return [1 + (bytes[24] | bytes[25] << 8 | bytes[26] << 16), 1 + (bytes[27] | bytes[28] << 8 | bytes[29] << 16)];
+      }
+      if (type === "image/jpeg") {
+        for (var at = 2; at + 9 < bytes.length;) {
+          if (bytes[at] !== 0xff) return null;
+          var marker = bytes[at + 1];
+          if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return [view.getUint16(at + 7), view.getUint16(at + 5)];
+          at += 2 + view.getUint16(at + 2);
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  /* A GIF's first frame, which is what a browser draws of one too. */
+  function decodeGif(bytes) {
+    function u16(at) { return bytes[at] | bytes[at + 1] << 8; }
+    var width = u16(6), height = u16(8), flags = bytes[10], at = 13, palette = null, transparent = -1;
+    var out = new Uint8Array(width * height * 4);
+    if (flags & 0x80) { palette = bytes.subarray(at, at + 3 * (2 << (flags & 7))); at += 3 * (2 << (flags & 7)); }
+    while (at < bytes.length) {
+      var block = bytes[at++];
+      if (block === 0x21) {
+        if (bytes[at] === 0xf9 && bytes[at + 2] & 1) transparent = bytes[at + 5];
+        at++;
+        while (bytes[at]) at += bytes[at] + 1;
+        at++;
+      } else if (block === 0x2c) {
+        var left = u16(at), top = u16(at + 2), w = u16(at + 4), h = u16(at + 6), packed = bytes[at + 8];
+        at += 9;
+        if (packed & 0x80) { palette = bytes.subarray(at, at + 3 * (2 << (packed & 7))); at += 3 * (2 << (packed & 7)); }
+        var minimum = bytes[at++], parts = [], size = 0;
+        while (bytes[at]) { parts.push(bytes.subarray(at + 1, at + 1 + bytes[at])); size += bytes[at]; at += bytes[at] + 1; }
+        var data = new Uint8Array(size), offset = 0;
+        parts.forEach(function (part) { data.set(part, offset); offset += part.length; });
+        var indices = lzw(data, minimum, w * h), rows = gifRows(h, packed & 0x40);
+        for (var i = 0; i < w * h; i++) {
+          var x = left + i % w, y = top + rows[Math.floor(i / w)], index = indices[i];
+          if (x >= width || y >= height || index === transparent || !palette || index * 3 >= palette.length) continue;
+          var o = (y * width + x) * 4;
+          out[o] = palette[index * 3]; out[o + 1] = palette[index * 3 + 1]; out[o + 2] = palette[index * 3 + 2]; out[o + 3] = 255;
+        }
+        return { data: out, width: width, height: height };
+      } else if (block === 0x3b) {
+        break;
+      } else {
+        throw new Error("that gif could not be read");
+      }
+    }
+    throw new Error("that gif has no picture in it");
+  }
+  /* Where each stored row of an interlaced GIF goes: every eighth row from
+     the first, every eighth from the fifth, every fourth from the third, then
+     every second. */
+  function gifRows(height, interlaced) {
+    var rows = [], y;
+    if (!interlaced) { for (y = 0; y < height; y++) rows.push(y); return rows; }
+    [[0, 8], [4, 8], [2, 4], [1, 2]].forEach(function (pass) { for (y = pass[0]; y < height; y += pass[1]) rows.push(y); });
+    return rows;
+  }
+  /* GIF's variable-width LZW, decoded into palette indices. */
+  function lzw(data, minimum, count) {
+    var clear = 1 << minimum, end = clear + 1, size = minimum + 1, next = end + 1, old = -1, first = 0;
+    var prefix = new Uint16Array(4096), suffix = new Uint8Array(4096), stack = new Uint8Array(4097), out = new Uint8Array(count);
+    var bits = 0, held = 0, at = 0, written = 0, code;
+    for (code = 0; code < clear; code++) suffix[code] = code;
+    while (written < count) {
+      while (bits < size) {
+        if (at >= data.length) return out;
+        held |= data[at++] << bits;
+        bits += 8;
+      }
+      code = held & ((1 << size) - 1);
+      held >>>= size;
+      bits -= size;
+      if (code === clear) { size = minimum + 1; next = end + 1; old = -1; continue; }
+      if (code === end) break;
+      if (old === -1) { out[written++] = suffix[code]; old = first = code; continue; }
+      var read = code, depth = 0;
+      if (code >= next) { stack[depth++] = first; code = old; }
+      while (code >= clear) { stack[depth++] = suffix[code]; code = prefix[code]; }
+      first = suffix[code];
+      stack[depth++] = first;
+      while (depth && written < count) out[written++] = stack[--depth];
+      if (next < 4096) {
+        prefix[next] = old;
+        suffix[next] = first;
+        next++;
+        if (next === 1 << size && size < 12) size++;
+      }
+      old = read;
+    }
+    return out;
+  }
+
+  function decode(bytes, type) {
+    if (type === "image/png") return Media.codec("png").then(function (codec) { return codec.decode(bytes); });
+    if (type === "image/jpeg") return Media.codec("jpeg-decode").then(function (codec) { return codec.decode(bytes); });
+    if (type === "image/webp") return Media.codec("webp-decode").then(function (codec) { return codec.decode(bytes); });
+    return Promise.resolve().then(function () { return decodeGif(bytes); });
+  }
+  function encode(pixels, width, height, type, quality) {
+    if (type === "image/png") return Media.codec("png").then(function (codec) { return codec.encode(pixels, width, height); });
+    if (type === "image/jpeg") {
+      /* jpeg has no transparency: what was see-through is laid on white. */
+      for (var at = 0; at < pixels.length; at += 4) {
+        var alpha = pixels[at + 3] / 255;
+        if (alpha === 1) continue;
+        pixels[at] = pixels[at] * alpha + 255 * (1 - alpha);
+        pixels[at + 1] = pixels[at + 1] * alpha + 255 * (1 - alpha);
+        pixels[at + 2] = pixels[at + 2] * alpha + 255 * (1 - alpha);
+        pixels[at + 3] = 255;
+      }
+      return Media.codec("jpeg-encode").then(function (codec) { return codec.encode(pixels, width, height, quality); });
+    }
+    return Media.codec("webp-encode").then(function (codec) { return codec.encode(pixels, width, height, quality); });
+  }
+
+  /* The size asked for: one side keeps the proportions, both set each, and
+     neither keeps the size. */
+  function target(args, width, height) {
+    var w = args.width == null ? null : Number(args.width), h = args.height == null ? null : Number(args.height);
+    if (w == null && h == null) return [width, height];
+    if (w == null) w = Math.max(1, Math.round(h * width / height));
+    if (h == null) h = Math.max(1, Math.round(w * height / width));
+    return [w, h];
+  }
+
+  /**
+   * Resize, convert, or both.
+   * @returns {Promise<Object>} The tool's answer, the image in it.
+   */
+  function resizeImage(args) {
+    var bytes = Media.bytes(args.image, "image", IMAGE_CAP), from = Media.type(bytes);
+    if (["image/png", "image/jpeg", "image/webp", "image/gif"].indexOf(from) < 0) {
+      throw new Error("send a png, jpeg, webp or gif" + (from ? "; this is " + from : "") + ". the img page reads more, such as avif, svg and bmp, in a browser");
+    }
+    var format = args.format == null ? (from === "image/gif" ? "png" : EXTENSION[from].replace("jpg", "jpeg")) : String(args.format).toLowerCase().replace(/^jpg$/, "jpeg");
+    if (format === "avif") throw new Error("avif is written on the img page, in a browser that can; here, use png, jpeg or webp");
+    if (!WRITES[format]) throw new Error("format must be png, jpeg or webp");
+    var quality = args.quality == null ? 82 : Number(args.quality);
+    var measured = measure(bytes, from);
+    if (measured && measured[0] * measured[1] > CORE_MAX_PIXELS) throw new Error("that image is over the 16 megapixel limit here; the img page goes to 40 in a browser");
+    return decode(bytes, from).then(function (image) {
+      if (!image.width || !image.height) throw new Error("that image has no usable dimensions");
+      if (image.width * image.height > CORE_MAX_PIXELS) throw new Error("that image is over the 16 megapixel limit here; the img page goes to 40 in a browser");
+      var size = target(args, image.width, image.height);
+      if (size[0] > MAX_SIDE || size[1] > MAX_SIDE) throw new Error("width and height must be whole numbers from 1 to " + MAX_SIDE);
+      if (size[0] * size[1] > CORE_MAX_PIXELS) throw new Error("that size is over the 16 megapixel limit here; the img page goes to 40 in a browser");
+      var resized = size[0] === image.width && size[1] === image.height ? Promise.resolve(image.data)
+        : Media.codec("resize").then(function (codec) { return codec.resize(image.data, image.width, image.height, size[0], size[1]); });
+      return resized.then(function (pixels) {
+        return encode(new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength), size[0], size[1], WRITES[format], quality);
+      }).then(function (out) {
+        var answer = {
+          width: size[0], height: size[1], format: format, bytes: out.length,
+          originalWidth: image.width, originalHeight: image.height, originalFormat: EXTENSION[from].replace("jpg", "jpeg"), originalBytes: bytes.length,
+          image: Media.file("image." + EXTENSION[WRITES[format]], WRITES[format], out)
+        };
+        if (format !== "png") answer.quality = quality;
+        return answer;
+      });
+    });
+  }
+
+  var AGENT_TOOLS = [{
+    name: "resize_image",
+    title: "resize or convert an image",
+    description: "Resize an image, convert it between png, jpeg and webp, or both, and get it back as an image, with " +
+      "its size in pixels and bytes before and after. Give a width or a height to keep its proportions, or both to set " +
+      "each; give neither to only convert. A photo is turned upright as its orientation tag says. Send the image as " +
+      "base64, up to 10 MB and 16 megapixels: png, jpeg, webp or gif (its first frame). On the img page, the image the " +
+      "visitor chose is used when none is sent, the browser reads more formats, and avif can be written where it can.",
+    input: {
+      type: "object",
+      properties: {
+        image: {
+          type: "string", contentEncoding: "base64", contentMediaType: "image/*", maxLength: 14000000,
+          description: "The image, as base64 or a data: URL. On the img page, leave it out to use the image the visitor chose."
+        },
+        width: { type: "integer", minimum: 1, maximum: MAX_SIDE, description: "The new width in pixels." },
+        height: { type: "integer", minimum: 1, maximum: MAX_SIDE, description: "The new height in pixels." },
+        format: {
+          type: "string", enum: ["png", "jpeg", "webp", "avif"],
+          description: "What to write; the image's own format when left out (a gif becomes png). avif only on the img page, in a browser that writes it."
+        },
+        quality: { type: "integer", minimum: 1, maximum: 100, default: 82, description: "For jpeg, webp and avif: higher is sharper and larger." }
+      },
+      required: ["image"],
+      additionalProperties: false,
+      examples: [{
+        image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP4z8DwHwyBNAMQMDAwAABK0gX7HD1MvAAAAABJRU5ErkJggg==",
+        width: 1, format: "webp", quality: 80
+      }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        width: { type: "integer" }, height: { type: "integer" },
+        format: { type: "string", enum: ["png", "jpeg", "webp", "avif"] },
+        quality: { type: "integer", description: "Present for jpeg, webp and avif." },
+        bytes: { type: "integer", description: "The new image's size." },
+        originalWidth: { type: "integer" }, originalHeight: { type: "integer" },
+        originalFormat: { type: "string" },
+        originalBytes: { type: "integer" },
+        image: Media.FILE
+      },
+      required: ["width", "height", "format", "bytes", "originalWidth", "originalHeight", "originalBytes", "image"],
+      additionalProperties: false
+    },
+    readOnly: true,
+    compute: resizeImage
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
   var file = E.qs("#file"), w = E.qs("#w"), h = E.qs("#h"), lock = E.qs("#lock"), original = E.qs("#original"), fmt = E.qs("#fmt"), q = E.qs("#q"), canvas = E.qs("#preview"), error = E.qs("#err"), meta = E.qs("#meta"), download = E.qs("#dl"), frame = E.qs("#frame");
   var source = null, sourceWidth = 0, sourceHeight = 0, sourceBytes = 0, name = "image", loadSeq = 0, renderSeq = 0, encoded = null, MAX_PIXELS = 40000000;
   function ext(type) { return type === "image/jpeg" ? "jpg" : type.split("/")[1]; }
@@ -92,25 +333,28 @@ E.tool(function () {
   /* For agents: new settings for the image the visitor chose, set in the
      page's own fields. The image never leaves the tab; the visitor downloads
      the result with the page's button. */
-  E.agentTool({
-    name: "resize_image",
-    title: "resize the image on the page",
-    description: "Resize or convert the image the visitor has chosen or dropped on this page, and report " +
-      "the new size in pixels and bytes. Give a width or a height to keep proportions, or both to set " +
-      "each. The image never leaves the browser: tell the visitor to press download on the page to save " +
-      "it. If no image is chosen, ask the visitor to choose or drop one here.",
-    input: {
-      type: "object",
-      properties: {
-        width: { type: "integer", minimum: 1, maximum: 12000 },
-        height: { type: "integer", minimum: 1, maximum: 12000 },
-        format: { type: "string", description: "png, jpeg or webp; avif where the browser can write it." },
-        quality: { type: "integer", minimum: 1, maximum: 100, description: "For jpeg, webp and avif." }
-      }
-    },
-    readOnly: true,
-    run: function (args, signal) {
-      if (!source) throw new Error("no image is chosen on the page; ask the visitor to choose or drop one");
+  /* For agents in the browser: the page's own fields do the work, as the
+     visitor's would, and the agent gets what the download button gives. An
+     image the agent sends goes in the page's file field first, as if the
+     visitor had chosen it. */
+  function chosen(signal) {
+    return new Promise(function (resolve, reject) {
+      (function wait() {
+        if (signal && signal.aborted) { reject(new Error("cancelled")); return; }
+        if (error.textContent && !source) { reject(new Error(error.textContent)); return; }
+        if (!source) { setTimeout(wait, 50); return; }
+        resolve();
+      })();
+    });
+  }
+  function fromPage(args, signal) {
+    if (args.image != null) {
+      var bytes = Media.bytes(args.image, "image", IMAGE_CAP);
+      E.giveFile(file, new File([bytes], "image from the agent", { type: Media.type(bytes) || "" }));
+    } else if (!source) {
+      throw new Error("no image is chosen on the page; send one as base64, or ask the visitor to choose or drop one");
+    }
+    return chosen(signal).then(function () {
       if (args.format != null) {
         var type = "image/" + String(args.format).toLowerCase().replace(/^jpg$/, "jpeg");
         if (!fmt.querySelector('option[value="' + type + '"]')) {
@@ -119,25 +363,30 @@ E.tool(function () {
         fmt.value = type;
       }
       if (args.quality != null) { q.value = String(args.quality); E.qs("#qv").textContent = q.value; }
-      var width = args.width, height = args.height;
-      if (width != null || height != null) {
-        lock.checked = width == null || height == null;
-        if (width == null) width = Math.max(1, Math.round(height * sourceWidth / sourceHeight));
-        if (height == null) height = Math.max(1, Math.round(width * sourceHeight / sourceWidth));
-        w.value = String(width);
-        h.value = String(height);
-      }
+      var size = target(args, sourceWidth, sourceHeight);
+      lock.checked = args.width == null || args.height == null;
+      w.value = String(size[0]);
+      h.value = String(size[1]);
       draw();
       return new Promise(function (resolve, reject) {
         (function wait() {
           if (signal && signal.aborted) { reject(new Error("cancelled")); return; }
           if (error.textContent) { reject(new Error(error.textContent)); return; }
           if (!encoded) { setTimeout(wait, 50); return; }
-          resolve({ width: canvas.width, height: canvas.height, format: ext(encoded.type), bytes: encoded.size, originalBytes: sourceBytes, summary: meta.textContent });
+          resolve(encoded.arrayBuffer().then(function (buffer) {
+            var type = encoded.type, answer = {
+              width: canvas.width, height: canvas.height, format: ext(type).replace("jpg", "jpeg"), bytes: encoded.size,
+              originalWidth: sourceWidth, originalHeight: sourceHeight, originalBytes: sourceBytes,
+              image: Media.file(name + "." + ext(type), type, new Uint8Array(buffer))
+            };
+            if (type !== "image/png") answer.quality = Number(q.value);
+            return answer;
+          }));
         })();
       });
-    }
-  });
+    });
+  }
+  E.agentTools(AGENT_TOOLS, { resize_image: fromPage }, ["image"]);
 });
 </script>
 </body>

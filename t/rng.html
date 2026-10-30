@@ -124,12 +124,26 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        min: { type: "integer", default: 1 },
-        max: { type: "integer", default: 100 },
-        count: { type: "integer", minimum: 1, maximum: 100, default: 1 },
-        unique: { type: "boolean", default: false, description: "Never pick the same number twice." },
-        source: { type: "string", enum: SOURCES, default: "csrng" }
-      }
+        min: { type: "integer", default: 1, description: "The smallest number that may come up." },
+        max: { type: "integer", default: 100, description: "The largest; at least min." },
+        count: { type: "integer", minimum: 1, maximum: 100, default: 1, description: "How many numbers." },
+        unique: { type: "boolean", default: false, description: "Never pick the same number twice; then count can be no more than the range holds." },
+        source: { type: "string", enum: SOURCES, default: "csrng", description: "csrng: Web Crypto, fit for secrets. trng: a drand beacon, verified, that anyone can check later by its round; reaches the network. prng: Math.random, predictable." }
+      },
+      additionalProperties: false,
+      examples: [{ min: 1, max: 49, count: 6, unique: true }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        numbers: { type: "array", items: { type: ["integer", "string"] }, description: "In the order drawn. A number too large for JSON to hold exactly comes as a string." },
+        source: { type: "string", enum: ["csrng", "trng", "prng"] },
+        verified: { type: "boolean", description: "True for trng: the beacon's signature was checked." },
+        round: { type: "integer", description: "trng only: the drand round drawn from." },
+        chainHash: { type: "string", description: "trng only: the drand chain the round belongs to." }
+      },
+      required: ["numbers", "source", "verified"],
+      additionalProperties: false
     },
     readOnly: true,
     network: true,

@@ -49,11 +49,15 @@
 E.tool(function () {
   "use strict";
 
-  var input = E.qs("#file"), out = E.qs("#out"), er = E.qs("#err"), summary = E.qs("#summary");
-  var filter = E.qs("#filter"), filterWrap = E.qs("#filter-wrap"), copy = E.qs("#copy"), download = E.qs("#download");
-  var report = "", allRows = [], shown = [], filename = "metadata", loadSeq = 0;
+  /* ── core ──────────────────────────────────────────────────────────
+     Pure: no DOM and no E, only exif-reader.js and media.js. The site's MCP
+     server (mcp-server.mjs) runs this block on its own, so an agent that never
+     opens the page gets the fields the page lists. AGENT_TOOLS is what the
+     page and the server both offer. */
+
   var SKIP = /thumbnail|makernote|padding|undefinedtag|metadatarange|mpf.*image|^_raw$/i;
   var BINARY = "[binary data]", STRUCTURED = "[structured data]";
+  var IMAGE_CAP = 10 * 1024 * 1024;
 
   /* A tag value as one readable, bounded line. */
   function text(v) {
@@ -109,6 +113,75 @@ E.tool(function () {
     });
     return rows;
   }
+
+  /* Nothing to read is an answer, not a failure. */
+  function nothingThere(e) {
+    return !!(e && (e.name === "MetadataMissingError" || /no exif data|no metadata blocks found/i.test(e.message || "")));
+  }
+
+  /**
+   * An image's metadata as the page lists it.
+   * @param {Uint8Array} bytes The whole file.
+   * @returns {Promise<Object>} The tool's answer.
+   */
+  function describeImage(bytes) {
+    var buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    return Promise.resolve().then(function () {
+      return ExifReader.load(buffer, { expanded: true, async: true });
+    }).then(flatten, function (e) {
+      if (nothingThere(e)) return [];
+      throw new Error("metadata could not be read; the file may be unsupported or malformed");
+    }).then(function (rows) {
+      var fields = {};
+      rows.forEach(function (row) { fields[row[0]] = row[1]; });
+      var answer = { type: Media.type(bytes) || "unknown", bytes: bytes.length, count: rows.length, fields: fields };
+      if (!rows.length) answer.note = "no readable metadata fields were found";
+      return answer;
+    });
+  }
+
+  var AGENT_TOOLS = [{
+    name: "read_image_metadata",
+    title: "read an image's metadata",
+    description: "Read the metadata inside an image: camera, lens, exposure, dates, gps position, color profile, " +
+      "dimensions and more, from exif, iptc, icc and the file's own headers, as \"group · tag\" fields. Reads jpeg, " +
+      "tiff, png, webp, heic, avif, gif and jpeg xl. Send the image as base64, up to 10 MB. On the metadata page, " +
+      "xmp is read too, and the image the visitor chose is used when none is sent.",
+    input: {
+      type: "object",
+      properties: {
+        image: {
+          type: "string", contentEncoding: "base64", contentMediaType: "image/*", maxLength: 14000000,
+          description: "The image, as base64 or a data: URL. On the metadata page, leave it out to use the image the visitor chose."
+        }
+      },
+      required: ["image"],
+      additionalProperties: false,
+      examples: [{ image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        type: { type: "string", description: "The file's type, told from its first bytes, or unknown." },
+        bytes: { type: "integer", minimum: 0, description: "The file's size." },
+        count: { type: "integer", minimum: 0, description: "How many fields were read." },
+        fields: { type: "object", additionalProperties: { type: "string" }, description: "\"group · tag\" → its value, as one readable line." },
+        note: { type: "string", description: "Present when there was nothing to read." }
+      },
+      required: ["type", "bytes", "count", "fields"],
+      additionalProperties: false
+    },
+    readOnly: true,
+    compute: function (args) {
+      return describeImage(Media.bytes(args.image, "image", IMAGE_CAP));
+    }
+  }];
+
+  /* ── end core ────────────────────────────────────────────────────── */
+
+  var input = E.qs("#file"), out = E.qs("#out"), er = E.qs("#err"), summary = E.qs("#summary");
+  var filter = E.qs("#filter"), filterWrap = E.qs("#filter-wrap"), copy = E.qs("#copy"), download = E.qs("#download");
+  var report = "", allRows = [], shown = [], filename = "metadata", loadSeq = 0;
 
   /* What the browser itself knows about the file, shown even when parsing fails. */
   function fileRows(f) {
@@ -185,7 +258,7 @@ E.tool(function () {
     }).catch(function (e) {
       if (seq !== loadSeq) return;
       render(base);
-      er.textContent = e && (e.name === "MetadataMissingError" || /no exif data|no metadata blocks found/i.test(e.message || ""))
+      er.textContent = nothingThere(e)
         ? "no readable metadata fields were found"
         : "metadata could not be read; the file may be unsupported or malformed";
     });
@@ -201,29 +274,22 @@ E.tool(function () {
     E.flash(this, "downloaded");
   });
 
-  /* For agents: what was read from the visitor's file, never the file. */
-  E.agentTool({
-    name: "read_image_metadata",
-    title: "read the image's metadata",
-    description: "Give the metadata read from the image the visitor has chosen or dropped on this page: " +
-      "camera, lens, exposure, dates, gps position, color profile and more, as \"group · tag\" fields. " +
-      "The image never leaves the browser. If no image is chosen, ask the visitor to choose or drop one here.",
-    readOnly: true,
-    run: function (args, signal) {
-      if (!input.files || !input.files.length) throw new Error("no image is chosen on the page; ask the visitor to choose or drop one");
-      return new Promise(function (resolve, reject) {
-        (function wait() {
-          if (signal && signal.aborted) { reject(new Error("cancelled")); return; }
-          if (summary.textContent === "reading…") { setTimeout(wait, 100); return; }
-          var fields = {};
-          allRows.forEach(function (row) { fields[row[0]] = row[1]; });
-          var result = { fields: fields };
-          if (er.textContent) result.note = er.textContent;
-          resolve(result);
-        })();
-      });
+  /* For agents in the browser: an image the agent sends is put in the page's
+     file field, as if the visitor had chosen it, and listed there; with none,
+     the visitor's own image is read. The answer is the core's either way. */
+  E.agentTools(AGENT_TOOLS, {
+    read_image_metadata: function (args) {
+      if (args.image != null) {
+        var bytes = Media.bytes(args.image, "image", IMAGE_CAP);
+        E.giveFile(input, new File([bytes], "image from the agent", { type: Media.type(bytes) || "" }));
+        return describeImage(bytes);
+      }
+      var f = input.files && input.files[0];
+      if (!f) throw new Error("no image is chosen on the page; send one as base64, or ask the visitor to choose or drop one");
+      if (f.size > 64 * 1024 * 1024) throw new Error("the chosen image is over 64 MB, more than is read for an agent");
+      return f.arrayBuffer().then(function (buffer) { return describeImage(new Uint8Array(buffer)); });
     }
-  });
+  }, ["image"]);
 });
 </script>
 </body>

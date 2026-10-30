@@ -303,9 +303,23 @@
           input: {
             type: "object",
             properties: {
-              color: { type: "string", description: "The color, such as #1e90ff, rgb(30 144 255) or tomato." }
+              color: { type: "string", minLength: 1, maxLength: 200, description: "The color, such as #1e90ff, rgb(30 144 255), hsl(210 100% 56%) or tomato." }
             },
-            required: ["color"]
+            required: ["color"],
+            additionalProperties: false,
+            examples: [{ color: "#1e90ff" }, { color: "rebeccapurple" }]
+          },
+          output: {
+            type: "object",
+            description: "Every one converts back to the same 8-bit color, the oklch() even as a browser reads it.",
+            properties: {
+              hex: { type: "string", pattern: "^#[0-9a-f]{6}$" },
+              rgb: { type: "string", description: "Such as rgb(30 144 255)." },
+              hsl: { type: "string", description: "Such as hsl(210 100% 56%), rounded to whole numbers." },
+              oklch: { type: "string", description: "Such as oklch(65.2% 0.19012 253.21)." }
+            },
+            required: ["hex", "rgb", "hsl", "oklch"],
+            additionalProperties: false
           },
           readOnly: true,
           compute: function (args) {

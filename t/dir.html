@@ -288,7 +288,25 @@ E.tool(function () {
       "address or group. Leave out the query to list them all.",
     input: {
       type: "object",
-      properties: { query: { type: "string", description: "Words that must all appear, such as \"public domain books\"." } }
+      properties: { query: { type: "string", maxLength: 200, description: "Words that must all appear, such as \"public domain books\". Every site when left out." } },
+      additionalProperties: false,
+      examples: [{ query: "maps" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        sites: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { name: { type: "string" }, url: { type: "string" }, description: { type: "string" }, group: { type: "string" } },
+            required: ["name", "url", "description", "group"],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ["sites"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {

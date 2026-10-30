@@ -197,13 +197,26 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        text: { type: "string", description: "Lines to tidy." },
-        order: { type: "string", enum: ORDERS, default: "keep" },
-        dedupe: { type: "boolean", default: true },
-        trim: { type: "boolean", default: true },
-        removeEmpty: { type: "boolean", default: true },
+        text: { type: "string", maxLength: 2000000, description: "Lines to tidy. On the scratchpad's page, leave it out to use the pad's text." },
+        order: { type: "string", enum: ORDERS, default: "keep", description: "keep the order, sort asc or desc (natural: item2 before item10), or reverse it." },
+        dedupe: { type: "boolean", default: true, description: "Keep the first of each line that repeats." },
+        trim: { type: "boolean", default: true, description: "Take spaces off both ends of each line." },
+        removeEmpty: { type: "boolean", default: true, description: "Drop lines left empty." },
         ignoreCase: { type: "boolean", default: false, description: "For duplicates and sorting." }
-      }
+      },
+      required: ["text"],
+      additionalProperties: false,
+      examples: [{ text: "pear\napple\n\npear\nApple", order: "asc", ignoreCase: true }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        text: { type: "string" },
+        linesBefore: { type: "integer" },
+        linesAfter: { type: "integer" }
+      },
+      required: ["text", "linesBefore", "linesAfter"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {
@@ -646,7 +659,7 @@ E.tool(function () {
     clean_up_lines: function (args) {
       return AGENT_TOOLS[0].compute(Object.assign({}, args, { text: args.text == null ? pad.value : args.text }));
     }
-  });
+  }, ["text"]);
 });
 </script>
 </body>

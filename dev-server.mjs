@@ -2,7 +2,7 @@
  *
  * Despite the filename this is the production server for self-hosted
  * deployments (see `deploy/README.md`): static hosts can serve the pages, but
- * only this process provides share discovery.
+ * only this process provides share discovery and the downloader's lookups.
  * It has no npm runtime dependencies and no build step, so what runs in
  * production is the file in the repository.
  *
@@ -326,15 +326,19 @@ function sendText(response, status, message, method = "GET", extraHeaders = {}) 
  * Every inline `<script>` without a `src` is hashed and added to the policy, so
  * the pages get the protection of a strict CSP while staying single files that
  * also open from `file://`. A page with no inline script (the index, the 404,
- * a redirect stub) keeps the base policy unchanged.
+ * a redirect stub) keeps the base policy unchanged. A tool whose row names
+ * `connect` sources may also fetch from them, as the downloader fetches media
+ * from wherever a video is kept; no other page may.
  * @param {Buffer} body The HTML.
+ * @param {string} [connect] Extra `connect-src` sources, from the page's `tools.js` row.
  * @returns {string} The full policy for that page.
  */
-function pagePolicy(body) {
+function pagePolicy(body, connect) {
+  const base = connect ? CSP.replace(/connect-src [^;]*/, sources => sources + " " + connect) : CSP;
   const hashes = [...body.toString("utf8").matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)]
     .filter(match => !/\bsrc\s*=/i.test(match[1]))
     .map(match => "'sha256-" + createHash("sha256").update(match[2]).digest("base64") + "'");
-  return hashes.length ? CSP + " " + hashes.join(" ") : CSP;
+  return hashes.length ? base + " " + hashes.join(" ") : base;
 }
 
 /* The 404 body never changes, so hash its inline scripts once at startup rather
@@ -449,7 +453,7 @@ async function loadAsset(filePath, fileStat) {
     /* Strong validator: derived from the bytes, so two deployments of identical
        content agree and a touched-but-unchanged file still revalidates. */
     etag: '"' + createHash("sha256").update(body).digest("base64url").slice(0, 27) + '"',
-    csp: type.startsWith("text/html") ? pagePolicy(body) : null,
+    csp: type.startsWith("text/html") ? pagePolicy(body, page?.connect) : null,
     compressible: COMPRESSIBLE_TYPE.test(type) && body.byteLength >= COMPRESS_MIN_BYTES,
     encoded: new Map()
   };
@@ -652,6 +656,7 @@ async function route(request, response, apis) {
  * @param {object} [options] Passed to every API module's factory.
  * @param {object} [options.shareOptions] Passed to createShareService.
  * @param {object} [options.mcpOptions] Passed to createMcpService.
+ * @param {object} [options.downloadOptions] Passed to createDownloadService.
  * @returns {{server: import("node:http").Server, close: () => Promise<void>}}
  */
 export function createEyesServer(options = {}) {

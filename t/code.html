@@ -303,11 +303,19 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        code: { type: "string", description: "The code to clean." },
-        language: { type: "string", enum: Object.keys(LANGUAGES), description: "The language's id, such as python, typescript or postgresql." },
+        code: { type: "string", minLength: 1, maxLength: 1000000, description: "The code to clean." },
+        language: { type: "string", enum: Object.keys(LANGUAGES), description: "The language's id, such as python, typescript, cpp, postgresql or yaml." },
         indent: { type: "string", enum: ["usual", "2", "4", "tab"], default: "usual", description: "usual keeps the formatter's own: 4 spaces for Python, tabs for Go." }
       },
-      required: ["code", "language"]
+      required: ["code", "language"],
+      additionalProperties: false,
+      examples: [{ code: "def f( a ):\n  return a", language: "python" }, { code: "select a,b from t where x=1", language: "postgresql", indent: "4" }]
+    },
+    output: {
+      type: "object",
+      properties: { code: { type: "string", description: "The cleaned code." } },
+      required: ["code"],
+      additionalProperties: false
     },
     readOnly: true,
     compute: function (args) {
@@ -322,11 +330,14 @@ E.tool(function () {
     input: {
       type: "object",
       properties: {
-        json: { type: "string", description: "The JSON text." },
+        json: { type: "string", minLength: 1, maxLength: 2000000, description: "The JSON text." },
         indent: { type: "string", enum: ["2", "4", "tab", "minify"], default: "2", description: "Indentation, or minify for one line." }
       },
-      required: ["json"]
+      required: ["json"],
+      additionalProperties: false,
+      examples: [{ json: "{\"a\":[1,2],\"b\":{\"c\":true}}", indent: "2" }]
     },
+    output: { type: "object", properties: { json: { type: "string" } }, required: ["json"], additionalProperties: false },
     readOnly: true,
     compute: function (args) {
       var indent = args.indent == null ? "2" : String(args.indent);
@@ -337,14 +348,28 @@ E.tool(function () {
     name: "escape_json_string",
     title: "escape text as a json string",
     description: "Turn text into a JSON string literal, quotes and escapes included, ready to paste into JSON or JavaScript.",
-    input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    input: {
+      type: "object",
+      properties: { text: { type: "string", maxLength: 2000000, description: "Any text, line breaks and quotes included." } },
+      required: ["text"],
+      additionalProperties: false,
+      examples: [{ text: "She said \"hi\"\nthen left" }]
+    },
+    output: { type: "object", properties: { json: { type: "string", description: "A JSON string literal, quotes included." } }, required: ["json"], additionalProperties: false },
     readOnly: true,
     compute: function (args) { return { json: transform("escape", text(args.text)) }; }
   }, {
     name: "unescape_json_string",
     title: "read a json string literal",
     description: "Turn a JSON string literal, in double quotes, back into the text it stands for.",
-    input: { type: "object", properties: { json: { type: "string", description: "A JSON string, quotes included." } }, required: ["json"] },
+    input: {
+      type: "object",
+      properties: { json: { type: "string", minLength: 1, maxLength: 2000000, description: "A JSON string literal, quotes included." } },
+      required: ["json"],
+      additionalProperties: false,
+      examples: [{ json: "\"She said \\\"hi\\\"\\nthen left\"" }]
+    },
+    output: { type: "object", properties: { text: { type: "string" } }, required: ["text"], additionalProperties: false },
     readOnly: true,
     compute: function (args) { return { text: transform("unescape", text(args.json)) }; }
   }];
