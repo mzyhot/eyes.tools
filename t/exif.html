@@ -19,6 +19,11 @@
     <p class="err" id="err" role="alert"></p>
   </section>
 
+  <section class="row">
+    <button class="btn" id="strip" type="button" disabled>download without metadata</button>
+    <span class="hint" id="strip-meta" aria-live="polite"></span>
+  </section>
+
   <section class="stack">
     <div id="filter-wrap" hidden>
       <label class="lbl" for="filter">filter metadata</label>
@@ -40,7 +45,8 @@
 <script>
 /* Metadata: hand the chosen file to the vendored ExifReader and list every
    field it finds as "group · tag" rows, which can be filtered, copied as
-   tab-separated text, or downloaded as JSON. The file never leaves the tab.
+   tab-separated text, or downloaded as JSON; and offer the same image with
+   its metadata cut out. The file never leaves the tab.
 
    ExifReader returns nested groups of tags, each tag an object with a
    human-readable `description`. The flattening below keeps the descriptions
@@ -134,8 +140,303 @@ E.tool(function () {
     }).then(function (rows) {
       var fields = {};
       rows.forEach(function (row) { fields[row[0]] = row[1]; });
-      var answer = { type: Media.type(bytes) || "unknown", bytes: bytes.length, count: rows.length, fields: fields };
+      var answer = { type: kind(bytes) || "unknown", bytes: bytes.length, count: rows.length, fields: fields };
       if (!rows.length) answer.note = "no readable metadata fields were found";
+      return answer;
+    });
+  }
+
+  /* ── removing ──
+     The metadata is cut out of the file block by block, so the picture is
+     never decoded or encoded again and loses nothing. What stays is what
+     changes how the picture looks: its color profile or color space, and its
+     orientation, which goes back in as an exif block holding nothing else. */
+
+  var EXTENSION = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/jxl": "jxl" };
+  var JXL_BOX = [0, 0, 0, 0x0c, 0x4a, 0x58, 0x4c, 0x20, 0x0d, 0x0a, 0x87, 0x0a];
+
+  function ascii(bytes, at, length) {
+    return String.fromCharCode.apply(null, bytes.subarray(at, at + length));
+  }
+  function join(parts) {
+    var size = 0, at = 0;
+    parts.forEach(function (part) { size += part.length; });
+    var out = new Uint8Array(size);
+    parts.forEach(function (part) { out.set(part, at); at += part.length; });
+    return out;
+  }
+  function note(list, label) {
+    if (list.indexOf(label) < 0) list.push(label);
+  }
+  function damaged() {
+    return new Error("metadata could not be removed; the file may be damaged");
+  }
+  /* Bytes after the image's end, unless they are only padding. */
+  function trailing(bytes, at, found) {
+    for (; at < bytes.length; at++) if (bytes[at]) return note(found.removed, "data after the image");
+  }
+
+  /* What a file is: media.js's sniffing, and jpeg xl, which it does not know. */
+  function kind(bytes) {
+    if (bytes[0] === 0xff && bytes[1] === 0x0a) return "image/jxl";
+    for (var i = 0; i < 12 && bytes[i] === JXL_BOX[i]; i++);
+    return i === 12 ? "image/jxl" : Media.type(bytes);
+  }
+
+  /* The orientation in an exif block's first directory; 1, as stored, when it has none. */
+  function orientation(tiff) {
+    if (ascii(tiff, 0, 6) === "Exif\u0000\u0000") tiff = tiff.subarray(6);
+    var order = ascii(tiff, 0, 2), little = order === "II";
+    if (tiff.length < 8 || !little && order !== "MM") return 1;
+    var view = new DataView(tiff.buffer, tiff.byteOffset, tiff.byteLength), ifd = view.getUint32(4, little);
+    if (ifd + 2 > tiff.length) return 1;
+    for (var i = 0, n = view.getUint16(ifd, little); i < n && ifd + 14 + i * 12 <= tiff.length; i++) {
+      var at = ifd + 2 + i * 12;
+      if (view.getUint16(at, little) === 0x0112 && view.getUint16(at + 2, little) === 3) {
+        var value = view.getUint16(at + 8, little);
+        return value >= 1 && value <= 8 ? value : 1;
+      }
+    }
+    return 1;
+  }
+  /* An exif block holding one orientation and nothing else. */
+  function orientationExif(value) {
+    return new Uint8Array([0x4d, 0x4d, 0, 0x2a, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, value, 0, 0, 0, 0, 0, 0]);
+  }
+
+  /* jpeg: segments, each a marker and a length, then the compressed scans,
+     which run to the next marker that is not an escaped byte or a restart. */
+  function jpegLabel(marker, id) {
+    if (marker === 0xfe) return "comment";
+    if (marker === 0xe0 && id.slice(0, 5) === "JFXX\u0000") return "thumbnail";
+    if (marker === 0xe1 && /^http:\/\/ns\.adobe\.com\/(xap\/1\.0|xmp\/extension)\/\u0000/.test(id)) return "xmp";
+    if (marker === 0xe2 && id.slice(0, 4) === "MPF\u0000") return "extra images";
+    if (marker === 0xeb) return "content credentials";
+    if (marker === 0xed && id.slice(0, 13) === "Photoshop 3.0") return "iptc";
+    return "other blocks";
+  }
+  function jpeg(bytes, found) {
+    var parts = [bytes.subarray(0, 2)], at = 2, exif = false;
+    while (at + 2 <= bytes.length) {
+      if (bytes[at] !== 0xff) throw damaged();
+      var marker = bytes[at + 1];
+      if (marker === 0xff) { at++; continue; }
+      if (marker === 0xd9) { parts.push(bytes.subarray(at, at + 2)); at += 2; break; }
+      if (marker === 0x01 || marker >= 0xd0 && marker <= 0xd8) { parts.push(bytes.subarray(at, at + 2)); at += 2; continue; }
+      if (at + 4 > bytes.length) throw damaged();
+      var end = at + 2 + (bytes[at + 2] << 8 | bytes[at + 3]);
+      if (end < at + 4 || end > bytes.length) throw damaged();
+      var segment = bytes.subarray(at, end), id = ascii(segment, 4, 35);
+      if (marker === 0xda) {
+        var next = end;
+        while ((next = bytes.indexOf(0xff, next)) > -1 && next + 1 < bytes.length && (bytes[next + 1] === 0 || bytes[next + 1] >= 0xd0 && bytes[next + 1] <= 0xd7)) next += 2;
+        if (next < 0 || next + 1 >= bytes.length) { parts.push(bytes.subarray(at)); at = bytes.length; break; }
+        parts.push(bytes.subarray(at, next));
+        at = next;
+        continue;
+      }
+      at = end;
+      if (marker < 0xe0 || marker > 0xef && marker !== 0xfe) parts.push(segment);   /* tables, frames, and what else decoding needs */
+      else if (marker === 0xe0 && id.slice(0, 5) === "JFIF\u0000" && segment.length >= 18) {
+        if (segment[16] && segment[17]) {
+          note(found.removed, "thumbnail");
+          segment = segment.slice(0, 18);
+          segment[2] = 0; segment[3] = 16; segment[16] = segment[17] = 0;
+        }
+        parts.push(segment);
+      }
+      else if (marker === 0xe2 && id.slice(0, 12) === "ICC_PROFILE\u0000") { note(found.kept, "color profile"); parts.push(segment); }
+      else if (marker === 0xee && id.slice(0, 5) === "Adobe") parts.push(segment);   /* how the colors are stored */
+      else if (marker === 0xe1 && id.slice(0, 6) === "Exif\u0000\u0000") {
+        note(found.removed, "exif");
+        var turned = exif ? 1 : orientation(segment.subarray(4));
+        exif = true;
+        if (turned > 1) {
+          note(found.kept, "orientation");
+          parts.push(join([new Uint8Array([0xff, 0xe1, 0, 34, 0x45, 0x78, 0x69, 0x66, 0, 0]), orientationExif(turned)]));
+        }
+      }
+      else note(found.removed, jpegLabel(marker, id));
+    }
+    trailing(bytes, at, found);
+    return join(parts);
+  }
+
+  /* png: chunks, each a length, a name, its data and a checksum. Those named
+     in capitals are needed to show the image; of the rest, only these are. */
+  var PNG_COLOR = { gAMA: 1, cHRM: 1, sRGB: 1, cICP: 1, mDCV: 1, cLLI: 1 };
+  var PNG_KEEP = { tRNS: 1, acTL: 1, fcTL: 1, fdAT: 1 };
+  function crc(data) {
+    var c = -1;
+    for (var i = 0; i < data.length; i++) {
+      c ^= data[i];
+      for (var k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    return (c ^ -1) >>> 0;
+  }
+  function pngLabel(name, chunk) {
+    if (name === "tEXt" || name === "zTXt") return "text";
+    if (name === "iTXt") return ascii(chunk, 8, 18) === "XML:com.adobe.xmp\u0000" ? "xmp" : "text";
+    if (name === "tIME") return "timestamp";
+    if (name === "caBX") return "content credentials";
+    return "other blocks";
+  }
+  function png(bytes, found) {
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var parts = [bytes.subarray(0, 8)], at = 8, firstData = -1, turned = 0, exif = false;
+    while (at + 12 <= bytes.length) {
+      var size = view.getUint32(at), name = ascii(bytes, at + 4, 4), end = at + 12 + size;
+      if (end > bytes.length) throw damaged();
+      var chunk = bytes.subarray(at, end);
+      at = end;
+      if (name === "iCCP") { note(found.kept, "color profile"); parts.push(chunk); }
+      else if (PNG_COLOR[name]) { note(found.kept, "color space"); parts.push(chunk); }
+      else if (name.charCodeAt(0) < 0x61 || PNG_KEEP[name]) {
+        if (name === "IDAT" && firstData < 0) firstData = parts.length;
+        parts.push(chunk);
+        if (name === "IEND") break;
+      }
+      else if (name === "eXIf") {
+        note(found.removed, "exif");
+        if (!exif) turned = orientation(chunk.subarray(8, 8 + size));
+        exif = true;
+      }
+      else note(found.removed, pngLabel(name, chunk));
+    }
+    if (turned > 1) {
+      var tiff = orientationExif(turned), added = new Uint8Array(12 + tiff.length), out = new DataView(added.buffer);
+      out.setUint32(0, tiff.length);
+      added.set([0x65, 0x58, 0x49, 0x66], 4);
+      added.set(tiff, 8);
+      out.setUint32(8 + tiff.length, crc(added.subarray(4, 8 + tiff.length)));
+      note(found.kept, "orientation");
+      parts.splice(firstData < 0 ? parts.length : firstData, 0, added);
+    }
+    trailing(bytes, at, found);
+    return join(parts);
+  }
+
+  /* webp: a RIFF file of chunks, each padded to an even length. The extended
+     header's flags say which optional chunks follow, so they are kept true. */
+  function webp(bytes, found) {
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var limit = Math.min(bytes.length, 8 + view.getUint32(4, true)), parts = [], at = 12, header = null, turned = 0, exif = false;
+    while (at + 8 <= limit) {
+      var name = ascii(bytes, at, 4), size = view.getUint32(at + 4, true), end = at + 8 + size, padded = end + (size & 1);
+      if (end > limit) throw damaged();
+      var chunk = padded <= limit ? bytes.subarray(at, padded) : join([bytes.subarray(at, end), new Uint8Array(1)]);
+      at = padded;
+      if (name === "VP8X") { header = chunk.slice(); parts.push(header); }
+      else if (name === "ICCP") { note(found.kept, "color profile"); parts.push(chunk); }
+      else if (/^(VP8 |VP8L|ALPH|ANIM|ANMF)$/.test(name)) parts.push(chunk);
+      else if (name === "EXIF") {
+        note(found.removed, "exif");
+        if (!exif) turned = orientation(chunk.subarray(8, 8 + size));
+        exif = true;
+      }
+      else note(found.removed, name === "XMP " ? "xmp" : "other blocks");
+    }
+    if (header && header.length > 8) {
+      header[8] &= ~0x0c;
+      if (turned > 1) {
+        header[8] |= 0x08;
+        note(found.kept, "orientation");
+        parts.push(join([new Uint8Array([0x45, 0x58, 0x49, 0x46, 26, 0, 0, 0]), orientationExif(turned)]));
+      }
+    }
+    trailing(bytes, at, found);
+    var riff = bytes.slice(0, 12), out = join([riff].concat(parts));
+    new DataView(out.buffer).setUint32(4, out.length - 8, true);
+    return out;
+  }
+
+  /* gif: blocks, each image or extension running on in sub-blocks to an empty one. */
+  function gif(bytes, found) {
+    var at = 13 + (bytes[10] & 0x80 ? 3 * (2 << (bytes[10] & 7)) : 0), parts = [bytes.subarray(0, at)], ended = false;
+    if (at > bytes.length) throw damaged();
+    function blocks(from) {
+      while (from < bytes.length && bytes[from]) from += bytes[from] + 1;
+      if (from >= bytes.length) throw damaged();
+      return from + 1;
+    }
+    while (at < bytes.length) {
+      var block = bytes[at], end;
+      if (block === 0x3b) { at++; ended = true; break; }
+      if (block === 0x2c) {
+        if (at + 10 > bytes.length) throw damaged();
+        end = blocks(at + 11 + (bytes[at + 9] & 0x80 ? 3 * (2 << (bytes[at + 9] & 7)) : 0));
+        parts.push(bytes.subarray(at, end));
+      } else if (block === 0x21) {
+        var label = bytes[at + 1], app = label === 0xff && bytes[at + 2] === 11 ? ascii(bytes, at + 3, 11) : "";
+        end = blocks(at + 2);
+        if (label === 0xf9 || label === 0x01 || app === "NETSCAPE2.0" || app === "ANIMEXTS1.0") parts.push(bytes.subarray(at, end));
+        else if (app === "ICCRGBG1012") { note(found.kept, "color profile"); parts.push(bytes.subarray(at, end)); }
+        else note(found.removed, label === 0xfe ? "comment" : app === "XMP DataXMP" ? "xmp" : "other blocks");
+      } else throw damaged();
+      at = end;
+    }
+    parts.push(new Uint8Array([0x3b]));
+    if (ended) trailing(bytes, at, found);
+    return join(parts);
+  }
+
+  /* jpeg xl: a bare codestream has nowhere to keep metadata; a container
+     keeps it in boxes beside the codestream's, some compressed in brob boxes
+     that start with the name of the box inside. */
+  function jxl(bytes, found) {
+    if (bytes[0] === 0xff) return bytes;
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), parts = [], at = 0;
+    while (at + 8 <= bytes.length) {
+      var size = view.getUint32(at), name = ascii(bytes, at + 4, 4), head = 8;
+      if (size === 1) {
+        if (at + 16 > bytes.length) throw damaged();
+        size = view.getUint32(at + 8) * 4294967296 + view.getUint32(at + 12);
+        head = 16;
+      } else if (size === 0) size = bytes.length - at;
+      if (size < head || at + size > bytes.length) throw damaged();
+      var box = bytes.subarray(at, at + size);
+      at += size;
+      if (/^(JXL |ftyp|jxll|jxlc|jxlp|jxli)$/.test(name)) { parts.push(box); continue; }
+      if (name === "brob") name = ascii(box, head, 4);
+      note(found.removed, name === "Exif" ? "exif" : name === "xml " ? "xmp" : name === "jumb" ? "content credentials" : "other blocks");
+    }
+    trailing(bytes, at, found);
+    return join(parts);
+  }
+
+  var STRIP = { "image/jpeg": jpeg, "image/png": png, "image/webp": webp, "image/gif": gif, "image/jxl": jxl };
+
+  /**
+   * An image without its metadata.
+   * @param {Uint8Array} bytes The whole file.
+   * @returns {{type: string, bytes: Uint8Array, removed: string[], kept: string[]}}
+   * @throws {Error} For a format this cannot rewrite, or a file it cannot follow.
+   */
+  function strip(bytes) {
+    var type = kind(bytes), found = { removed: [], kept: [] };
+    if (!STRIP[type]) {
+      throw new Error("metadata is removed from jpeg, png, webp, gif and jpeg xl files" + (type ? "; this is " + type : "") +
+        ". the img page can turn an image into one of those, which leaves its metadata behind");
+    }
+    var out = STRIP[type](bytes, found);
+    return { type: type, bytes: out, removed: found.removed, kept: found.kept };
+  }
+
+  /**
+   * The tool's answer: the image without its metadata, and what the reader
+   * still finds in it.
+   * @param {Uint8Array} bytes The whole file.
+   * @returns {Promise<Object>}
+   */
+  function removeMetadata(bytes) {
+    var result = strip(bytes);
+    return describeImage(result.bytes).then(function (left) {
+      var answer = {
+        type: result.type, originalBytes: bytes.length, bytes: result.bytes.length,
+        removed: result.removed, kept: result.kept, fields: left.fields,
+        image: Media.file("image." + EXTENSION[result.type], result.type, result.bytes)
+      };
+      if (!result.removed.length) answer.note = "there was no metadata to remove; the image is as it was sent";
       return answer;
     });
   }
@@ -175,13 +476,60 @@ E.tool(function () {
     compute: function (args) {
       return describeImage(Media.bytes(args.image, "image", IMAGE_CAP));
     }
+  }, {
+    name: "remove_image_metadata",
+    title: "remove an image's metadata",
+    description: "Take the metadata out of an image and get the image back: exif (camera, dates, gps position), xmp, " +
+      "iptc, comments, text, thumbnails and whatever else the picture does not need. The picture is not encoded again, " +
+      "so it loses nothing, and its color profile and orientation stay, since they change how it looks. Works on jpeg, " +
+      "png, webp, gif and jpeg xl; send the image as base64, up to 10 MB. The answer says what was removed and lists " +
+      "what the metadata reader still finds. On the metadata page, the image the visitor chose is used when none is sent.",
+    input: {
+      type: "object",
+      properties: {
+        image: {
+          type: "string", contentEncoding: "base64", contentMediaType: "image/*", maxLength: 14000000,
+          description: "The image, as base64 or a data: URL. On the metadata page, leave it out to use the image the visitor chose."
+        }
+      },
+      required: ["image"],
+      additionalProperties: false,
+      examples: [{ image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD3RFWHRBdXRob3IAYSBjYW1lcmGT5KioAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==" }]
+    },
+    output: {
+      type: "object",
+      properties: {
+        type: { type: "string", description: "The image's type, told from its first bytes." },
+        originalBytes: { type: "integer", minimum: 0, description: "The image's size as sent." },
+        bytes: { type: "integer", minimum: 0, description: "Its size without the metadata." },
+        removed: {
+          type: "array", items: { type: "string" },
+          description: "What was taken out: exif, xmp, iptc, comment, text, timestamp, thumbnail, extra images, content credentials, data after the image or other blocks."
+        },
+        kept: {
+          type: "array", items: { type: "string", enum: ["color profile", "color space", "orientation"] },
+          description: "What stays because it changes how the image looks."
+        },
+        fields: { type: "object", additionalProperties: { type: "string" }, description: "What the metadata reader still finds in the new image, \"group · tag\" → its value." },
+        note: { type: "string", description: "Present when there was nothing to remove." },
+        image: Media.FILE
+      },
+      required: ["type", "originalBytes", "bytes", "removed", "kept", "fields", "image"],
+      additionalProperties: false
+    },
+    readOnly: true,
+    compute: function (args) {
+      return removeMetadata(Media.bytes(args.image, "image", IMAGE_CAP));
+    }
   }];
 
   /* ── end core ────────────────────────────────────────────────────── */
 
   var input = E.qs("#file"), out = E.qs("#out"), er = E.qs("#err"), summary = E.qs("#summary");
   var filter = E.qs("#filter"), filterWrap = E.qs("#filter-wrap"), copy = E.qs("#copy"), download = E.qs("#download");
-  var report = "", allRows = [], shown = [], filename = "metadata", loadSeq = 0;
+  var stripButton = E.qs("#strip"), stripMeta = E.qs("#strip-meta");
+  var report = "", allRows = [], shown = [], filename = "metadata", stem = "image", cleaned = null, loadSeq = 0;
+  var PAGE_CAP = 64 * 1024 * 1024;
 
   /* What the browser itself knows about the file, shown even when parsing fails. */
   function fileRows(f) {
@@ -219,6 +567,30 @@ E.tool(function () {
     filterWrap.hidden = true;
     copy.disabled = true;
     download.disabled = true;
+    cleaned = null;
+    stripButton.disabled = true;
+    stripMeta.textContent = "";
+  }
+
+  /* "a", "a and b", "a, b and c". */
+  function both(words) {
+    return words.length < 2 ? words.join("") : words.slice(0, -1).join(", ") + " and " + words[words.length - 1];
+  }
+
+  /* The whole file is read again for this, since the readout reads only its start. */
+  function prepareClean(f, seq) {
+    if (f.size > PAGE_CAP) { stripMeta.textContent = "images over 64 MB are not rewritten here, to protect this tab's memory"; return; }
+    f.arrayBuffer().then(function (buffer) {
+      if (seq !== loadSeq) return;
+      var result = strip(new Uint8Array(buffer));
+      if (!result.removed.length) { stripMeta.textContent = "nothing to remove; the fields listed describe the image itself"; return; }
+      cleaned = result;
+      stripButton.disabled = false;
+      stripMeta.textContent = both(result.removed) + " removed" + (result.kept.length ? " · " + both(result.kept) + " kept" : "") +
+        " · " + E.bytes(f.size) + " → " + E.bytes(result.bytes.length);
+    }).catch(function (e) {
+      if (seq === loadSeq) stripMeta.textContent = e.message || "metadata could not be removed";
+    });
   }
 
   /* Reading only the start of the file is fast, but some layouts keep their
@@ -243,6 +615,8 @@ E.tool(function () {
     clear();
     if (!f) return;
     filename = f.name.replace(/\.[^.]*$/, "") || "metadata";
+    stem = f.name.replace(/\.[^.]*$/, "") || "image";
+    prepareClean(f, seq);
     var base = fileRows(f), Reader = window.ExifReader;
     if (!Reader || typeof Reader.load !== "function") {
       render(base);
@@ -273,22 +647,29 @@ E.tool(function () {
     E.download(JSON.stringify(data, null, 2) + "\n", filename + "-metadata.json", "application/json");
     E.flash(this, "downloaded");
   });
+  E.on(stripButton, "click", function () {
+    if (!cleaned) return;
+    E.download(new Blob([cleaned.bytes], { type: cleaned.type }), stem + "-no-metadata." + EXTENSION[cleaned.type], cleaned.type);
+    E.flash(this, "downloaded");
+  });
 
   /* For agents in the browser: an image the agent sends is put in the page's
      file field, as if the visitor had chosen it, and listed there; with none,
-     the visitor's own image is read. The answer is the core's either way. */
-  E.agentTools(AGENT_TOOLS, {
-    read_image_metadata: function (args) {
-      if (args.image != null) {
-        var bytes = Media.bytes(args.image, "image", IMAGE_CAP);
-        E.giveFile(input, new File([bytes], "image from the agent", { type: Media.type(bytes) || "" }));
-        return describeImage(bytes);
-      }
-      var f = input.files && input.files[0];
-      if (!f) throw new Error("no image is chosen on the page; send one as base64, or ask the visitor to choose or drop one");
-      if (f.size > 64 * 1024 * 1024) throw new Error("the chosen image is over 64 MB, more than is read for an agent");
-      return f.arrayBuffer().then(function (buffer) { return describeImage(new Uint8Array(buffer)); });
+     the visitor's own image is used. The answer is the core's either way. */
+  function given(args) {
+    if (args.image != null) {
+      var bytes = Media.bytes(args.image, "image", IMAGE_CAP);
+      E.giveFile(input, new File([bytes], "image from the agent", { type: kind(bytes) || "" }));
+      return Promise.resolve(bytes);
     }
+    var f = input.files && input.files[0];
+    if (!f) throw new Error("no image is chosen on the page; send one as base64, or ask the visitor to choose or drop one");
+    if (f.size > PAGE_CAP) throw new Error("the chosen image is over 64 MB, more than is read for an agent");
+    return f.arrayBuffer().then(function (buffer) { return new Uint8Array(buffer); });
+  }
+  E.agentTools(AGENT_TOOLS, {
+    read_image_metadata: function (args) { return given(args).then(describeImage); },
+    remove_image_metadata: function (args) { return given(args).then(removeMetadata); }
   }, ["image"]);
 });
 </script>

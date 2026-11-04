@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
+import { crc32 } from 'node:zlib';
 import { createEyesServer } from '../dev-server.mjs';
 
 // One test stands in for the network; the requests the tests send are real.
@@ -86,7 +87,7 @@ test('MCP: initialize, list and call the pages\' tools over Streamable HTTP', as
   assert.equal(new Set(names).size, names.length, 'tool names are unique');
   assert.ok(names.length >= 34, 'only ' + names.length + ' tools');
   for (const name of ['hash_text', 'hash_file', 'convert_case', 'calculate', 'convert_color', 'clean_code', 'format_json', 'roll_dice',
-    'make_qr_code', 'make_ean13_barcode', 'resize_image', 'read_image_metadata', 'make_spectrogram']) assert.ok(names.includes(name), name);
+    'make_qr_code', 'make_ean13_barcode', 'resize_image', 'read_image_metadata', 'remove_image_metadata', 'make_spectrogram']) assert.ok(names.includes(name), name);
   // What needs a visitor's scratchpad or share room stays on the pages.
   for (const name of ['read_scratchpad', 'add_to_scratchpad', 'find_tool', 'hash_chosen_file']) assert.ok(!names.includes(name), name);
   for (const tool of tools) {
@@ -194,6 +195,33 @@ test('MCP: files go in as base64 and images come back as image content', async t
   assert.equal(metadata.type, 'image/png');
   assert.ok(Object.entries(metadata.fields).some(([key, value]) => /image width/i.test(key) && /384/.test(value)), JSON.stringify(metadata.fields));
 
+  // Metadata taken out of a progressive jpeg: what told of the camera and the
+  // place goes, the orientation stays as an exif block of its own, and every
+  // other byte is the encoder's, so the picture is untouched.
+  const jpeg = image(converted);
+  const segment = (marker, body) => Buffer.concat([Buffer.from([0xff, marker, (body.length + 2) >> 8, (body.length + 2) & 0xff]), body]);
+  const tiff = Buffer.concat([Buffer.from('4d4d002a000000080002010f00020000000700000026011200030000000100060000' + '00000000', 'hex'), Buffer.from('Pocket\0', 'latin1')]);
+  const tagged = Buffer.concat([jpeg.subarray(0, 2),
+    segment(0xe1, Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), tiff])),
+    segment(0xe1, Buffer.from('http://ns.adobe.com/xap/1.0/\0<x:xmpmeta xmlns:x="adobe:ns:meta/"/>', 'latin1')),
+    segment(0xfe, Buffer.from('taken at home')), jpeg.subarray(2), Buffer.from('more after the end')]);
+  const stripped = await call('remove_image_metadata', { image: tagged.toString('base64') });
+  const clean = image(stripped);
+  assert.deepEqual([stripped.structuredContent.removed, stripped.structuredContent.kept], [['exif', 'xmp', 'comment', 'data after the image'], ['orientation']]);
+  for (const word of ['Pocket', 'xmpmeta', 'taken at home', 'more after']) assert.ok(!clean.includes(word), word);
+  assert.ok(clean.subarray(2 + 36).equals(jpeg.subarray(2)), 'only the metadata changed');
+  assert.equal(stripped.structuredContent.fields['exif · Orientation'], 'right-top');
+  assert.equal((await call('resize_image', { image: clean.toString('base64') })).structuredContent.width, 384);
+  // A png's text chunk goes; a png with none comes back as it was.
+  const text = Buffer.from('tEXtComment\0from a scanner', 'latin1'), chunk = Buffer.alloc(12 + text.length - 4);
+  chunk.writeUInt32BE(text.length - 4); text.copy(chunk, 4); chunk.writeUInt32BE(crc32(text), 8 + text.length - 4);
+  const noted = await call('remove_image_metadata', { image: Buffer.concat([qrPng.subarray(0, 33), chunk, qrPng.subarray(33)]).toString('base64') });
+  assert.ok(image(noted).equals(qrPng));
+  assert.deepEqual(noted.structuredContent.removed, ['text']);
+  const bare = await call('remove_image_metadata', { image: qrPng.toString('base64') });
+  assert.ok(image(bare).equals(qrPng));
+  assert.match(bare.structuredContent.note, /no metadata to remove/);
+
   // A download's checksum, checked.
   const file = Buffer.from('the file a page offers for download\n');
   const hashed = (await call('hash_file', { file: file.toString('base64'), compare: 'SHA256 (file.txt) = ' + createHash('sha256').update(file).digest('hex') })).structuredContent;
@@ -210,6 +238,7 @@ test('MCP: files go in as base64 and images come back as image content', async t
   const bmp = Buffer.from('424d', 'hex');
   assert.match((await call('resize_image', { image: Buffer.concat([bmp, Buffer.alloc(60)]).toString('base64') })).content[0].text, /^send a png, jpeg, webp or gif; this is image\/bmp\. the img page reads more/);
   assert.match((await call('make_spectrogram', { audio: qrPng.toString('base64') })).content[0].text, /^send wav, mp3, flac, ogg vorbis or opus; this is image\/png/);
+  assert.match((await call('remove_image_metadata', { image: Buffer.concat([bmp, Buffer.alloc(60)]).toString('base64') })).content[0].text, /^metadata is removed from jpeg, png, webp, gif and jpeg xl files; this is image\/bmp\. the img page/);
   assert.match((await call('resize_image', { image: qrPng.toString('base64'), format: 'avif' })).content[0].text, /avif is written on the img page/);
 });
 

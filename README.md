@@ -156,7 +156,7 @@ curl -s https://eyes.tools/mcp -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hash_text","arguments":{"text":"hello"}}}'
 ```
 
-`tools/list` names all 34: `hash_text`, `convert_case`, `calculate`,
+`tools/list` names all 35: `hash_text`, `convert_case`, `calculate`,
 `clean_code`, `convert_color`, `convert_time_zone`, `generate_passwords`,
 `roll_dice`, `make_qr_code`, `resize_image`, `make_spectrogram` and the rest.
 Every tool describes each of its inputs, gives an example, and declares the
@@ -165,12 +165,12 @@ and as its JSON. Arguments are checked before a tool runs, and a mistake is
 named: `unknown input lenght: this tool takes text, length and count`.
 
 Files go in as base64, or as a data: URL, in the argument the tool names: an
-image to resize, convert or read the metadata of, a file to hash against a
-checksum, a sound to draw as a spectrogram, up to 10 MB. An image a tool makes
-(a QR code, a barcode, a resized photo, a spectrogram) comes back as image
-content, so an assistant can show it, and its base64 stays out of the text. A
-call sends its input to the server, which uses it for the one answer and keeps
-nothing.
+image to resize or convert, or to read or remove the metadata of, a file to
+hash against a checksum, a sound to draw as a spectrogram, up to 10 MB. An
+image a tool makes (a QR code, a barcode, a resized photo, a photo without its
+metadata, a spectrogram) comes back as image content, so an assistant can show
+it, and its base64 stays out of the text. A call sends its input to the
+server, which uses it for the one answer and keeps nothing.
 
 **In the browser, through [WebMCP](https://github.com/webmachinelearning/webmcp).**
 Every page offers `find_tool`, and each tool's page offers the tool itself. An

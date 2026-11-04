@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
+import { crc32 } from 'node:zlib';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
 const context = await browser.newContext();
@@ -36,6 +37,12 @@ const has = (selector, value) => page.waitForFunction(([s, v]) => document.query
 const enabled = selector => page.waitForFunction(s => !document.querySelector(s)?.disabled, selector);
 const outValue = value => page.waitForFunction(v => document.querySelector('#out')?.value === v, value);
 async function check(name, run) { try { await run(); console.log('PASS ' + name); } catch (error) { failures.push(name + ': ' + error.message); console.error('FAIL ' + name + ': ' + error.message); } }
+/* A png with a text chunk after its header, as a scanner or editor leaves one. */
+function withText(png, keyword, value) {
+  const body = Buffer.from('tEXt' + keyword + '\0' + value, 'latin1'), chunk = Buffer.alloc(8 + body.length);
+  chunk.writeUInt32BE(body.length - 4); body.copy(chunk, 4); chunk.writeUInt32BE(crc32(body), 4 + body.length);
+  return Buffer.concat([png.subarray(0, 33), chunk, png.subarray(33)]);
+}
 async function download(selector) {
   const pending = page.waitForEvent('download'); await click(selector);
   const file = await pending; return { name: file.suggestedFilename(), bytes: await readFile(await file.path()) };
@@ -252,6 +259,15 @@ try {
     const resized = (await download('#dl')).bytes; assert.equal(resized.readUInt32BE(16), 16); assert.equal(resized.readUInt32BE(20), 8);
     await go('exif'); await page.locator('#file').setInputFiles({ name: 'fixture.png', mimeType: 'image/png', buffer: png }); await enabled('#download'); await has('#out', '32'); await has('#out', '16');
     assert.ok(Object.keys(JSON.parse((await download('#download')).bytes)).length > 4);
+    await has('#strip-meta', 'nothing to remove'); assert.equal(await page.locator('#strip').isDisabled(), true);
+  });
+  await check('metadata comes out of an image, and the picture stays as it was', async () => {
+    await go('exif'); await page.locator('#file').setInputFiles({ name: 'scan.png', mimeType: 'image/png', buffer: withText(png, 'Author', 'someone at home') });
+    await enabled('#strip'); await has('#strip-meta', 'text removed'); await has('#out', 'someone at home');
+    const clean = await download('#strip');
+    assert.equal(clean.name, 'scan-no-metadata.png'); assert.ok(clean.bytes.equals(png));
+    await page.locator('#file').setInputFiles({ name: 'odd.bmp', mimeType: 'image/bmp', buffer: Buffer.concat([Buffer.from('BM'), Buffer.alloc(60)]) });
+    await has('#strip-meta', 'jpeg, png, webp, gif and jpeg xl'); assert.equal(await page.locator('#strip').isDisabled(), true);
   });
   await check('spectrogram decodes PCM audio and exports PNG', async () => {
     await go('spectrogram'); const frames = 8000, wav = Buffer.alloc(44 + frames * 2);
@@ -333,6 +349,7 @@ try {
       ['lorem', 'generate_lorem_ipsum', { unit: 'words', count: 7 }], ['time', 'convert_timestamp', { value: '1787313600' }],
       ['hash', 'hash_file', { file: 'aGVsbG8=', compare: 'sha-1: aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d' }],
       ['exif', 'read_image_metadata', { image: (await readFile(new URL('../preview.png', import.meta.url))).toString('base64') }],
+      ['exif', 'remove_image_metadata', { image: withText(await readFile(new URL('../preview.png', import.meta.url)), 'Software', 'an editor').toString('base64') }],
       ['dump', 'clean_up_lines', { text: 'b', sort: 'asc' }], ['qr', 'make_qr_code', { text: 'eyes', size: 128 }],
       ['tz', 'convert_time_zone', { dateTime: '2026-03-08T02:30', from: 'America/New_York', to: 'Asia/Tokyo' }],
       ['calc', 'calculate', { expression: '1/0' }], ['code', 'format_json', { json: '{bad}' }],

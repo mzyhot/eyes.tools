@@ -75,7 +75,7 @@ const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif
 
 const INSTRUCTIONS = "eyes.tools is a set of small tools: text and code (clean code in 69 languages, json, diffs, counts, " +
   "case, base64, urls and hashes), colors, time and time zones, units and arithmetic, randomness (passwords, ids, numbers, " +
-  "dice and coins, verifiable through drand), qr codes and barcodes, and files: an image's metadata, resizing or converting " +
+  "dice and coins, verifiable through drand), qr codes and barcodes, and files: an image's metadata, read or removed, resizing or converting " +
   "an image, a file's checksums, and a sound's spectrogram. Each tool here is the same code its page runs in a visitor's " +
   "browser, so it answers the same way. Give a file as base64, or as a data: URL, in the argument the tool names; an image " +
   "a tool makes comes back as image content. Calls send their input to the eyes.tools server, which uses it for the one " +
