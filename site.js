@@ -9,8 +9,8 @@
  * Node server reads it to write each page's link preview. A page never repeats
  * any of it.
  *
- * What each tool says about itself (its name, lede, search aliases, extra
- * scripts and network note) lives in `tools.js`, one row per tool.
+ * What each tool says about itself (its name, description, search aliases,
+ * extra scripts and network note) lives in `tools.js`, one row per tool.
  *
  * Loaded in the head, ahead of every script that reads it.
  */

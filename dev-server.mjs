@@ -198,7 +198,7 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, c => "&#" + c.char
  */
 export function previewTags(site, tool) {
   const url = site.url + "/" + (tool ? tool.slug : "");
-  const description = tool ? tool.meta || tool.desc : site.description;
+  const description = tool ? tool.meta : site.description;
   const tags = [
     ["title", tool ? tool.name + (site.titleSuffix || "") : site.title],
     ["meta", { name: "description", content: description }],

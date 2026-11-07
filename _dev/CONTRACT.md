@@ -5,8 +5,8 @@ HTML file in `t/` holding two things: its `<main>` and its script. There is no
 build step, no framework, and no runtime package. Beyond the site's own files,
 a page makes no network requests unless it is a network tool (rule 4).
 
-Everything around the tool (the head tags, the header, the `<h1>`, the lede,
-the footer) is built by `s.js` from `site.js` (the site's copy and behaviour)
+Everything around the tool (the head tags, the header, the `<h1>`, the
+footer) is built by `s.js` from `site.js` (the site's copy and behaviour)
 and the tool's row in `tools.js`. That is why a page never writes them, and why
 `npm run check` fails if it does. The Node server writes the same title and
 description into the page as it serves it, so a link preview shows them too.
@@ -60,8 +60,7 @@ Your row in `tools.js` carries the rest:
 | Field | Becomes |
 | --- | --- |
 | `name` | the `<h1>`, the breadcrumb, `document.title`, the index, a link preview's title |
-| `desc` | the lede under the heading, and the index's second column |
-| `meta` | the page's `<meta name="description">`, and a link preview's description |
+| `meta` | the page's `<meta name="description">`, a link preview's description, and what `find_tool` tells an agent |
 | `alias` | extra words the index filter matches |
 | `deps` | scripts `s.js` loads before running your code |
 | `note` | the footer line, for a tool that reaches the network |
@@ -129,7 +128,8 @@ The site's one job is: **the visitor leaves holding a result.**
 
 Lowercase for labels, buttons, and hints. Sentence case for prose. No
 exclamation marks, no "Simply", no "Just", no marketing, no invented statistics,
-no fake testimonials. Buttons are verbs: `copy`, `download png`, `swap`,
+no fake testimonials, no taglines: a tool's name is its whole heading, on its
+page and on the index. Buttons are verbs: `copy`, `download png`, `swap`,
 `clear`. Never `Click here` or `Submit`.
 
 ## 5. CSS you may use
@@ -244,7 +244,7 @@ Must render with no horizontal scroll at **320 / 375 / 414 / 768 px**.
 
 - [ ] The page contains a `<main>`, one `E.tool(...)` script, and nothing else:
       no header, no footer, no `<title>`, no `<script src>` of its own.
-- [ ] Its row in `tools.js` carries the name, lede, meta, aliases, any `deps`
+- [ ] Its row in `tools.js` carries the name, meta, aliases, any `deps`
       and, for a network tool, the footer `note`.
 - [ ] `npm run check` passes. It catches a page that writes its own header,
       footer, `<title>` or description, a `deps` script the page also loads

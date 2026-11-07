@@ -20,7 +20,7 @@
  *
  * A page therefore contains its `<main>` and one script, and nothing else. To
  * change the chrome everywhere, change `site.js`; to change one tool's header,
- * lede, dependencies or footer note, change its row in `tools.js`.
+ * dependencies or footer note, change its row in `tools.js`.
  */
 (function () {
   "use strict";
@@ -375,7 +375,7 @@
     var copy = kind === "not-found" ? SITE.notFound || {} : null;
     document.title = entry ? entry.name + (SITE.titleSuffix || "")
       : copy ? copy.title + (SITE.titleSuffix || "") : SITE.title || "";
-    var description = entry ? entry.meta || entry.desc : copy ? null : SITE.description;
+    var description = entry ? entry.meta : copy ? null : SITE.description;
     if (description && !E.qs('meta[name="description"]')) {
       document.head.appendChild(E.el("meta", { name: "description", content: description }));
     }
@@ -396,12 +396,9 @@
     return E.el("header", { class: kind === "index" ? "top directory-top" : "top" }, parts);
   }
 
-  /** The `<h1>` and lede above a tool, from the registry. */
+  /** The `<h1>` above a tool, from the registry. */
   function buildTitleBlock(entry) {
-    return E.el("div", { class: "head" }, [
-      E.el("h1", { class: "h1", text: entry.name }),
-      E.el("p", { class: "lede", text: entry.desc })
-    ]);
+    return E.el("div", { class: "head" }, [E.el("h1", { class: "h1", text: entry.name })]);
   }
 
   /** The footer: the way back, and what the page does with your data. */
@@ -549,7 +546,7 @@
 
   /* Every page, the index and the not-found page included, can point an agent
      at the right tool. Matching is the index's: every word typed must appear
-     in a tool's name, lede or search aliases. */
+     in a tool's name or search aliases. */
   function offerToolFinder() {
     if (!window.TOOLS) return;
     E.agentTool({
@@ -568,12 +565,12 @@
       run: function (input) {
         var words = String(input.query || "").toLowerCase().split(/\s+/).filter(Boolean);
         var found = window.TOOLS.filter(function (t) {
-          var haystack = (t.name + " " + t.desc + " " + (t.alias || "")).toLowerCase();
+          var haystack = (t.name + " " + (t.alias || "")).toLowerCase();
           return words.every(function (word) { return haystack.indexOf(word) !== -1; });
         });
         return {
           tools: found.map(function (t) {
-            return { name: t.name, description: t.desc, url: new URL(E.toolHref(t.slug), location.href).href };
+            return { name: t.name, description: t.meta, url: new URL(E.toolHref(t.slug), location.href).href };
           })
         };
       }

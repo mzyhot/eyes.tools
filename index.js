@@ -71,14 +71,13 @@
      single lowercase string every filter test runs against. */
   var INDEX = window.TOOLS.map(function (t) {
     var a = E.el("a", { class: "item tool-item", href: E.toolHref(t.slug) }, [
-      E.el("span", { class: "item__name", text: t.name }),
-      E.el("span", { class: "item__desc", text: t.desc })
+      E.el("span", { class: "item__name", text: t.name })
     ]);
     return {
       tool: t,
       li: E.el("li", {}, [a]),
       a: a,
-      haystack: (t.name + " " + t.desc + " " + (t.alias || "")).toLowerCase()
+      haystack: (t.name + " " + (t.alias || "")).toLowerCase()
     };
   });
   var TOTAL = INDEX.length;

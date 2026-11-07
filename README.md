@@ -25,7 +25,7 @@ local processing does; what the browser cannot finish, the server does.
 
 ```
 site.js           the site registry: wordmark, copy, footers, shortcuts
-tools.js          the tool registry. one row per tool: name, lede, aliases, deps, note.
+tools.js          the tool registry. one row per tool: name, meta, aliases, deps, note.
 fonts.css         the typeface, Geist and Geist Mono. the one file to change to change the type.
 fonts/            the typeface's files, one per script, self-hosted
 tokens.css        design tokens (colour, size, space, motion). the only place values live.
@@ -104,7 +104,7 @@ cd desktop && cargo run
 | To change | Edit |
 | --- | --- |
 | The wordmark, footer notes, index copy, the not-found page, keyboard shortcuts, the address and picture link previews use | `site.js` |
-| A tool's name, lede, search aliases, meta description, scripts or footer note | its row in `tools.js` |
+| A tool's name, search aliases, meta description, scripts or footer note | its row in `tools.js` |
 | The typeface | `fonts.css`, with its files in `fonts/` listed in `public-files.mjs` |
 | Colours, sizes, spacing, motion | `tokens.css` |
 | The header, title block or footer markup itself | `s.js`, once, for every page |
@@ -116,7 +116,7 @@ cd desktop && cargo run
 
 1. Copy `_dev/TEMPLATE.html` to `t/<slug>.html` and write the tool inside
    `<main>` and the `E.tool(...)` block. Nothing else belongs in the file.
-2. Add one row to `tools.js`. The title, header, lede, meta description,
+2. Add one row to `tools.js`. The title, header, meta description,
    footer note and any extra scripts (`deps`) all come from it.
 3. Run `node scripts/static-routes.mjs` so Vercel and Cloudflare Pages serve the
    page at `/<slug>` and `sitemap.xml` lists it. Run it too after adding any file at the top level, so the

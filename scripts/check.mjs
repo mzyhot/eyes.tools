@@ -8,7 +8,7 @@
  *
  * It also verifies the shape every page shares, because the shared layer only
  * works if pages stay out of its way: a page owns its `<main>` and one script,
- * the registry owns its title, header, lede, footer note and dependencies, and
+ * the registry owns its title, header, footer note and dependencies, and
  * `site.js` owns everything else. A page that writes its own header, or names a
  * script the registry should name, fails here.
  *

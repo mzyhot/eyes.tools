@@ -741,7 +741,6 @@ input[type="range"]::-moz-range-thumb { width: var(--space-5); height: var(--spa
   border-bottom: var(--rule) solid var(--color-rule);
 }
 .top .eyes { font-size: 1.75rem; }
-[data-tool] .lede { font-size: var(--text-base); }
 [data-tool] .head { margin-bottom: var(--space-8); }
 .field[readonly] { background: var(--color-paper-2); }
 .tbtn:active:not(:disabled) { color: var(--color-ink); }
@@ -762,14 +761,12 @@ main { scroll-margin-top: var(--space-6); }
 .tool-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-1);
   padding: var(--space-3);
 }
 .tool-item .item__name { min-width: 0; font-weight: 400; white-space: nowrap; }
-.tool-item .item__desc { font-size: var(--text-sm); }
 .tool-item:focus-visible { outline-offset: 3px; position: relative; z-index: 1; }
 .directory-empty { display: flex; align-items: center; justify-content: space-between; padding-block: var(--space-3); }
 .directory-empty .hint { margin: 0; }
 @media (min-width: 40rem) {
-  .tool-item { grid-template-columns: 10rem minmax(0, 1fr); gap: var(--space-4); align-items: baseline; min-height: 3.5rem; }
+  .tool-item { align-items: center; min-height: 3.5rem; }
 }
